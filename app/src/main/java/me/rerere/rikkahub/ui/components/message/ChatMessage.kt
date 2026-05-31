@@ -464,6 +464,13 @@ private fun MessagePartsBlock(
                         AudioPlayerBubble(url = part.url)
                     }
 
+                    is UIMessagePart.VoiceMessage -> {
+                        VoiceMessageBubble(
+                            voiceMessage = part,
+                            isUser = role == MessageRole.USER,
+                        )
+                    }
+
                     is UIMessagePart.Image -> {
                         val isImageLoading =
                             part.url.isBlank() || part.url.matches(Regex("^data:image/[^;]*;base64,\\s*$"))
@@ -771,6 +778,122 @@ internal fun AudioPlayerBubble(url: String) {
             modifier = Modifier.width(36.dp),
             textAlign = TextAlign.End
         )
+    }
+}
+
+@Composable
+internal fun VoiceMessageBubble(
+    voiceMessage: UIMessagePart.VoiceMessage,
+    isUser: Boolean,
+) {
+    val context = LocalContext.current
+    var isPlaying by remember { mutableStateOf(false) }
+    var mediaPlayer by remember { mutableStateOf<MediaPlayer?>(null) }
+
+    val durationSec = (voiceMessage.duration / 1000).coerceAtLeast(1)
+
+    DisposableEffect(voiceMessage.url) {
+        onDispose {
+            mediaPlayer?.release()
+            mediaPlayer = null
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            mediaPlayer?.let {
+                if (!it.isPlaying) {
+                    isPlaying = false
+                }
+            }
+            kotlinx.coroutines.delay(50)
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (isUser) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.secondaryContainer,
+        onClick = {
+            if (isPlaying) {
+                mediaPlayer?.let {
+                    it.stop()
+                    it.reset()
+                }
+                isPlaying = false
+            } else {
+                try {
+                    val mp = MediaPlayer()
+                    mp.setDataSource(voiceMessage.url)
+                    mp.prepare()
+                    mp.setOnCompletionListener {
+                        isPlaying = false
+                    }
+                    mp.start()
+                    isPlaying = true
+                    mediaPlayer?.release()
+                    mediaPlayer = mp
+                } catch (e: Exception) {
+                    // File might not exist
+                }
+            }
+        },
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Icon(
+                    imageVector = if (isPlaying) HugeIcons.PauseCircle else HugeIcons.PlayCircle,
+                    contentDescription = if (isPlaying) "Pause" else "Play",
+                    tint = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(24.dp)
+                )
+                // Waveform bars
+                val waveformBars = remember(voiceMessage.url) {
+                    val rnd = java.util.Random(voiceMessage.url.hashCode().toLong())
+                    List(24) { 0.2f + rnd.nextFloat() * 0.8f }
+                }
+                val waveformColor = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.5f)
+                else MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.5f)
+                Canvas(modifier = Modifier.width(60.dp).height(24.dp)) {
+                    val barCount = waveformBars.size
+                    val barWidth = 2.5f
+                    val gap = (size.width - barWidth * barCount) / (barCount - 1).coerceAtLeast(1)
+                    waveformBars.forEachIndexed { index, barRatio ->
+                        val barHeight = size.height * barRatio.coerceIn(0.2f, 1f)
+                        val x = index * (barWidth + gap)
+                        val y = (size.height - barHeight) / 2f
+                        drawRoundRect(
+                            color = waveformColor,
+                            topLeft = androidx.compose.ui.geometry.Offset(x, y),
+                            size = Size(barWidth, barHeight),
+                            cornerRadius = androidx.compose.ui.geometry.CornerRadius(1.5f, 1.5f)
+                        )
+                    }
+                }
+                Text(
+                    text = "${durationSec}″",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer
+                    else MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            // Show transcript text below the voice bubble (like WeChat)
+            if (voiceMessage.transcript.isNotBlank()) {
+                Text(
+                    text = voiceMessage.transcript,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (isUser) MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                    modifier = Modifier.padding(top = 4.dp),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 

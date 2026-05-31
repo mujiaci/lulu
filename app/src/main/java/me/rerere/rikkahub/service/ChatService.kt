@@ -73,6 +73,7 @@ import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
+import me.rerere.rikkahub.data.ai.transformers.VoiceMessageTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -119,6 +120,7 @@ private val inputTransformers by lazy {
         PlaceholderTransformer,
         DocumentAsPromptTransformer,
         OcrTransformer,
+        VoiceMessageTransformer,
     )
 }
 

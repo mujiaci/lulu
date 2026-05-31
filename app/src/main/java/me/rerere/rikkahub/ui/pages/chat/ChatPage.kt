@@ -310,6 +310,24 @@ private fun ChatPageContent(
                         }
                         inputState.clearInput()
                     },
+                    onVoiceMessage = { url, duration, transcript ->
+                        if (currentChatModel == null) {
+                            toaster.show("请先选择模型", type = ToastType.Error)
+                            return@ChatInput
+                        }
+                        vm.handleMessageSend(
+                            listOf(
+                                UIMessagePart.VoiceMessage(
+                                    url = url,
+                                    duration = duration,
+                                    transcript = transcript,
+                                )
+                            )
+                        )
+                        scope.launch {
+                            chatListState.requestScrollToItem(conversation.currentMessages.size + 5)
+                        }
+                    },
                     onLongSendClick = {
                         if (inputState.isEditing()) {
                             vm.handleMessageEdit(

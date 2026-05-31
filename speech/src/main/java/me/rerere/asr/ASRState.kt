@@ -14,6 +14,8 @@ data class ASRState(
     val transcript: String = "",
     val errorMessage: String? = null,
     val amplitudes: List<Float> = emptyList(),
+    val audioFilePath: String? = null,
+    val durationMs: Long = 0L,
 ) {
     val isRecording: Boolean
         get() = status == ASRStatus.Connecting || status == ASRStatus.Listening || status == ASRStatus.Stopping

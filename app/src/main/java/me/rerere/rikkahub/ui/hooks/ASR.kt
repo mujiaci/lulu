@@ -15,8 +15,8 @@ import kotlinx.coroutines.flow.StateFlow
 import me.rerere.asr.ASRController
 import me.rerere.asr.ASRProviderSetting
 import me.rerere.asr.ASRState
-import me.rerere.asr.providers.DashScopeASRController
 import me.rerere.asr.providers.OpenAIRealtimeASRController
+import me.rerere.asr.providers.SiliconFlowASRController
 import me.rerere.asr.providers.VolcengineASRController
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedASRProvider
@@ -109,9 +109,9 @@ private class CustomAsrStateImpl(
                 OpenAIRealtimeASRController(context, httpClient, provider)
             }
 
-            is ASRProviderSetting.DashScope -> {
+            is ASRProviderSetting.SiliconFlow -> {
                 if (provider.apiKey.isBlank()) return null
-                DashScopeASRController(context, httpClient, provider)
+                SiliconFlowASRController(context, httpClient, provider)
             }
 
             is ASRProviderSetting.Volcengine -> {

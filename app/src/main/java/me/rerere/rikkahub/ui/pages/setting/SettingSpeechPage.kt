@@ -544,9 +544,9 @@ private fun AddASRProviderButton(onAdd: (ASRProviderSetting) -> Unit) {
                 }
             )
             DropdownMenuItem(
-                text = { Text("DashScope") },
+                text = { Text("SiliconFlow") },
                 onClick = {
-                    currentProvider = ASRProviderSetting.DashScope()
+                    currentProvider = ASRProviderSetting.SiliconFlow()
                     showTypeMenu = false
                     showBottomSheet = true
                 }
@@ -819,7 +819,7 @@ private fun ASRProviderItem(
                     Text(
                         text = when (provider) {
                             is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
-                            is ASRProviderSetting.DashScope -> "DashScope"
+                            is ASRProviderSetting.SiliconFlow -> "SiliconFlow"
                             is ASRProviderSetting.Volcengine -> "Volcengine"
                         },
                         style = MaterialTheme.typography.bodySmall,

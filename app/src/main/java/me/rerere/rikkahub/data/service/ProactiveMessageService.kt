@@ -607,10 +607,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 messageNodes = emptyList()
             )
 
-        // 保存用户上下文 + AI回复到对话历史
+        // 只保存AI回复到对话历史（不保存用户上下文，避免暴露隐私信息）
         val updatedConversation = currentConversation.copy(
             messageNodes = currentConversation.messageNodes + listOf(
-                userMessage.toMessageNode(),
                 aiMessage.toMessageNode()
             ),
             updateAt = java.time.Instant.now()

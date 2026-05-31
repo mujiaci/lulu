@@ -95,6 +95,7 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.Voice
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -142,6 +143,7 @@ fun ChatInput(
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
     onLongSendClick: () -> Unit,
+    onVoiceMessage: ((url: String, duration: Long, transcript: String) -> Unit)? = null,
 ) {
     val toaster = LocalToaster.current
     val assistant = settings.getCurrentAssistant()
@@ -191,6 +193,8 @@ fun ChatInput(
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
     PermissionManager(permissionState = asrPermission)
     var asrBaseText by remember { mutableStateOf("") }
+    var voiceMessageMode by remember { mutableStateOf(false) }
+
     LaunchedEffect(asrState.status) {
         when (asrState.status) {
             ASRStatus.Listening -> {
@@ -209,6 +213,19 @@ fun ChatInput(
     LaunchedEffect(asrState.errorMessage) {
         asrState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             toaster.show(message = message, type = ToastType.Error)
+            voiceMessageMode = false
+        }
+    }
+
+    // Handle voice message completion
+    LaunchedEffect(asrState.audioFilePath, voiceMessageMode) {
+        if (voiceMessageMode && asrState.audioFilePath != null && asrState.status == ASRStatus.Idle) {
+            onVoiceMessage?.invoke(
+                asrState.audioFilePath!!,
+                asrState.durationMs,
+                asrState.transcript
+            )
+            voiceMessageMode = false
         }
     }
 
@@ -570,29 +587,43 @@ fun ChatInput(
                                 )
                             }
 
+                            // Voice button: click to record, click again to stop and send
                             if (asrState.isAvailable || asrState.isRecording) {
-                                AsrButton(
-                                    state = asrState,
+                                ActionIconButton(
                                     onClick = {
                                         when (asrState.status) {
-                                            ASRStatus.Listening -> asr.stop()
+                                            ASRStatus.Listening -> {
+                                                asr.stop()
+                                            }
                                             ASRStatus.Idle, ASRStatus.Error -> {
                                                 if (!asrPermission.allRequiredPermissionsGranted) {
                                                     asrPermission.requestPermissions()
                                                 } else {
-                                                    asrBaseText = state.textContent.text.toString()
+                                                    voiceMessageMode = true
                                                     asr.start { transcript ->
-                                                        val spacer =
-                                                            if (asrBaseText.isBlank() || transcript.isBlank()) "" else " "
-                                                        state.setMessageText(asrBaseText + spacer + transcript)
+                                                        // Ignore transcript in voice message mode
                                                     }
                                                 }
                                             }
-
                                             ASRStatus.Connecting, ASRStatus.Stopping -> {}
                                         }
                                     }
-                                )
+                                ) {
+                                    if (asrState.isRecording) {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                            strokeWidth = 2.dp,
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    } else {
+                                        Icon(
+                                            imageVector = HugeIcons.Voice,
+                                            contentDescription = "Voice",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
                             }
 
                             AnimatedVisibility(

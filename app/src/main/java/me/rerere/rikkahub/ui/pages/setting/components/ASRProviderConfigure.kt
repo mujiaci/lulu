@@ -33,7 +33,7 @@ fun ASRProviderConfigure(
             OutlinedTextField(
                 value = when (setting) {
                     is ASRProviderSetting.OpenAIRealtime -> "OpenAI Realtime"
-                    is ASRProviderSetting.DashScope -> "DashScope"
+                    is ASRProviderSetting.SiliconFlow -> "SiliconFlow"
                     is ASRProviderSetting.Volcengine -> "Volcengine"
                 },
                 onValueChange = {},
@@ -56,7 +56,7 @@ fun ASRProviderConfigure(
 
         when (setting) {
             is ASRProviderSetting.OpenAIRealtime -> OpenAIRealtimeASRConfiguration(setting, onValueChange)
-            is ASRProviderSetting.DashScope -> DashScopeASRConfiguration(setting, onValueChange)
+            is ASRProviderSetting.SiliconFlow -> SiliconFlowASRConfiguration(setting, onValueChange)
             is ASRProviderSetting.Volcengine -> VolcengineASRConfiguration(setting, onValueChange)
         }
     }
@@ -178,13 +178,13 @@ private fun OpenAIRealtimeASRConfiguration(
 }
 
 @Composable
-private fun DashScopeASRConfiguration(
-    setting: ASRProviderSetting.DashScope,
+private fun SiliconFlowASRConfiguration(
+    setting: ASRProviderSetting.SiliconFlow,
     onValueChange: (ASRProviderSetting) -> Unit
 ) {
     FormItem(
         label = { Text(stringResource(R.string.setting_asr_configure_api_key)) },
-        description = { Text(stringResource(R.string.setting_asr_configure_dashscope_api_key_desc)) }
+        description = { Text("SiliconFlow API Key") }
     ) {
         OutlinedTextField(
             value = setting.apiKey,
@@ -195,14 +195,14 @@ private fun DashScopeASRConfiguration(
     }
 
     FormItem(
-        label = { Text(stringResource(R.string.setting_asr_configure_websocket_url)) },
-        description = { Text(stringResource(R.string.setting_asr_configure_dashscope_websocket_desc)) }
+        label = { Text("Base URL") },
+        description = { Text("SiliconFlow 语音识别 API 地址") }
     ) {
         OutlinedTextField(
-            value = setting.websocketUrl,
-            onValueChange = { onValueChange(setting.copy(websocketUrl = it)) },
+            value = setting.baseUrl,
+            onValueChange = { onValueChange(setting.copy(baseUrl = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("wss://dashscope.aliyuncs.com/api-ws/v1/realtime") }
+            placeholder = { Text("https://api.siliconflow.cn/v1/audio/transcriptions") }
         )
     }
 
@@ -214,7 +214,7 @@ private fun DashScopeASRConfiguration(
             value = setting.model,
             onValueChange = { onValueChange(setting.copy(model = it)) },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("qwen3-asr-flash-realtime-2026-02-10") }
+            placeholder = { Text("FunAudioLLM/Spirit-tiny") }
         )
     }
 
@@ -227,38 +227,6 @@ private fun DashScopeASRConfiguration(
             onValueChange = { onValueChange(setting.copy(language = it)) },
             modifier = Modifier.fillMaxWidth(),
             placeholder = { Text("zh") }
-        )
-    }
-
-    FormItem(
-        label = { Text(stringResource(R.string.setting_asr_configure_vad_threshold)) },
-        description = { Text(stringResource(R.string.setting_asr_configure_dashscope_vad_desc)) }
-    ) {
-        OutlinedNumberInput(
-            value = setting.vadThreshold,
-            onValueChange = { value ->
-                if (value in 0.0f..1.0f) {
-                    onValueChange(setting.copy(vadThreshold = value))
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = "VAD Threshold"
-        )
-    }
-
-    FormItem(
-        label = { Text(stringResource(R.string.setting_asr_configure_silence_duration)) },
-        description = { Text(stringResource(R.string.setting_asr_configure_silence_duration_desc)) }
-    ) {
-        OutlinedNumberInput(
-            value = setting.silenceDurationMs,
-            onValueChange = { value ->
-                if (value in 100..5000) {
-                    onValueChange(setting.copy(silenceDurationMs = value))
-                }
-            },
-            modifier = Modifier.fillMaxWidth(),
-            label = "Silence Duration"
         )
     }
 }
