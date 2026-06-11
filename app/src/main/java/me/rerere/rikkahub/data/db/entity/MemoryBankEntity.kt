@@ -50,29 +50,5 @@ data class MemoryBankEntity(
     val vectorRetryCount: Int = 0,
 )
 
-/**
- * 记忆向量实体
- * 存储每条记忆的向量表示，用于相似度搜索
- */
-@Entity(tableName = "memory_vector", primaryKeys = ["memory_id"])
-data class MemoryVectorEntity(
-    /** 关联的记忆ID */
-    @ColumnInfo("memory_id")
-    val memoryId: Int,
-    
-    /** 向量数据，以逗号分隔的浮点数字符串 */
-    @ColumnInfo("vector")
-    val vector: String = "",
-    
-    /** 向量维度 */
-    @ColumnInfo("dimensions")
-    val dimensions: Int = 0,
-    
-    /** 向量化模型名称 */
-    @ColumnInfo("model")
-    val model: String = "",
-    
-    /** 创建时间戳 */
-    @ColumnInfo("created_at")
-    val createdAt: Long = System.currentTimeMillis(),
-)
+
+

@@ -8,7 +8,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
-import me.rerere.rikkahub.data.db.entity.MemoryVectorEntity
+
 
 @Dao
 interface MemoryBankDAO {
@@ -103,39 +103,4 @@ interface MemoryBankDAO {
 
     @Query("UPDATE memory_bank SET vector_status = :status, vector_retry_count = :retryCount WHERE id = :id")
     suspend fun updateVectorStatus(id: Int, status: String, retryCount: Int)
-
-    // ===== MemoryVector CRUD =====
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertVector(vector: MemoryVectorEntity)
-
-    @Query("SELECT * FROM memory_vector WHERE memory_id = :memoryId")
-    suspend fun getVectorByMemoryId(memoryId: Int): MemoryVectorEntity?
-
-    @Query("DELETE FROM memory_vector WHERE memory_id = :memoryId")
-    suspend fun deleteVectorByMemoryId(memoryId: Int)
-
-    @Query("""
-        SELECT mv.memory_id, mv.vector, mv.dimensions, mv.model, mv.created_at,
-               mb.content, mb.type
-        FROM memory_vector mv 
-        INNER JOIN memory_bank mb ON mv.memory_id = mb.id
-    """)
-    suspend fun getAllVectorsWithMemories(): List<MemoryVectorAndMemory>
-
-    @Query("SELECT COUNT(*) FROM memory_vector")
-    suspend fun getVectorCount(): Int
 }
-
-/**
- * 向量和记忆的联合查询结果
- */
-data class MemoryVectorAndMemory(
-    @ColumnInfo(name = "memory_id") val memoryId: Int,
-    val vector: String,
-    val dimensions: Int,
-    val model: String,
-    val content: String,
-    val type: String,
-    @ColumnInfo(name = "created_at") val createdAt: Long,
-)
