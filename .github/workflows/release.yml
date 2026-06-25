@@ -72,7 +72,7 @@ jobs:
       - name: Gradle Build
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleRelease -x :app:uploadCrashlyticsMappingFileRelease
+          ./gradlew --no-daemon assembleRelease
 
       - name: Collect APK files
         run: |
