@@ -61,6 +61,7 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
@@ -621,7 +622,7 @@ addAll(localTools.getTools(assistant.localTools))
                     }
                     // Plugin tools
                     addAll(pluginToolProvider.getTools())
-                },
+                }.deduplicateByToolName(),
                 pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
             ).onCompletion {
                 // 取消 Live Update 通知

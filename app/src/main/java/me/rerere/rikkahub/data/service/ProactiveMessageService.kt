@@ -48,6 +48,7 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
@@ -722,7 +723,7 @@ addAll(localTools.getTools(assistant.localTools))
             
             // 插件工具
             addAll(pluginToolProvider.getTools())
-        }
+        }.deduplicateByToolName()
     }
 
     /**
