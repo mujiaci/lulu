@@ -1,10 +1,10 @@
-name: APK Build
+name: Signed APK Build
 
 on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "GitHub Release tag. Leave empty to use debug-build-<run_number>."
+        description: "GitHub Release tag. Leave empty to use signed-build-<run_number>."
         required: false
         type: string
 
@@ -35,23 +35,38 @@ jobs:
             ~/.gradle/wrapper
           key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
 
+      - name: Prepare signing files
+        env:
+          KEY_BASE64: ${{ secrets.KEY_BASE64 }}
+          SIGNING_CONFIG: ${{ secrets.SIGNING_CONFIG }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$KEY_BASE64" ] || [ -z "$SIGNING_CONFIG" ]; then
+            echo "::error title=Missing signing secrets::Signed builds require KEY_BASE64 and SIGNING_CONFIG."
+            exit 1
+          fi
+
+          printf '%s' "$KEY_BASE64" | base64 -d > app/app.key
+          printf '%s' "$SIGNING_CONFIG" > local.properties
+
       - name: Gradle Build
         run: |
           chmod +x ./gradlew
-          ./gradlew --no-daemon assembleDebug
+          ./gradlew --no-daemon assembleRelease
 
       - name: Collect APK files
         run: |
           set -euo pipefail
           mkdir -p apk-artifacts
-          cp app/build/outputs/apk/debug/*.apk apk-artifacts/
+          cp app/build/outputs/apk/release/*.apk apk-artifacts/
           ls -lh apk-artifacts
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: debug-apk
+          name: signed-apk
           path: apk-artifacts/*.apk
           if-no-files-found: error
 
@@ -65,11 +80,11 @@ jobs:
 
           tag="$RELEASE_TAG"
           if [ -z "$tag" ]; then
-            tag="debug-build-${GITHUB_RUN_NUMBER}"
+            tag="signed-build-${GITHUB_RUN_NUMBER}"
           fi
 
           title="Lulu ${tag}"
-          notes="Automated debug APK build from ${GITHUB_SHA}."
+          notes="Automated signed APK build from ${GITHUB_SHA}."
 
           if gh release view "$tag" >/dev/null 2>&1; then
             gh release upload "$tag" apk-artifacts/*.apk --clobber

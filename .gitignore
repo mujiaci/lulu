@@ -16,6 +16,7 @@ node_modules/
 dist/
 .next/
 .env
+release-signing/
 **/.gradle/
 **/.idea/
 *.class
