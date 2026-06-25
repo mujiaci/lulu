@@ -347,6 +347,21 @@ private fun MiniMaxTTSConfiguration(
         )
     }
 
+    // Group ID
+    FormItem(
+        label = { Text("Group ID") },
+        description = { Text("MiniMax requires Group ID in the TTS request URL.") }
+    ) {
+        OutlinedTextField(
+            value = setting.groupId,
+            onValueChange = { newGroupId ->
+                onValueChange(setting.copy(groupId = newGroupId))
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = { Text("MiniMax Group ID") },
+        )
+    }
+
     // Base URL
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_base_url)) },
@@ -363,18 +378,45 @@ private fun MiniMaxTTSConfiguration(
     }
 
     // Model
+    var modelExpanded by remember { mutableStateOf(false) }
+    val models = TTSProviderSetting.MiniMax.SUPPORTED_MODELS
+
     FormItem(
         label = { Text(stringResource(R.string.setting_tts_page_model)) },
         description = { Text(stringResource(R.string.setting_tts_page_model_description)) }
     ) {
-        OutlinedTextField(
-            value = setting.model,
-            onValueChange = { newModel ->
-                onValueChange(setting.copy(model = newModel))
-            },
-            modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("speech-2.5-hd-preview") }
-        )
+        ExposedDropdownMenuBox(
+            expanded = modelExpanded,
+            onExpandedChange = { modelExpanded = !modelExpanded }
+        ) {
+            OutlinedTextField(
+                value = TTSProviderSetting.MiniMax.normalizeModel(setting.model),
+                onValueChange = { newModel ->
+                    onValueChange(setting.copy(model = newModel))
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                placeholder = { Text(TTSProviderSetting.MiniMax.DEFAULT_MODEL) },
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = modelExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = modelExpanded,
+                onDismissRequest = { modelExpanded = false }
+            ) {
+                models.forEach { model ->
+                    DropdownMenuItem(
+                        text = { Text(model) },
+                        onClick = {
+                            modelExpanded = false
+                            onValueChange(setting.copy(model = model))
+                        }
+                    )
+                }
+            }
+        }
     }
 
     // Voice ID
@@ -479,7 +521,7 @@ private fun MiniMaxTTSConfiguration(
         OutlinedNumberInput(
             value = setting.speed,
             onValueChange = { newSpeed ->
-                if (newSpeed in 0.25f..4.0f) {
+                if (newSpeed in 0.5f..2.0f) {
                     onValueChange(setting.copy(speed = newSpeed))
                 }
             },

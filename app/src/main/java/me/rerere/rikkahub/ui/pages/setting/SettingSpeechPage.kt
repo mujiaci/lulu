@@ -635,6 +635,7 @@ private fun TTSProviderItem(
     val tts = LocalTTSState.current
     val isSpeaking by tts.isSpeaking.collectAsState()
     val isAvailable by tts.isAvailable.collectAsState()
+    val error by tts.error.collectAsState()
 
     Card(
         modifier = modifier,
@@ -763,6 +764,13 @@ private fun TTSProviderItem(
                         )
                     }
                 }
+            }
+            if (isSelected && error?.isNotBlank() == true) {
+                Text(
+                    text = error.orEmpty(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

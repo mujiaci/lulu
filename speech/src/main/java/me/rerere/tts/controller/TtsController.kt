@@ -97,6 +97,7 @@ class TtsController(
     fun setProvider(provider: TTSProviderSetting?) {
         currentProvider = provider
         _isAvailable.update { provider != null }
+        _error.update { null }
         if (provider == null) stop()
     }
 
@@ -205,6 +206,7 @@ class TtsController(
         cache.clear()
         lastPrefetchedIndex = -1
         _isSpeaking.update { false }
+        _error.update { null }
         _currentChunk.update { 0 }
         _totalChunks.update { 0 }
         _playbackState.update { PlaybackState(status = PlaybackStatus.Idle) }

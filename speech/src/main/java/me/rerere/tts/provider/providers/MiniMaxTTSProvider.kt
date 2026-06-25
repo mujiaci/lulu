@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.buildJsonObject
@@ -19,20 +20,33 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "MiniMaxTTSProvider"
 
 @Serializable
 private data class MiniMaxResponseData(
-    val audio: String,
-    val status: Int,
-    val ced: String
+    val audio: String? = null,
+    val status: Int? = null,
+    val ced: String? = null
 )
 
 @Serializable
 private data class MiniMaxResponse(
-    val data: MiniMaxResponseData
+    val data: MiniMaxResponseData? = null,
+    @SerialName("base_resp")
+    val baseResp: MiniMaxBaseResponse? = null,
+    @SerialName("trace_id")
+    val traceId: String? = null
+)
+
+@Serializable
+private data class MiniMaxBaseResponse(
+    @SerialName("status_code")
+    val statusCode: Int = 0,
+    @SerialName("status_msg")
+    val statusMsg: String = ""
 )
 
 class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
@@ -50,8 +64,15 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
         providerSetting: TTSProviderSetting.MiniMax,
         request: TTSRequest
     ): Flow<AudioChunk> = flow {
+        val apiKey = providerSetting.apiKey.trim()
+        val groupId = providerSetting.groupId.trim()
+        val model = TTSProviderSetting.MiniMax.normalizeModel(providerSetting.model)
+
+        require(apiKey.isNotBlank()) { "MiniMax API Key is required" }
+        require(groupId.isNotBlank()) { "MiniMax Group ID is required" }
+
         val requestBody = buildJsonObject {
-            put("model", providerSetting.model)
+            put("model", model)
             put("text", request.text)
             put("stream", true)
             put("output_format", "hex")
@@ -63,13 +84,19 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
                 put("emotion", providerSetting.emotion)
                 put("speed", providerSetting.speed)
             })
+            put("audio_setting", buildJsonObject {
+                put("sample_rate", 32000)
+                put("bitrate", 128000)
+                put("format", "mp3")
+                put("channel", 1)
+            })
         }
 
         Log.i(TAG, "generateSpeech: $requestBody")
 
         val httpRequest = Request.Builder()
-            .url("${providerSetting.baseUrl}/t2a_v2")
-            .addHeader("Authorization", "Bearer ${providerSetting.apiKey}")
+            .url(buildT2aUrl(providerSetting.baseUrl, groupId))
+            .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
             .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
             .build()
@@ -80,31 +107,49 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
             when (it) {
                 is SseEvent.Open -> Log.i(TAG, "SSE connection opened")
                 is SseEvent.Event -> {
-                    try {
-                        val data = json.decodeFromString<MiniMaxResponse>(it.data)
+                    if (it.data == "[DONE]") return@collect
 
-                        // Convert hex string to bytes
-                        val audioBytes = hexStringToBytes(data.data.audio)
+                    val data = try {
+                        json.decodeFromString<MiniMaxResponse>(it.data)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Ignoring malformed MiniMax SSE chunk: ${it.data}", e)
+                        return@collect
+                    }
 
-                        emit(
-                            AudioChunk(
-                                data = audioBytes,
-                                format = AudioFormat.MP3, // MiniMax returns MP3 format
-                                sampleRate = 32000, // Default sample rate from MiniMax
-                                isLast = false, // Will be set to true on last chunk
-                                metadata = mapOf(
-                                    "provider" to "minimax",
-                                    "model" to providerSetting.model,
-                                    "voice" to providerSetting.voiceId,
-                                    "status" to data.data.status.toString(),
-                                    "ced" to data.data.ced
-                                )
+                    data.baseResp?.takeIf { response -> response.statusCode != 0 }?.let { response ->
+                        throw Exception(
+                            "MiniMax TTS error ${response.statusCode}: ${response.statusMsg.ifBlank { "unknown error" }}"
+                        )
+                    }
+
+                    val responseData = data.data ?: return@collect
+                    val audioHex = responseData.audio.orEmpty()
+                    if (audioHex.isBlank()) return@collect
+
+                    // Convert hex string to bytes
+                    val audioBytes = try {
+                        hexStringToBytes(audioHex)
+                    } catch (e: Exception) {
+                        throw Exception("MiniMax TTS returned invalid audio data", e)
+                    }
+
+                    emit(
+                        AudioChunk(
+                            data = audioBytes,
+                            format = AudioFormat.MP3, // MiniMax returns MP3 format
+                            sampleRate = 32000, // Default sample rate from MiniMax
+                            isLast = false, // Will be set to true on last chunk
+                            metadata = mapOf(
+                                "provider" to "minimax",
+                                "model" to model,
+                                "voice" to providerSetting.voiceId,
+                                "status" to responseData.status.toString(),
+                                "ced" to responseData.ced.orEmpty(),
+                                "traceId" to data.traceId.orEmpty()
                             )
                         )
-                        hasEmittedAudio = true
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to process audio chunk", e)
-                    }
+                    )
+                    hasEmittedAudio = true
                 }
 
                 is SseEvent.Closed -> {
@@ -120,16 +165,44 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
                                 metadata = mapOf("provider" to "minimax")
                             )
                         )
+                    } else {
+                        throw Exception("MiniMax TTS returned no audio. Check API Key, Group ID, model, and voice ID.")
                     }
                 }
 
                 is SseEvent.Failure -> {
                     Log.e(TAG, "SSE connection failed", it.throwable)
-                    throw it.throwable ?: Exception("MiniMax TTS streaming failed")
+                    val response = it.response
+                    val errorBody = response?.body?.string().orEmpty()
+                    throw Exception(
+                        buildString {
+                            append("MiniMax TTS request failed")
+                            if (response != null) append(": ${response.code} ${response.message}")
+                            if (errorBody.isNotBlank()) append(" - $errorBody")
+                            if (it.throwable?.message?.isNotBlank() == true) append(" - ${it.throwable.message}")
+                        },
+                        it.throwable
+                    )
                 }
             }
         }
     }
+}
+
+private fun buildT2aUrl(baseUrl: String, groupId: String): okhttp3.HttpUrl {
+    val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
+    val endpoint = if (normalizedBaseUrl.endsWith("/t2a_v2")) {
+        normalizedBaseUrl
+    } else {
+        "$normalizedBaseUrl/t2a_v2"
+    }
+
+    return endpoint.toHttpUrl()
+        .newBuilder()
+        .removeAllQueryParameters("GroupId")
+        .removeAllQueryParameters("Groupid")
+        .addQueryParameter("GroupId", groupId)
+        .build()
 }
 
 private fun hexStringToBytes(hexString: String): ByteArray {

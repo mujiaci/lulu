@@ -81,12 +81,36 @@ sealed class TTSProviderSetting {
         override var id: Uuid = Uuid.random(),
         override var name: String = "MiniMax TTS",
         val apiKey: String = "",
+        val groupId: String = "",
         val baseUrl: String = "https://api.minimaxi.com/v1",
-        val model: String = "speech-2.6-turbo",
+        val model: String = "speech-02-turbo",
         val voiceId: String = "female-shaonv",
         val emotion: String = "calm",
         val speed: Float = 1.0f
     ) : TTSProviderSetting() {
+        companion object {
+            const val DEFAULT_MODEL = "speech-02-turbo"
+
+            val SUPPORTED_MODELS = listOf(
+                "speech-2.5-hd-preview",
+                "speech-2.5-turbo-preview",
+                "speech-02-hd",
+                DEFAULT_MODEL,
+                "speech-01-hd",
+                "speech-01-turbo",
+                "speech-01-240228",
+                "speech-01-turbo-240228",
+            )
+
+            fun normalizeModel(model: String): String {
+                val trimmed = model.trim()
+                return when (trimmed) {
+                    "", "speech-2.6-turbo" -> DEFAULT_MODEL
+                    else -> trimmed
+                }
+            }
+        }
+
         override fun copyProvider(
             id: Uuid,
             name: String,
