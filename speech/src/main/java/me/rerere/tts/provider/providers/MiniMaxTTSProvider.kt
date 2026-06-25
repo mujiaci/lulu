@@ -16,14 +16,21 @@ import me.rerere.tts.model.AudioFormat
 import me.rerere.tts.model.TTSRequest
 import me.rerere.tts.provider.TTSProvider
 import me.rerere.tts.provider.TTSProviderSetting
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.HttpUrl.Companion.toHttpUrl
 import java.util.concurrent.TimeUnit
 
 private const val TAG = "MiniMaxTTSProvider"
+private const val MINIMAX_SAMPLE_RATE = 32000
+private val JSON_MEDIA_TYPE = "application/json".toMediaType()
+private val miniMaxJson = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+}
 
 @Serializable
 private data class MiniMaxResponseData(
@@ -49,15 +56,103 @@ private data class MiniMaxBaseResponse(
     val statusMsg: String = ""
 )
 
+internal class MiniMaxSseProcessor(
+    private val model: String,
+    private val voiceId: String
+) {
+    private var hasAudio = false
+
+    fun process(event: SseEvent): AudioChunk? {
+        return when (event) {
+            is SseEvent.Open -> {
+                Log.i(TAG, "SSE connection opened")
+                null
+            }
+
+            is SseEvent.Event -> processData(event.data)
+
+            is SseEvent.Closed -> {
+                Log.i(TAG, "SSE connection closed")
+                if (!hasAudio) {
+                    throw IllegalStateException(
+                        "MiniMax TTS returned no audio. Check API Key, Group ID, model, and voice ID."
+                    )
+                }
+                AudioChunk(
+                    data = byteArrayOf(),
+                    format = AudioFormat.MP3,
+                    sampleRate = MINIMAX_SAMPLE_RATE,
+                    isLast = true,
+                    metadata = mapOf("provider" to "minimax")
+                )
+            }
+
+            is SseEvent.Failure -> {
+                val throwable = event.throwable
+                Log.e(TAG, "SSE connection failed", throwable)
+                val response = event.response
+                val errorBody = response?.body?.string().orEmpty()
+                throw Exception(
+                    buildString {
+                        append("MiniMax TTS request failed")
+                        if (response != null) append(": ${response.code} ${response.message}")
+                        if (errorBody.isNotBlank()) append(" - $errorBody")
+                        if (throwable?.message?.isNotBlank() == true) {
+                            append(" - ${throwable.message}")
+                        }
+                    },
+                    throwable
+                )
+            }
+        }
+    }
+
+    private fun processData(rawData: String): AudioChunk? {
+        if (rawData == "[DONE]") return null
+
+        val response = try {
+            miniMaxJson.decodeFromString<MiniMaxResponse>(rawData)
+        } catch (e: Exception) {
+            Log.w(TAG, "Ignoring malformed MiniMax SSE chunk: $rawData", e)
+            return null
+        }
+
+        response.baseResp?.takeIf { it.statusCode != 0 }?.let {
+            throw Exception("MiniMax TTS error ${it.statusCode}: ${it.statusMsg.ifBlank { "unknown error" }}")
+        }
+
+        val responseData = response.data ?: return null
+        val audioHex = responseData.audio.orEmpty()
+        if (audioHex.isBlank()) return null
+
+        val audioBytes = try {
+            hexStringToBytes(audioHex)
+        } catch (e: Exception) {
+            throw Exception("MiniMax TTS returned invalid audio data", e)
+        }
+
+        hasAudio = true
+        return AudioChunk(
+            data = audioBytes,
+            format = AudioFormat.MP3,
+            sampleRate = MINIMAX_SAMPLE_RATE,
+            isLast = false,
+            metadata = mapOf(
+                "provider" to "minimax",
+                "model" to model,
+                "voice" to voiceId,
+                "status" to responseData.status?.toString().orEmpty(),
+                "ced" to responseData.ced.orEmpty(),
+                "traceId" to response.traceId.orEmpty()
+            )
+        )
+    }
+}
+
 class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
     private val httpClient = OkHttpClient.Builder()
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
-
-    private val json = Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-    }
 
     override fun generateSpeech(
         context: Context,
@@ -98,98 +193,21 @@ class MiniMaxTTSProvider : TTSProvider<TTSProviderSetting.MiniMax> {
             .url(buildT2aUrl(providerSetting.baseUrl, groupId))
             .addHeader("Authorization", "Bearer $apiKey")
             .addHeader("Content-Type", "application/json")
-            .post(json.encodeToString(requestBody).toRequestBody("application/json".toMediaType()))
+            .post(requestBody.toString().toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
-        var hasEmittedAudio = false
+        val processor = MiniMaxSseProcessor(
+            model = model,
+            voiceId = providerSetting.voiceId
+        )
 
-        httpClient.sseFlow(httpRequest).collect {
-            when (it) {
-                is SseEvent.Open -> Log.i(TAG, "SSE connection opened")
-                is SseEvent.Event -> {
-                    if (it.data == "[DONE]") return@collect
-
-                    val data = try {
-                        json.decodeFromString<MiniMaxResponse>(it.data)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "Ignoring malformed MiniMax SSE chunk: ${it.data}", e)
-                        return@collect
-                    }
-
-                    data.baseResp?.takeIf { response -> response.statusCode != 0 }?.let { response ->
-                        throw Exception(
-                            "MiniMax TTS error ${response.statusCode}: ${response.statusMsg.ifBlank { "unknown error" }}"
-                        )
-                    }
-
-                    val responseData = data.data ?: return@collect
-                    val audioHex = responseData.audio.orEmpty()
-                    if (audioHex.isBlank()) return@collect
-
-                    // Convert hex string to bytes
-                    val audioBytes = try {
-                        hexStringToBytes(audioHex)
-                    } catch (e: Exception) {
-                        throw Exception("MiniMax TTS returned invalid audio data", e)
-                    }
-
-                    emit(
-                        AudioChunk(
-                            data = audioBytes,
-                            format = AudioFormat.MP3, // MiniMax returns MP3 format
-                            sampleRate = 32000, // Default sample rate from MiniMax
-                            isLast = false, // Will be set to true on last chunk
-                            metadata = mapOf(
-                                "provider" to "minimax",
-                                "model" to model,
-                                "voice" to providerSetting.voiceId,
-                                "status" to responseData.status.toString(),
-                                "ced" to responseData.ced.orEmpty(),
-                                "traceId" to data.traceId.orEmpty()
-                            )
-                        )
-                    )
-                    hasEmittedAudio = true
-                }
-
-                is SseEvent.Closed -> {
-                    Log.i(TAG, "SSE connection closed")
-                    // Emit final chunk if we haven't already
-                    if (hasEmittedAudio) {
-                        emit(
-                            AudioChunk(
-                                data = byteArrayOf(), // Empty data for last chunk
-                                format = AudioFormat.MP3,
-                                sampleRate = 32000,
-                                isLast = true,
-                                metadata = mapOf("provider" to "minimax")
-                            )
-                        )
-                    } else {
-                        throw Exception("MiniMax TTS returned no audio. Check API Key, Group ID, model, and voice ID.")
-                    }
-                }
-
-                is SseEvent.Failure -> {
-                    Log.e(TAG, "SSE connection failed", it.throwable)
-                    val response = it.response
-                    val errorBody = response?.body?.string().orEmpty()
-                    throw Exception(
-                        buildString {
-                            append("MiniMax TTS request failed")
-                            if (response != null) append(": ${response.code} ${response.message}")
-                            if (errorBody.isNotBlank()) append(" - $errorBody")
-                            if (it.throwable?.message?.isNotBlank() == true) append(" - ${it.throwable.message}")
-                        },
-                        it.throwable
-                    )
-                }
-            }
+        httpClient.sseFlow(httpRequest).collect { event ->
+            processor.process(event)?.let { emit(it) }
         }
     }
 }
 
-private fun buildT2aUrl(baseUrl: String, groupId: String): okhttp3.HttpUrl {
+private fun buildT2aUrl(baseUrl: String, groupId: String): HttpUrl {
     val normalizedBaseUrl = baseUrl.trim().trimEnd('/')
     val endpoint = if (normalizedBaseUrl.endsWith("/t2a_v2")) {
         normalizedBaseUrl
