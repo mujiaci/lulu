@@ -39,16 +39,7 @@ class VoiceCallRepository(
             assistantId = assistantId,
             assistantName = assistantName,
             startedAt = now,
-            transcript = initialLines.ifEmpty {
-                listOf(
-                    VoiceCallLine(
-                        role = VoiceCallRole.System,
-                        text = "Voice call started",
-                        timestamp = now,
-                        replayable = false,
-                    )
-                )
-            },
+            transcript = initialLines,
         )
         if (persistImmediately) upsertSession(session)
         return session

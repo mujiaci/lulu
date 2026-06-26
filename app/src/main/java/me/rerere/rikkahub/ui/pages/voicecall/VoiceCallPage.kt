@@ -15,8 +15,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledIconButton
@@ -44,12 +50,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import me.rerere.asr.ASRStatus
 import me.rerere.hugeicons.HugeIcons
@@ -76,13 +84,16 @@ import me.rerere.rikkahub.ui.context.LocalASRState
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
+import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.tts.model.PlaybackStatus
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.uuid.Uuid
 
 private enum class CallStage {
+    Idle,
     Connecting,
     Active,
     Ended,
@@ -109,12 +120,13 @@ fun VoiceCallPage(
     val assistantName = assistant?.name?.ifBlank { "Lulu" } ?: "Lulu"
     val isHistoryOnly = sessionId != null
     var session by remember(sessionId, conversationId, assistantId) { mutableStateOf<VoiceCallSession?>(null) }
-    var stage by remember(sessionId) { mutableStateOf(if (isHistoryOnly) CallStage.Ended else CallStage.Connecting) }
+    var stage by remember(sessionId) { mutableStateOf(if (isHistoryOnly) CallStage.Ended else CallStage.Idle) }
     var showMiniWindow by remember { mutableStateOf(false) }
     var sleepMode by remember { mutableStateOf(false) }
     var sleepMinutes by remember { mutableLongStateOf(20L) }
     var lastTranscript by remember { mutableStateOf("") }
     var silenceJob by remember { mutableStateOf<Job?>(null) }
+    var sleepJob by remember { mutableStateOf<Job?>(null) }
     val latestSession by rememberUpdatedState(session)
     val latestStage by rememberUpdatedState(stage)
 
@@ -122,7 +134,7 @@ fun VoiceCallPage(
         val current = session ?: return
         val updated = repository.appendLine(current, line)
         session = updated
-        if (speak && line.replayable) tts.speak(line.text, flushCalled = true)
+        if (speak) tts.speak(line.text, flushCalled = true)
     }
 
     fun assistantSay(text: String, replayable: Boolean = true) {
@@ -134,6 +146,19 @@ fun VoiceCallPage(
             ),
             speak = true,
         )
+    }
+
+    fun startCall() {
+        if (isHistoryOnly || stage != CallStage.Idle) return
+        stage = CallStage.Connecting
+        scope.launch {
+            delay(1_800)
+            stage = CallStage.Active
+            assistantSay(
+                text = "I picked up. I am here with you. Take your time and talk to me when you are ready.",
+                replayable = false,
+            )
+        }
     }
 
     fun startListening() {
@@ -159,6 +184,7 @@ fun VoiceCallPage(
 
     fun endCall() {
         silenceJob?.cancel()
+        sleepJob?.cancel()
         asr.stop()
         tts.stop()
         val ended = session?.let { repository.endSession(it) }
@@ -174,26 +200,9 @@ fun VoiceCallPage(
                 conversationId = conversationId,
                 assistantId = assistantId,
                 assistantName = assistantName,
-                initialLines = listOf(
-                    VoiceCallLine(
-                        role = VoiceCallRole.System,
-                        text = "Connecting call",
-                        replayable = false,
-                    ),
-                ),
+                initialLines = emptyList(),
                 persistImmediately = false,
             )
-    }
-
-    LaunchedEffect(session?.id, isHistoryOnly) {
-        if (session == null || isHistoryOnly) return@LaunchedEffect
-        stage = CallStage.Connecting
-        delay(1_200)
-        stage = CallStage.Active
-        assistantSay(
-            text = "I picked up. I am here with you. Take your time and talk to me when you are ready.",
-            replayable = false,
-        )
     }
 
     LaunchedEffect(isSpeaking, stage, sleepMode) {
@@ -204,19 +213,31 @@ fun VoiceCallPage(
     }
 
     LaunchedEffect(sleepMode, sleepMinutes, stage) {
+        sleepJob?.cancel()
         if (!sleepMode || stage != CallStage.Active) return@LaunchedEffect
         asr.stop()
         val current = session ?: return@LaunchedEffect
         val updated = repository.replaceSession(current.copy(sleepMode = true))
         session = updated
-        assistantSay(buildSleepTalk(assistantName, sleepMinutes))
-        delay(sleepMinutes * 60_000)
-        if (stage == CallStage.Active && sleepMode) endCall()
+        sleepJob = scope.launch {
+            val deadline = System.currentTimeMillis() + sleepMinutes * 60_000
+            val segments = buildSleepTalkSegments(assistantName)
+            var index = 0
+            while (isActive && System.currentTimeMillis() < deadline) {
+                if (stage != CallStage.Active || !sleepMode) return@launch
+                assistantSay(segments[index % segments.size])
+                waitForTtsPlayback(tts)
+                delay(700)
+                index++
+            }
+            if (stage == CallStage.Active && sleepMode) endCall()
+        }
     }
 
     DisposableEffect(Unit) {
         onDispose {
             silenceJob?.cancel()
+            sleepJob?.cancel()
             if (!isHistoryOnly) asr.stop()
             if (!isHistoryOnly && latestStage != CallStage.Ended) {
                 latestSession?.let {
@@ -307,18 +328,15 @@ fun VoiceCallPage(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            if (stage == CallStage.Connecting && !isHistoryOnly) {
-                ConnectingPanel(
-                    assistantName = assistantName,
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            } else {
-                TranscriptCard(
-                    session = currentSession,
-                    onReplay = { line -> tts.speak(line.text, flushCalled = true) },
-                    modifier = Modifier.weight(1f).fillMaxWidth(),
-                )
-            }
+            CallContentCard(
+                stage = stage,
+                isHistoryOnly = isHistoryOnly,
+                assistantName = assistantName,
+                session = currentSession,
+                onStartCall = { startCall() },
+                onReplay = { line -> tts.speak(line.text, flushCalled = true) },
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+            )
 
             if (!isHistoryOnly) {
                 SleepModePanel(
@@ -347,6 +365,7 @@ fun VoiceCallPage(
                     }
                     FilledIconButton(
                         onClick = { endCall() },
+                        enabled = stage != CallStage.Idle,
                         modifier = Modifier.size(58.dp),
                     ) {
                         Icon(HugeIcons.Cancel01, contentDescription = null)
@@ -424,47 +443,126 @@ fun VoiceCallHistoryPage(
 }
 
 @Composable
-private fun ConnectingPanel(
+private fun CallContentCard(
+    stage: CallStage,
+    isHistoryOnly: Boolean,
     assistantName: String,
+    session: VoiceCallSession,
+    onStartCall: () -> Unit,
+    onReplay: (VoiceCallLine) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier = modifier, colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.fillMaxSize().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
-            Icon(
-                HugeIcons.Call02,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.primary,
+        when {
+            stage == CallStage.Idle && !isHistoryOnly -> IdleCallPanel(
+                assistantName = assistantName,
+                onStartCall = onStartCall,
             )
-            Spacer(Modifier.height(12.dp))
-            Text("Calling $assistantName...", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Waiting for pickup",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+
+            stage == CallStage.Connecting && !isHistoryOnly -> ConnectingPanel(assistantName = assistantName)
+
+            else -> TranscriptList(session = session, onReplay = onReplay)
         }
     }
 }
 
 @Composable
-private fun TranscriptCard(
+private fun IdleCallPanel(
+    assistantName: String,
+    onStartCall: () -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            HugeIcons.Call02,
+            contentDescription = null,
+            modifier = Modifier.size(54.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
+        Spacer(Modifier.height(14.dp))
+        Text("Ready to call $assistantName", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(18.dp))
+        FilledTonalButton(onClick = onStartCall) {
+            Icon(HugeIcons.Call02, contentDescription = null)
+            Text("Start call")
+        }
+    }
+}
+
+@Composable
+private fun ConnectingPanel(assistantName: String) {
+    val transition = rememberInfiniteTransition(label = "calling_pulse")
+    val pulse by transition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(760),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "calling_pulse_scale",
+    )
+    Column(
+        modifier = Modifier.fillMaxSize().padding(24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Box(
+            modifier = Modifier.size(76.dp).scale(pulse).clip(CircleShape)
+                .background(MaterialTheme.colorScheme.primaryContainer),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                HugeIcons.Call02,
+                contentDescription = null,
+                modifier = Modifier.size(38.dp),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+        Text("Calling $assistantName...", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Connecting",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun TranscriptList(
     session: VoiceCallSession,
     onReplay: (VoiceCallLine) -> Unit,
-    modifier: Modifier = Modifier,
 ) {
-    Card(modifier = modifier, colors = CustomColors.cardColorsOnSurfaceContainer) {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(session.transcript) { line ->
-                TranscriptLine(line = line, onReplay = { onReplay(line) })
+    val listState = rememberLazyListState()
+    LaunchedEffect(session.transcript.size) {
+        if (session.transcript.isNotEmpty()) {
+            listState.animateScrollToItem(session.transcript.lastIndex)
+        }
+    }
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(14.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        items(session.transcript) { line ->
+            TranscriptLine(line = line, onReplay = { onReplay(line) })
+        }
+        if (session.transcript.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier.fillParentMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "No transcript yet",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
         }
     }
@@ -633,6 +731,7 @@ private fun statusText(
     isHistoryOnly: Boolean,
 ): String {
     if (isHistoryOnly) return "Saved call record"
+    if (stage == CallStage.Idle) return "Ready"
     if (sleepMode) return "Sleep mode"
     if (stage == CallStage.Connecting) return "Connecting"
     if (stage == CallStage.Ended) return "Ended"
@@ -651,8 +750,33 @@ private fun buildAssistantReply(userText: String): String {
     return "I heard you say: $trimmed. I am staying with you, and I will answer more naturally once this call is connected to the chat model."
 }
 
-private fun buildSleepTalk(assistantName: String, minutes: Long): String {
-    return "$assistantName is here. You do not need to say anything now. Let your shoulders loosen, let your breathing slow down, and just listen. I will stay with you for about $minutes minutes. You are safe, you are loved, and nothing urgent needs you right now. Close your eyes. I will keep my voice soft and gentle, like a small warm light beside you."
+private suspend fun waitForTtsPlayback(tts: CustomTtsState) {
+    var observedActive = false
+    repeat(1_200) {
+        val status = tts.playbackState.value.status
+        if (status == PlaybackStatus.Playing || status == PlaybackStatus.Buffering) {
+            observedActive = true
+        }
+        if (observedActive && status != PlaybackStatus.Playing && status != PlaybackStatus.Buffering) {
+            return
+        }
+        delay(250)
+    }
+}
+
+private fun buildSleepTalkSegments(assistantName: String): List<String> {
+    return listOf(
+        "$assistantName is here. You do not need to say anything now. Let your shoulders loosen, let your breathing slow down, and just listen. You are safe, you are loved, and nothing urgent needs you right now.",
+        "Breathe in slowly, and breathe out even slower. I will stay beside you. You can let the day fall away piece by piece, like setting down a heavy bag at the door.",
+        "Close your eyes if you want to. Imagine a warm little light near your pillow. It is quiet, soft, and steady. I am speaking gently, and you only need to rest.",
+        "If any thought comes by, you do not need to chase it. Let it pass. Come back to my voice, come back to the blanket, come back to this small safe room.",
+        "You have done enough for today. Even if something was unfinished, it can wait. Right now your only job is to be held by the dark and slowly drift down.",
+        "I am proud of you for making it here. You can unclench your hands, relax your jaw, and let your breathing become lazy and deep.",
+        "Think of a quiet night road with warm windows far away. Nothing is asking for you. The world is soft at the edges, and sleep is allowed to come closer.",
+        "I will keep talking softly. You do not have to answer me. Just receive this: you matter, you are wanted, and you can rest without earning it.",
+        "Let your body become heavier. Your feet, your knees, your shoulders, your face. Everything can sink a little deeper into the bed.",
+        "If you are still awake, that is okay too. We are not forcing sleep. We are just making a kind place for sleep to arrive when it wants.",
+    )
 }
 
 private fun formatTime(value: Long): String {
