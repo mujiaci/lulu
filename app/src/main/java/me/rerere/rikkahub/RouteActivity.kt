@@ -122,6 +122,7 @@ import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
 import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
+import me.rerere.rikkahub.ui.pages.study.StudyPomodoroFocusPage
 import me.rerere.rikkahub.ui.pages.study.StudyPage
 import me.rerere.rikkahub.ui.pages.study.StudyPomodoroPage
 import me.rerere.rikkahub.ui.pages.stats.StatsPage
@@ -347,6 +348,15 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.StudyPomodoro> {
                                 StudyPomodoroPage()
+                            }
+
+                            entry<Screen.StudyPomodoroFocus> { key ->
+                                StudyPomodoroFocusPage(
+                                    minutes = key.minutes,
+                                    task = key.task,
+                                    imageEnabled = key.imageEnabled,
+                                    voiceEnabled = key.voiceEnabled,
+                                )
                             }
 
                             entry<Screen.UserProfile> {
@@ -662,6 +672,14 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object StudyPomodoro : Screen
+
+    @Serializable
+    data class StudyPomodoroFocus(
+        val minutes: Int,
+        val task: String,
+        val imageEnabled: Boolean,
+        val voiceEnabled: Boolean,
+    ) : Screen
 
     @Serializable
     data object ChatRooms : Screen

@@ -6,14 +6,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -22,13 +24,11 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -41,7 +41,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
@@ -112,7 +115,15 @@ fun StudyPage() {
             contentPadding = padding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { StudyHeader(daysLeft = daysLeft, kudos = kudos) }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                    StudyHeader(daysLeft = daysLeft, kudos = kudos, modifier = Modifier.weight(1.35f))
+                    PomodoroEntryCard(
+                        modifier = Modifier.weight(1f),
+                        onClick = { navController.navigate(Screen.StudyPomodoro) },
+                    )
+                }
+            }
             item { LevelCard(kudos = kudos) }
             item {
                 StudyPlanCard(
@@ -140,23 +151,14 @@ fun StudyPage() {
                     },
                 )
             }
-            item {
-                FilledTonalButton(
-                    onClick = { navController.navigate(Screen.StudyPomodoro) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(HugeIcons.Clock02, contentDescription = null)
-                    Text("进入番茄钟")
-                }
-            }
         }
     }
 }
 
 @Composable
 fun StudyPomodoroPage() {
+    val navController = LocalNavController.current
     val settings = LocalSettings.current
-    val tts = LocalTTSState.current
     val assistant = settings.getCurrentAssistant()
     var menuExpanded by remember { mutableStateOf(false) }
     var imageEnabled by remember { mutableStateOf(true) }
@@ -164,38 +166,13 @@ fun StudyPomodoroPage() {
     var selectedMinutes by remember { mutableIntStateOf(25) }
     var customMinutes by remember { mutableStateOf("") }
     var taskText by remember { mutableStateOf("") }
-    var running by remember { mutableStateOf(false) }
-    var remainingSeconds by remember { mutableIntStateOf(25 * 60) }
-    var chatText by remember { mutableStateOf("") }
-    var coachReply by remember { mutableStateOf("准备好了就开始，我会陪你把这一轮学完。") }
-    var kudos by remember { mutableIntStateOf(0) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-
-    LaunchedEffect(running, selectedMinutes) {
-        if (!running) return@LaunchedEffect
-        while (running && remainingSeconds > 0) {
-            delay(1_000)
-            remainingSeconds -= 1
-            if (remainingSeconds > 0 && remainingSeconds % (5 * 60) == 0) {
-                val line = buildEncourageLine(taskText, assistant)
-                coachReply = line
-                if (voiceEnabled) tts.speak(line, flushCalled = true)
-            }
-        }
-        if (running && remainingSeconds <= 0) {
-            running = false
-            kudos += 2
-            val line = "这一轮完成了，夸夸值 +2。你刚才没有逃走，这很厉害。"
-            coachReply = line
-            if (voiceEnabled) tts.speak(line, flushCalled = true)
-        }
-    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("督学番茄钟") },
+                title = { Text("番茄钟设置") },
                 navigationIcon = { BackButton() },
                 actions = {
                     Box {
@@ -228,7 +205,7 @@ fun StudyPomodoroPage() {
             contentPadding = padding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item { CoachCard(assistant = assistant, imageEnabled = imageEnabled, kudos = kudos) }
+            item { CoachCard(assistant = assistant, imageEnabled = imageEnabled, kudos = 0) }
             item {
                 OutlinedTextField(
                     value = taskText,
@@ -244,64 +221,161 @@ fun StudyPomodoroPage() {
                     customMinutes = customMinutes,
                     onSelected = {
                         selectedMinutes = it
-                        remainingSeconds = it * 60
                         customMinutes = ""
                     },
                     onCustomChange = {
                         customMinutes = it.filter(Char::isDigit).take(3)
                         customMinutes.toIntOrNull()?.takeIf { value -> value > 0 }?.let { value ->
                             selectedMinutes = value
-                            remainingSeconds = value * 60
                         }
                     },
                 )
             }
             item {
-                TimerCard(
-                    selectedMinutes = selectedMinutes,
-                    remainingSeconds = remainingSeconds,
-                    running = running,
-                    onToggle = {
-                        if (!running && remainingSeconds <= 0) remainingSeconds = selectedMinutes * 60
-                        running = !running
+                FilledTonalButton(
+                    onClick = {
+                        navController.navigate(
+                            Screen.StudyPomodoroFocus(
+                                minutes = selectedMinutes.coerceAtLeast(1),
+                                task = taskText.trim(),
+                                imageEnabled = imageEnabled,
+                                voiceEnabled = voiceEnabled,
+                            )
+                        )
                     },
-                    onReset = {
-                        running = false
-                        remainingSeconds = selectedMinutes * 60
-                    },
-                )
-            }
-            item {
-                CoachChatCard(
-                    assistant = assistant,
-                    reply = coachReply,
-                    chatText = chatText,
-                    onChatChange = { chatText = it },
-                    onSend = {
-                        val text = chatText.trim()
-                        if (text.isNotBlank()) {
-                            val line = buildChatReply(text, taskText, assistant)
-                            coachReply = line
-                            chatText = ""
-                            if (voiceEnabled) tts.speak(line, flushCalled = true)
-                        }
-                    },
-                )
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(HugeIcons.Clock02, contentDescription = null)
+                    Text("开始番茄钟")
+                }
             }
         }
     }
 }
 
 @Composable
-private fun StudyHeader(daysLeft: Long, kudos: Int) {
-    Card {
+fun StudyPomodoroFocusPage(
+    minutes: Int,
+    task: String,
+    imageEnabled: Boolean,
+    voiceEnabled: Boolean,
+) {
+    val settings = LocalSettings.current
+    val tts = LocalTTSState.current
+    val assistant = settings.getCurrentAssistant()
+    val safeMinutes = minutes.coerceAtLeast(1)
+    var remainingSeconds by remember(safeMinutes) { mutableIntStateOf(safeMinutes * 60) }
+    var chatText by remember { mutableStateOf("") }
+    var coachReply by remember { mutableStateOf(buildEncourageLine(task, assistant)) }
+    var kudos by remember { mutableIntStateOf(0) }
+
+    LaunchedEffect(safeMinutes) {
+        if (voiceEnabled) tts.speak(coachReply, flushCalled = true)
+        while (remainingSeconds > 0) {
+            delay(1_000)
+            remainingSeconds -= 1
+            if (remainingSeconds > 0 && remainingSeconds % (5 * 60) == 0) {
+                val line = buildEncourageLine(task, assistant)
+                coachReply = line
+                if (voiceEnabled) tts.speak(line, flushCalled = true)
+            }
+        }
+        kudos += 2
+        val line = "这一轮完成了，夸夸值 +2。你刚才真的有好好留下来。"
+        coachReply = line
+        if (voiceEnabled) tts.speak(line, flushCalled = true)
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(focusBackgroundBrush(kudos)),
+    ) {
+        if (imageEnabled) {
+            CompanionImageBackdrop(
+                modifier = Modifier.fillMaxSize(),
+                assistant = assistant,
+                kudos = kudos,
+            )
+        }
         Column(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            Color.Black.copy(alpha = 0.18f),
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.32f),
+                        )
+                    )
+                )
+                .padding(horizontal = 18.dp, vertical = 28.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Text(
+                text = secondsText(remainingSeconds),
+                style = MaterialTheme.typography.displayLarge,
+                color = Color.White,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = task.ifBlank { "专注这一轮" },
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.82f),
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            FocusChatPanel(
+                assistant = assistant,
+                reply = coachReply,
+                chatText = chatText,
+                onChatChange = { chatText = it },
+                onSend = {
+                    val text = chatText.trim()
+                    if (text.isNotBlank()) {
+                        val line = buildChatReply(text, task, assistant)
+                        coachReply = line
+                        chatText = ""
+                        if (voiceEnabled) tts.speak(line, flushCalled = true)
+                    }
+                },
+            )
+            Spacer(modifier = Modifier.height(18.dp))
+        }
+    }
+}
+
+@Composable
+private fun StudyHeader(daysLeft: Long, kudos: Int, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(18.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("距离下一次中国考研初试还有", style = MaterialTheme.typography.bodyMedium)
-            Text("${daysLeft} 天", style = MaterialTheme.typography.displaySmall)
-            Text("夸夸值：$kudos", style = MaterialTheme.typography.titleMedium)
+            Text("考研倒计时", style = MaterialTheme.typography.labelLarge)
+            Text("${daysLeft} 天", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
+            Text("夸夸值 $kudos", style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+@Composable
+private fun PomodoroEntryCard(modifier: Modifier = Modifier, onClick: () -> Unit) {
+    Card(
+        modifier = modifier,
+        onClick = onClick,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(HugeIcons.Clock02, contentDescription = null, modifier = Modifier.size(28.dp))
+            Text("番茄钟", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("设置督学和时间", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -309,12 +383,12 @@ private fun StudyHeader(daysLeft: Long, kudos: Int) {
 @Composable
 private fun LevelCard(kudos: Int) {
     val reward = rewardFor(kudos)
-    Card {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("当前等级：Lv.${reward.level} ${reward.title}", style = MaterialTheme.typography.titleMedium)
+            Text("Lv.${reward.level} ${reward.title}", style = MaterialTheme.typography.titleMedium)
             Text(reward.unlock, style = MaterialTheme.typography.bodyMedium)
         }
     }
@@ -328,7 +402,7 @@ private fun StudyPlanCard(
     onToggle: (StudyTask) -> Unit,
     onAddTask: () -> Unit,
 ) {
-    Card {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -371,7 +445,7 @@ private fun StudyPlanCard(
 
 @Composable
 private fun CoachCard(assistant: Assistant, imageEnabled: Boolean, kudos: Int) {
-    Card {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -387,20 +461,17 @@ private fun CoachCard(assistant: Assistant, imageEnabled: Boolean, kudos: Int) {
                 }
             }
             if (imageEnabled) {
-                Box(
+                Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .clip(MaterialTheme.shapes.medium)
                         .background(MaterialTheme.colorScheme.surfaceVariant)
                         .padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(HugeIcons.Image03, contentDescription = null, modifier = Modifier.size(30.dp))
-                        Text(studyImagePromptHint(kudos), style = MaterialTheme.typography.bodyMedium)
-                    }
+                    Icon(HugeIcons.Image03, contentDescription = null, modifier = Modifier.size(30.dp))
+                    Text(studyImagePromptHint(kudos), style = MaterialTheme.typography.bodyMedium)
                 }
             }
         }
@@ -426,7 +497,7 @@ private fun DurationPicker(
     onSelected: (Int) -> Unit,
     onCustomChange: (String) -> Unit,
 ) {
-    Card {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -453,54 +524,54 @@ private fun DurationPicker(
 }
 
 @Composable
-private fun TimerCard(
-    selectedMinutes: Int,
-    remainingSeconds: Int,
-    running: Boolean,
-    onToggle: () -> Unit,
-    onReset: () -> Unit,
-) {
-    val total = (selectedMinutes * 60).coerceAtLeast(1)
-    val progress = 1f - remainingSeconds.coerceIn(0, total).toFloat() / total
-    Card {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text(secondsText(remainingSeconds), style = MaterialTheme.typography.displayMedium)
-            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = onToggle) {
-                    Text(if (running) "暂停番茄钟" else "开始番茄钟")
-                }
-                TextButton(onClick = onReset) {
-                    Text("重置")
-                }
+private fun CompanionImageBackdrop(modifier: Modifier = Modifier, assistant: Assistant, kudos: Int) {
+    Box(
+        modifier = modifier
+            .background(focusBackgroundBrush(kudos))
+            .padding(24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(160.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.26f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                UIAvatar(name = assistant.name, value = assistant.avatar, modifier = Modifier.size(128.dp))
             }
+            Text(
+                text = studyImagePromptHint(kudos),
+                color = Color.White.copy(alpha = 0.82f),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier
+                    .clip(MaterialTheme.shapes.medium)
+                    .background(Color.Black.copy(alpha = 0.16f))
+                    .padding(12.dp),
+            )
         }
     }
 }
 
 @Composable
-private fun CoachChatCard(
+private fun FocusChatPanel(
     assistant: Assistant,
     reply: String,
     chatText: String,
     onChatChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
-    Card {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Column(
             modifier = Modifier.padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.primary),
-                )
+                UIAvatar(name = assistant.name, value = assistant.avatar, modifier = Modifier.size(32.dp))
                 Text("${assistant.name} 的陪伴回复", style = MaterialTheme.typography.titleMedium)
             }
             Text(reply, style = MaterialTheme.typography.bodyMedium)
@@ -555,8 +626,18 @@ private fun buildChatReply(userText: String, taskText: String, assistant: Assist
 }
 
 private fun studyImagePromptHint(kudos: Int): String = when {
-    kudos >= 12 -> "生图方向：角色靠在你肩上陪读，画面亲密、安心、有互动感。"
-    kudos >= 7 -> "生图方向：角色趴在桌边牵住你的手，鼓励你继续学习。"
-    kudos >= 3 -> "生图方向：角色托腮看着屏幕，离你更近，陪你复习。"
-    else -> "生图方向：角色坐在你面前半身陪读，桌面干净，氛围温柔。"
+    kudos >= 12 -> "角色靠在你肩上陪读，画面亲密、安心、有互动感。"
+    kudos >= 7 -> "角色趴在桌边牵住你的手，鼓励你继续学习。"
+    kudos >= 3 -> "角色托腮看着屏幕，离你更近，陪你复习。"
+    else -> "角色坐在你面前半身陪读，桌面干净，氛围温柔。"
+}
+
+private fun focusBackgroundBrush(kudos: Int): Brush {
+    val colors = when {
+        kudos >= 12 -> listOf(Color(0xFF80546E), Color(0xFFB77B8F), Color(0xFFF1C7B9))
+        kudos >= 7 -> listOf(Color(0xFF4B6D73), Color(0xFF85A79B), Color(0xFFF1D9B5))
+        kudos >= 3 -> listOf(Color(0xFF545F88), Color(0xFF8E9CCB), Color(0xFFE7C6AA))
+        else -> listOf(Color(0xFF4D6573), Color(0xFF9AB1A9), Color(0xFFE8D7BC))
+    }
+    return Brush.verticalGradient(colors)
 }
