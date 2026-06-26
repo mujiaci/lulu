@@ -86,6 +86,7 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.service.VoiceCallForegroundService
 import me.rerere.tts.model.PlaybackStatus
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -161,6 +162,7 @@ fun VoiceCallPage(
 
     fun startCall() {
         if (isHistoryOnly || stage != CallStage.Idle) return
+        VoiceCallForegroundService.start(context.applicationContext, assistantName)
         stage = CallStage.Connecting
         scope.launch {
             delay(1_800)
@@ -200,17 +202,15 @@ fun VoiceCallPage(
         tts.stop()
         val ended = session?.let { repository.endSession(it) }
         session = ended ?: session?.copy(status = VoiceCallStatus.Ended, endedAt = System.currentTimeMillis())
-        stage = CallStage.Ended
-        navController.navigate(
-            Screen.VoiceCallHistory(
-                conversationId = conversationId,
-                assistantId = assistantId,
-            )
-        ) {
-            popUpTo(Screen.VoiceCall(conversationId = conversationId, assistantId = assistantId)) {
-                inclusive = true
-            }
-        }
+        VoiceCallForegroundService.stop(context.applicationContext)
+        stage = CallStage.Idle
+        session = repository.createSession(
+            conversationId = conversationId,
+            assistantId = assistantId,
+            assistantName = assistantName,
+            initialLines = emptyList(),
+            persistImmediately = false,
+        )
     }
 
     LaunchedEffect(sessionId, conversationId, assistantId) {
@@ -261,6 +261,7 @@ fun VoiceCallPage(
             silenceJob?.cancel()
             sleepJob?.cancel()
             if (!isHistoryOnly) asr.stop()
+            if (!isHistoryOnly) VoiceCallForegroundService.stop(context.applicationContext)
             if (!isHistoryOnly && latestStage != CallStage.Ended) {
                 latestSession?.let {
                     if (it.hasUserFacingContent()) {

@@ -73,6 +73,9 @@ import androidx.core.net.toUri
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -113,6 +116,7 @@ import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
 import java.util.Locale
+import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
 
 @Composable
@@ -161,6 +165,9 @@ fun ChatMessage(
     val navController = LocalNavController.current
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+    val animateNewAssistantMessage = remember(message.id) {
+        message.role == MessageRole.ASSISTANT && isFreshMessage(message.createdAt)
+    }
     Column(
         modifier = modifier.fillMaxWidth(),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
@@ -195,6 +202,7 @@ fun ChatMessage(
                 parts = message.parts,
                 annotations = message.annotations,
                 loading = loading,
+                animateAssistantSegments = animateNewAssistantMessage,
                 model = model,
                 onToolApproval = onToolApproval,
                 onToolAnswer = onToolAnswer,
@@ -284,6 +292,11 @@ fun ChatMessage(
     }
 }
 
+private fun isFreshMessage(createdAt: LocalDateTime): Boolean {
+    val age = Clock.System.now() - createdAt.toInstant(TimeZone.currentSystemDefault())
+    return age.inWholeMilliseconds in 0..8_000
+}
+
 @OptIn(FlowPreview::class)
 @Composable
 private fun MessagePartsBlock(
@@ -293,6 +306,7 @@ private fun MessagePartsBlock(
     parts: List<UIMessagePart>,
     annotations: List<UIMessageAnnotation>,
     loading: Boolean,
+    animateAssistantSegments: Boolean,
     onToolApproval: ((toolCallId: String, approved: Boolean, reason: String) -> Unit)? = null,
     onToolAnswer: ((toolCallId: String, answer: String) -> Unit)? = null,
     onUserMessageClick: (() -> Unit)? = null,
@@ -407,17 +421,28 @@ private fun MessagePartsBlock(
                                 } else {
                                     if (settings.displaySetting.showAssistantBubble) {
                                         val visualSegments = remember(displayText) { displayText.splitIntoVisualBubbles() }
-                                        var visibleSegmentCount by remember(displayText, loading) {
-                                            mutableIntStateOf(if (loading) visualSegments.size else 0)
+                                        var visibleSegmentCount by remember(animateAssistantSegments) {
+                                            mutableIntStateOf(
+                                                if (!animateAssistantSegments) {
+                                                    visualSegments.size
+                                                } else {
+                                                    0
+                                                }
+                                            )
                                         }
-                                        LaunchedEffect(displayText, loading, visualSegments.size) {
-                                            if (loading) {
+                                        LaunchedEffect(
+                                            visualSegments.size,
+                                            animateAssistantSegments,
+                                        ) {
+                                            if (!animateAssistantSegments) {
                                                 visibleSegmentCount = visualSegments.size
                                             } else {
-                                                visibleSegmentCount = 0
-                                                repeat(visualSegments.size) {
+                                                while (visibleSegmentCount < visualSegments.size) {
                                                     delay(120)
-                                                    visibleSegmentCount = it + 1
+                                                    visibleSegmentCount += 1
+                                                }
+                                                if (visibleSegmentCount > visualSegments.size) {
+                                                    visibleSegmentCount = visualSegments.size
                                                 }
                                             }
                                         }
