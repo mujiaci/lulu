@@ -87,7 +87,9 @@ import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.hooks.CustomTtsState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.service.VoiceCallForegroundService
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.tts.model.PlaybackStatus
+import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -110,6 +112,7 @@ fun VoiceCallPage(
     val settings = LocalSettings.current
     val context = androidx.compose.ui.platform.LocalContext.current
     val repository = remember(context) { VoiceCallRepository(context.applicationContext) }
+    val chatService: ChatService = koinInject()
     val tts = LocalTTSState.current
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
@@ -189,7 +192,14 @@ fun VoiceCallPage(
                 val finalText = lastTranscript.trim()
                 if (finalText.isNotBlank()) {
                     saveLine(VoiceCallLine(role = VoiceCallRole.User, text = finalText))
-                    assistantSay(buildAssistantReply(finalText))
+                    val reply = chatService.sendVoiceCallTurn(
+                        conversationId = Uuid.parse(conversationId),
+                        text = finalText,
+                    )
+                    assistantSay(
+                        text = reply ?: "我刚刚有点没接住，你再轻轻说一遍，好不好？",
+                        replayable = true,
+                    )
                 }
             }
         }
@@ -769,11 +779,6 @@ private fun statusText(
         ASRStatus.Error -> "Mic error"
         ASRStatus.Idle -> "Ready"
     }
-}
-
-private fun buildAssistantReply(userText: String): String {
-    val trimmed = userText.take(80)
-    return "I heard you say: $trimmed. I am staying with you, and I will answer more naturally once this call is connected to the chat model."
 }
 
 private suspend fun waitForTtsPlayback(tts: CustomTtsState) {

@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -32,6 +33,7 @@ import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -381,6 +383,31 @@ class ChatService(
     }
 
     // ---- 添加主动消息 ----
+
+    suspend fun sendVoiceCallTurn(conversationId: Uuid, text: String): String? {
+        val trimmed = text.trim()
+        if (trimmed.isBlank()) return null
+
+        val beforeAssistantMessageId = getConversationFlow(conversationId).value.currentMessages
+            .lastOrNull { it.role == MessageRole.ASSISTANT }
+            ?.id
+
+        sendMessage(
+            conversationId = conversationId,
+            content = listOf(UIMessagePart.Text(trimmed)),
+            answer = true,
+        )
+
+        withTimeoutOrNull(120_000) {
+            generationDoneFlow.filter { it == conversationId }.first()
+        } ?: return null
+
+        return getConversationFlow(conversationId).value.currentMessages
+            .lastOrNull { it.role == MessageRole.ASSISTANT && it.id != beforeAssistantMessageId }
+            ?.toText()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
         launchWithConversationReference(conversationId) {
