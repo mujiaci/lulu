@@ -195,6 +195,19 @@ private fun buildSleepSessionList(
                     put("deep_sleep_minutes", summary.deepSleep)
                     put("light_sleep_minutes", summary.lightSleep)
                     put("rem_sleep_minutes", summary.remSleep)
+                    put("awake_minutes", summary.awakeDuration)
+                }
+                summary.sleepScore?.let { put("sleep_score", it) }
+                summary.sleepEfficiency?.let { put("sleep_efficiency", it) }
+                summary.sleepLatency?.let { put("sleep_latency_minutes", it) }
+                summary.avgHeartRate?.let { put("avg_heart_rate", it) }
+                summary.avgOxygenSaturation?.let { put("avg_spo2", it) }
+                summary.avgHrv?.let { put("avg_hrv", it) }
+                summary.avgBreathRate?.let { put("avg_breath_rate", it) }
+                summary.wakeCount?.let { put("wake_count", it) }
+                summary.turnOverCount?.let { put("turn_over_count", it) }
+                if (summary.stageSampleCount > 0) {
+                    put("stage_sample_count", summary.stageSampleCount)
                 }
             })
         }

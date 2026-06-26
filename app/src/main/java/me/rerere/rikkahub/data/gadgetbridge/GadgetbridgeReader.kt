@@ -186,7 +186,7 @@ object GadgetbridgeReader {
     fun readSleepSummaries(days: Int, customPath: String = ""): List<SleepSummary> {
         return withDatabase(customPath) { db ->
             when (detectManufacturer(db)) {
-                Manufacturer.HUAWEI -> readSleepSummariesHuawei(db, days)
+                Manufacturer.HUAWEI -> readSleepSummariesHuaweiV2(db, days)
                 Manufacturer.XIAOMI -> readSleepSummariesXiaomi(db, days)
             }
         }.getOrDefault(emptyList())
@@ -579,6 +579,118 @@ object GadgetbridgeReader {
      *
      * 注意：两张表时间戳单位不同，分别用 epochSecond / toEpochMilli 计算当天范围。
      */
+    // Huawei Band 11 stores rich sleep stages in HUAWEI_SLEEP_STAGE_SAMPLE, one row per minute.
+    // HUAWEI_SLEEP_STATS_SAMPLE carries the session-level metrics such as score, efficiency, HRV, and SpO2.
+    private fun readSleepSummariesHuaweiV2(db: SQLiteDatabase, days: Int): List<SleepSummary> {
+        val zone = ZoneId.systemDefault()
+        val startMs = LocalDate.now()
+            .minusDays(days.toLong())
+            .atStartOfDay(zone)
+            .toInstant()
+            .toEpochMilli()
+        val summaries = mutableListOf<SleepSummary>()
+
+        return try {
+            db.query(
+                "HUAWEI_SLEEP_STATS_SAMPLE",
+                arrayOf(
+                    "TIMESTAMP",
+                    "SLEEP_SCORE",
+                    "BED_TIME",
+                    "RISING_TIME",
+                    "WAKEUP_TIME",
+                    "SLEEP_LATENCY",
+                    "SLEEP_EFFICIENCY",
+                    "MIN_HEART_RATE",
+                    "MAX_HEART_RATE",
+                    "MIN_OXYGEN_SATURATION",
+                    "MAX_OXYGEN_SATURATION",
+                    "AVG_HRV",
+                    "AVG_BREATH_RATE",
+                    "AVG_OXYGEN_SATURATION",
+                    "AVG_HEART_RATE",
+                    "WAKE_COUNT",
+                    "TURN_OVER_COUNT",
+                ),
+                "WAKEUP_TIME >= ?",
+                arrayOf(startMs.toString()),
+                null,
+                null,
+                "TIMESTAMP DESC",
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    try {
+                        val stats = HuaweiSleepStatsRow(
+                            timestamp = cursor.getLong(cursor.getColumnIndexOrThrow("TIMESTAMP")),
+                            sleepScore = cursor.getInt(cursor.getColumnIndexOrThrow("SLEEP_SCORE")),
+                            bedTime = cursor.getLong(cursor.getColumnIndexOrThrow("BED_TIME")),
+                            risingTime = cursor.getLong(cursor.getColumnIndexOrThrow("RISING_TIME")),
+                            wakeupTime = cursor.getLong(cursor.getColumnIndexOrThrow("WAKEUP_TIME")),
+                            sleepLatency = cursor.getInt(cursor.getColumnIndexOrThrow("SLEEP_LATENCY")),
+                            sleepEfficiency = cursor.getInt(cursor.getColumnIndexOrThrow("SLEEP_EFFICIENCY")),
+                            minHeartRate = cursor.getInt(cursor.getColumnIndexOrThrow("MIN_HEART_RATE")),
+                            maxHeartRate = cursor.getInt(cursor.getColumnIndexOrThrow("MAX_HEART_RATE")),
+                            minOxygenSaturation = cursor.getDouble(cursor.getColumnIndexOrThrow("MIN_OXYGEN_SATURATION")),
+                            maxOxygenSaturation = cursor.getDouble(cursor.getColumnIndexOrThrow("MAX_OXYGEN_SATURATION")),
+                            avgHrv = cursor.getInt(cursor.getColumnIndexOrThrow("AVG_HRV")),
+                            avgBreathRate = cursor.getInt(cursor.getColumnIndexOrThrow("AVG_BREATH_RATE")),
+                            avgOxygenSaturation = cursor.getInt(cursor.getColumnIndexOrThrow("AVG_OXYGEN_SATURATION")),
+                            avgHeartRate = cursor.getInt(cursor.getColumnIndexOrThrow("AVG_HEART_RATE")),
+                            wakeCount = cursor.getInt(cursor.getColumnIndexOrThrow("WAKE_COUNT")),
+                            turnOverCount = cursor.getInt(cursor.getColumnIndexOrThrow("TURN_OVER_COUNT")),
+                        )
+                        val stageEnd = listOf(stats.wakeupTime, stats.risingTime)
+                            .filter { it > stats.bedTime }
+                            .maxOrNull()
+                            ?: stats.wakeupTime
+                        val stages = readHuaweiSleepStages(db, stats.bedTime, stageEnd)
+                        summaries.add(buildHuaweiSleepSummary(stats, stages))
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Huawei sleep row mapping failed", e)
+                    }
+                }
+            }
+            summaries
+        } catch (e: Exception) {
+            Log.e(TAG, "Huawei sleep query failed startMs=$startMs", e)
+            summaries
+        }
+    }
+
+    private fun readHuaweiSleepStages(
+        db: SQLiteDatabase,
+        startMs: Long,
+        endMs: Long,
+    ): List<HuaweiSleepStagePoint> {
+        if (startMs <= 0 || endMs <= startMs) return emptyList()
+        val stages = mutableListOf<HuaweiSleepStagePoint>()
+
+        return try {
+            db.query(
+                "HUAWEI_SLEEP_STAGE_SAMPLE",
+                arrayOf("TIMESTAMP", "STAGE"),
+                "TIMESTAMP >= ? AND TIMESTAMP <= ?",
+                arrayOf(startMs.toString(), endMs.toString()),
+                null,
+                null,
+                "TIMESTAMP ASC",
+            ).use { cursor ->
+                while (cursor.moveToNext()) {
+                    stages.add(
+                        HuaweiSleepStagePoint(
+                            timestamp = cursor.getLong(0),
+                            stage = cursor.getInt(1),
+                        )
+                    )
+                }
+            }
+            stages
+        } catch (e: Exception) {
+            Log.e(TAG, "Huawei sleep stage query failed startMs=$startMs endMs=$endMs", e)
+            emptyList()
+        }
+    }
+
     private fun readLatestSpo2AndStressHuawei(db: SQLiteDatabase): Pair<Int?, Int?> {
         val zone = ZoneId.systemDefault()
         val today = LocalDate.now()

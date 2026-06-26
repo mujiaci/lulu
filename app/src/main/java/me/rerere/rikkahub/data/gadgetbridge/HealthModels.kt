@@ -1,4 +1,3 @@
-
 package me.rerere.rikkahub.data.gadgetbridge
 
 import java.time.LocalDate
@@ -26,14 +25,28 @@ data class ActivitySample(
 )
 
 data class SleepSummary(
-    val timestamp: Long,      // 入睡时间（毫秒时间戳）
-    val wakeupTime: Long,     // 醒来时间（毫秒时间戳）
-    val totalDuration: Int,   // 总时长（分钟）
-    val deepSleep: Int,       // 深睡时长（分钟）
-    val lightSleep: Int,      // 浅睡时长（分钟）
-    val remSleep: Int,        // REM时长（分钟）
-    val awakeDuration: Int,   // 清醒时长（分钟）
-    val isAwake: Boolean,     // 是否只是短暂清醒（IS_AWAKE=1）
+    val timestamp: Long,
+    val wakeupTime: Long,
+    val totalDuration: Int,
+    val deepSleep: Int,
+    val lightSleep: Int,
+    val remSleep: Int,
+    val awakeDuration: Int,
+    val isAwake: Boolean,
+    val sleepScore: Int? = null,
+    val sleepLatency: Int? = null,
+    val sleepEfficiency: Int? = null,
+    val minHeartRate: Int? = null,
+    val maxHeartRate: Int? = null,
+    val avgHeartRate: Int? = null,
+    val minOxygenSaturation: Int? = null,
+    val maxOxygenSaturation: Int? = null,
+    val avgOxygenSaturation: Int? = null,
+    val avgHrv: Int? = null,
+    val avgBreathRate: Int? = null,
+    val wakeCount: Int? = null,
+    val turnOverCount: Int? = null,
+    val stageSampleCount: Int = 0,
 ) {
     val isNap: Boolean get() = isAwake && deepSleep == 0 && lightSleep == 0 && remSleep == 0
 }

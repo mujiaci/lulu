@@ -268,7 +268,7 @@ private fun HealthContent(
             )
         }
         item {
-            SleepSummaryCard(
+            RichSleepSummaryCard(
                 summaries = state.sleepSummaries,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -575,65 +575,92 @@ private fun HeartRateLineChart(
 
 // ============ Sleep Summary Card ============
 @Composable
-private fun SleepSummaryCard(
+private fun RichSleepSummaryCard(
     summaries: List<SleepSummary>,
     modifier: Modifier = Modifier,
 ) {
     if (summaries.isEmpty()) return
 
     Card(modifier = modifier, colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Icon(imageVector = HugeIcons.Alert01, contentDescription = null, modifier = Modifier.size(20.dp), tint = Color(0xFF7E57C2))
-                Text("最近睡眠", style = MaterialTheme.typography.titleMedium)
+                Text("睡眠数据", style = MaterialTheme.typography.titleMedium)
             }
 
             summaries.take(7).forEachIndexed { index, summary ->
-                Row(
+                val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
+                val dateFormatter = remember { DateTimeFormatter.ofPattern("M/d") }
+                val startDate = Instant.ofEpochMilli(summary.timestamp)
+                    .atZone(ZoneId.systemDefault()).toLocalDate()
+                    .format(dateFormatter)
+                val startTime = Instant.ofEpochMilli(summary.timestamp)
+                    .atZone(ZoneId.systemDefault()).toLocalTime()
+                    .format(timeFormatter)
+                val endTime = Instant.ofEpochMilli(summary.wakeupTime)
+                    .atZone(ZoneId.systemDefault()).toLocalTime()
+                    .format(timeFormatter)
+                val hours = summary.totalDuration / 60
+                val mins = summary.totalDuration % 60
+
+                Column(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Top,
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    val timeFormatter = remember { DateTimeFormatter.ofPattern("HH:mm") }
-                    val dateFormatter = remember { DateTimeFormatter.ofPattern("M/d") }
-                    val startDate = Instant.ofEpochMilli(summary.timestamp)
-                        .atZone(ZoneId.systemDefault()).toLocalDate()
-                        .format(dateFormatter)
-                    val startTime = Instant.ofEpochMilli(summary.timestamp)
-                        .atZone(ZoneId.systemDefault()).toLocalTime()
-                        .format(timeFormatter)
-                    val endTime = Instant.ofEpochMilli(summary.wakeupTime)
-                        .atZone(ZoneId.systemDefault()).toLocalTime()
-                        .format(timeFormatter)
-                    val hours = summary.totalDuration / 60
-                    val mins = summary.totalDuration % 60
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.Top,
+                    ) {
+                        Column {
+                            Text(
+                                if (summary.isNap) "小憩" else "夜间睡眠",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                            Text(
+                                "$startDate $startTime - $endTime",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
 
-                    Column {
-                        Text(
-                            if (summary.isNap) "小憩" else "睡眠",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        Text(
-                            "$startDate $startTime - $endTime",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "${hours}h ${mins}min",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                        if (!summary.isNap && summary.totalDuration > 0) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                Text("深${summary.deepSleep}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1565C0))
-                                Text("浅${summary.lightSleep}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFF64B5F6))
-                                Text("REM${summary.remSleep}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAB47BC))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text("${hours}h ${mins}min", style = MaterialTheme.typography.bodyMedium)
+                            summary.sleepScore?.let {
+                                Text(
+                                    "睡眠分 $it",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
                             }
                         }
                     }
+
+                    if (!summary.isNap && summary.totalDuration > 0) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("深睡 ${summary.deepSleep}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFF1565C0))
+                            Text("浅睡 ${summary.lightSleep}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFF64B5F6))
+                            Text("REM ${summary.remSleep}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFFAB47BC))
+                            Text("清醒 ${summary.awakeDuration}m", style = MaterialTheme.typography.labelSmall, color = Color(0xFFFFA726))
+                        }
+                    }
+
+                    val metrics = buildList {
+                        summary.sleepEfficiency?.let { add("效率 $it%") }
+                        summary.avgHeartRate?.let { add("平均心率 $it") }
+                        summary.avgOxygenSaturation?.let { add("平均血氧 $it%") }
+                        summary.avgHrv?.let { add("HRV $it") }
+                        summary.avgBreathRate?.let { add("呼吸率 $it") }
+                    }.joinToString("  ")
+                    if (metrics.isNotBlank()) {
+                        Text(
+                            metrics,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
+
                 if (index < summaries.take(7).size - 1) {
                     HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
                 }
