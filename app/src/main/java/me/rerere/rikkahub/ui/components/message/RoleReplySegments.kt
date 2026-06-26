@@ -65,13 +65,21 @@ fun String.splitIntoVisualBubbles(): List<String> {
         .filter { it.isNotBlank() }
     if (paragraphSegments.size > 1) return paragraphSegments
 
-    if (text.length < 120) return listOf(text)
-    return text.split(Regex("(?<=[.!?\\u3002\\uFF01\\uFF1F])\\s+|(?<=[.!?\\u3002\\uFF01\\uFF1F])"))
+    val sentenceParts = text.split(Regex("(?<=[.!?~～。！？…])\\s*"))
         .map { it.trim() }
         .filter { it.isNotBlank() }
+    val roughParts = if (sentenceParts.size > 1) {
+        sentenceParts
+    } else {
+        text.split(Regex("(?<=[,，、;；:：])\\s*"))
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+    }
+    if (roughParts.size <= 1 && text.length <= 56) return listOf(text)
+    return roughParts
         .fold(mutableListOf<String>()) { acc, part ->
             val last = acc.lastOrNull()
-            if (last == null || last.length + part.length > 90) {
+            if (last == null || last.length + part.length > 44) {
                 acc += part
             } else {
                 acc[acc.lastIndex] = "$last$part"

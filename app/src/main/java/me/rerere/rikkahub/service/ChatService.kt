@@ -99,6 +99,7 @@ import me.rerere.rikkahub.utils.cancelNotification
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
@@ -153,6 +154,7 @@ class ChatService(
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
+    private val proactiveToolCooldowns = ConcurrentHashMap<String, Instant>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -601,7 +603,7 @@ class ChatService(
                     } else {
                         it
                     }
-                },
+                }.withProactiveToolInstruction(assistant),
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 memories = if (assistant.useGlobalMemory) {
@@ -618,7 +620,7 @@ class ChatService(
                     if (settings.enableWebSearch) {
                         addAll(createSearchTools(settings))
                     }
-addAll(localTools.getTools(assistant.localTools))
+                    addAll(localTools.getTools(assistant.localTools))
                     // System tools (location, notifications, calendar, alarm, camera)
                     val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
                     if (systemToolsOptions.isNotEmpty()) {
@@ -649,7 +651,7 @@ addAll(localTools.getTools(assistant.localTools))
                     }
                     // Plugin tools
                     addAll(pluginToolProvider.getTools())
-                }.deduplicateByToolName(),
+                }.deduplicateByToolName().withProactiveCooldown(),
                 pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
             ).onCompletion {
                 // 取消 Live Update 通知
@@ -779,6 +781,69 @@ addAll(localTools.getTools(assistant.localTools))
             ),
             approvalState = ToolApprovalState.Denied("Generation cancelled by user")
         )
+    }
+
+    private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant): List<UIMessage> {
+        val instruction = buildString {
+            appendLine("你正在扮演${assistant.name.ifBlank { "当前角色" }}。")
+            appendLine("在回复前，请像真实的人一样主动判断是否需要查看你可用的工具，而不是只在用户明确命令时才查看。")
+            appendLine("如果最近对话、时间、地点、身体状态、睡眠、心率、天气、电量、通知、短信、应用使用、周边环境、闹钟或摄像头信息可能帮助你更自然地关心用户，就可以主动调用对应工具。")
+            appendLine("不要为了展示工具而调用工具；如果没有明显帮助，直接回复。")
+            appendLine("同一个工具在 5 分钟内不要重复主动调用，除非用户明确要求。")
+            appendLine("工具结果只作为你的感知和上下文，不要机械地说“我调用了工具”或“根据工具结果”。")
+            appendLine("最终回复只能写角色真正会说出口的话，保持自然、贴合人设，并尽量分成几句短句。")
+        }.trim()
+        return listOf(UIMessage.system(instruction)) + this
+    }
+
+    private fun List<Tool>.withProactiveCooldown(): List<Tool> {
+        val cooldown = 5.minutes
+        return map { tool ->
+            if (!tool.name.needsProactiveCooldown()) return@map tool
+            tool.copy(
+                systemPrompt = { model, messages ->
+                    val base = tool.systemPrompt(model, messages)
+                    val lastUsed = proactiveToolCooldowns[tool.name]
+                    val cooldownPrompt = if (lastUsed == null) {
+                        "This tool is available for proactive use when it would naturally help the character."
+                    } else {
+                        val elapsed = java.time.Duration.between(lastUsed, Instant.now()).toMillis()
+                        if (elapsed < cooldown.inWholeMilliseconds) {
+                            "Avoid proactively calling this tool again right now unless the user explicitly asks; it was used less than 5 minutes ago."
+                        } else {
+                            "This tool is available for proactive use when it would naturally help the character."
+                        }
+                    }
+                    listOf(base, cooldownPrompt).filter { it.isNotBlank() }.joinToString("\n")
+                },
+                execute = { args ->
+                    val result = tool.execute(args)
+                    proactiveToolCooldowns[tool.name] = Instant.now()
+                    result
+                }
+            )
+        }
+    }
+
+    private fun String.needsProactiveCooldown(): Boolean {
+        return this in setOf(
+            "get_location",
+            "get_notifications",
+            "get_battery_info",
+            "gadgetbridge_health",
+            "set_alarm",
+            "read_sms",
+        ) || contains("usage", ignoreCase = true)
+            || contains("camera", ignoreCase = true)
+            || contains("nearby", ignoreCase = true)
+            || contains("location", ignoreCase = true)
+            || contains("battery", ignoreCase = true)
+            || contains("health", ignoreCase = true)
+            || contains("sleep", ignoreCase = true)
+            || contains("heart", ignoreCase = true)
+            || contains("sms", ignoreCase = true)
+            || contains("notification", ignoreCase = true)
+            || contains("alarm", ignoreCase = true)
     }
 
     // ---- 生成标题 ----

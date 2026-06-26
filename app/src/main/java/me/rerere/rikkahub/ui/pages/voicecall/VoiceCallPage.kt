@@ -142,7 +142,7 @@ fun VoiceCallPage(
         session = updated
         if (speak) {
             line.text.extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
-                tts.speak(it, flushCalled = true)
+                scope.launch { speakInSegments(tts, it) }
             }
         }
     }
@@ -382,7 +382,7 @@ fun VoiceCallPage(
                 onStartCall = { startCall() },
                 onReplay = { line ->
                     line.text.extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
-                        tts.speak(it, flushCalled = true)
+                        scope.launch { speakInSegments(tts, it) }
                     }
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -825,6 +825,15 @@ private suspend fun waitForTtsPlayback(tts: CustomTtsState) {
             return
         }
         delay(250)
+    }
+}
+
+private suspend fun speakInSegments(tts: CustomTtsState, text: String) {
+    val segments = text.splitIntoVisualBubbles().filter { it.isNotBlank() }
+    segments.forEachIndexed { index, segment ->
+        tts.speak(segment, flushCalled = index == 0)
+        waitForTtsPlayback(tts)
+        delay(120)
     }
 }
 
