@@ -95,7 +95,6 @@ import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
-import me.rerere.hugeicons.stroke.Voice
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -601,9 +600,10 @@ fun ChatInput(
                                 )
                             }
 
-                            // Voice button: click to record, click again to stop and send
+                            // Voice button: click to record, click again to stop and insert transcript
                             if (asrState.isAvailable || asrState.isRecording) {
-                                ActionIconButton(
+                                AsrButton(
+                                    state = asrState,
                                     onClick = {
                                         when (asrState.status) {
                                             ASRStatus.Listening -> {
@@ -613,31 +613,23 @@ fun ChatInput(
                                                 if (!asrPermission.allRequiredPermissionsGranted) {
                                                     asrPermission.requestPermissions()
                                                 } else {
-                                                    voiceMessageMode = true
+                                                    asrBaseText = state.textContent.text.toString()
+                                                    voiceMessageMode = false
                                                     asr.start { transcript ->
-                                                        // Ignore transcript in voice message mode
+                                                        val text = transcript.trim()
+                                                        if (text.isNotEmpty()) {
+                                                            val prefix = asrBaseText.trimEnd()
+                                                            state.setMessageText(
+                                                                if (prefix.isEmpty()) text else "$prefix $text"
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
                                             ASRStatus.Connecting, ASRStatus.Stopping -> {}
                                         }
                                     }
-                                ) {
-                                    if (asrState.isRecording) {
-                                        androidx.compose.material3.CircularProgressIndicator(
-                                            modifier = Modifier.size(18.dp),
-                                            strokeWidth = 2.dp,
-                                            color = MaterialTheme.colorScheme.error,
-                                        )
-                                    } else {
-                                        Icon(
-                                            imageVector = HugeIcons.Voice,
-                                            contentDescription = "Voice",
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
+                                )
                             }
 
                             AnimatedVisibility(
