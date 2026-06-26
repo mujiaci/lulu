@@ -68,17 +68,35 @@ import kotlin.uuid.Uuid
 fun DesktopPage() {
     val navController = LocalNavController.current
     val settings = LocalSettings.current
+    val conversationRepository = koinInject<ConversationRepository>()
+    val settingsStore = koinInject<SettingsStore>()
+    val scope = rememberCoroutineScope()
     val currentAssistant = settings.getCurrentAssistant()
-    var note by remember { mutableStateOf("I want to be gently accompanied today.") }
+    var note by remember { mutableStateOf("今天也想被好好陪着。") }
+
+    fun openAssistantChat(assistant: Assistant) {
+        scope.launch {
+            settingsStore.updateAssistant(assistant.id)
+            val target = conversationRepository.getRecentConversations(assistant.id, limit = 1)
+                .firstOrNull()
+                ?: Conversation.ofId(
+                    id = Uuid.random(),
+                    assistantId = assistant.id,
+                    newConversation = true,
+                )
+            navController.navigate(Screen.Chat(target.id.toString()))
+        }
+    }
+
     val apps = remember {
         listOf(
-            DesktopApp("Study", HugeIcons.BookOpen02, "study") {},
-            DesktopApp("Chat", HugeIcons.BubbleChat, "chat") { navController.navigate(Screen.ChatRooms) },
-            DesktopApp("User", HugeIcons.User, "user") { navController.navigate(Screen.UserProfile) },
-            DesktopApp("Stats", HugeIcons.Chart, "stats") { navController.navigate(Screen.Stats) },
-            DesktopApp("Saved", HugeIcons.Favourite, "favorite") { navController.navigate(Screen.Favorite) },
-            DesktopApp("Roles", HugeIcons.Bot, "assistant") { navController.navigate(Screen.Assistant) },
-            DesktopApp("Settings", HugeIcons.Setting07, "setting") { navController.navigate(Screen.Setting) },
+            DesktopApp("考研", HugeIcons.BookOpen02, "study") {},
+            DesktopApp("聊天", HugeIcons.BubbleChat, "chat") { navController.navigate(Screen.ChatRooms) },
+            DesktopApp("我的", HugeIcons.User, "user") { navController.navigate(Screen.UserProfile) },
+            DesktopApp("统计", HugeIcons.Chart, "stats") { navController.navigate(Screen.Stats) },
+            DesktopApp("收藏", HugeIcons.Favourite, "favorite") { navController.navigate(Screen.Favorite) },
+            DesktopApp("角色", HugeIcons.Bot, "assistant") { navController.navigate(Screen.Assistant) },
+            DesktopApp("设置", HugeIcons.Setting07, "setting") { navController.navigate(Screen.Setting) },
         )
     }
 
@@ -92,7 +110,7 @@ fun DesktopPage() {
                 assistant = currentAssistant,
                 note = note,
                 onNoteChange = { note = it },
-                onOpenChat = { navController.navigate(Screen.ChatRooms) },
+                onOpenChat = { openAssistantChat(currentAssistant) },
             )
             LazyVerticalGrid(
                 columns = GridCells.Fixed(4),
@@ -134,7 +152,7 @@ fun ChatRoomsPage() {
         ) {
             item {
                 Text(
-                    text = "Chat",
+                    text = "聊天",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
@@ -175,12 +193,12 @@ fun UserProfilePage() {
         ) {
             Spacer(Modifier.height(40.dp))
             UIAvatar(
-                name = settings.displaySetting.userNickname.ifBlank { "Me" },
+                name = settings.displaySetting.userNickname.ifBlank { "我" },
                 value = settings.displaySetting.userAvatar,
                 modifier = Modifier.size(96.dp),
             )
             Text(
-                text = settings.displaySetting.userNickname.ifBlank { "My profile" },
+                text = settings.displaySetting.userNickname.ifBlank { "我的资料" },
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -189,11 +207,11 @@ fun UserProfilePage() {
                     modifier = Modifier.fillMaxWidth().padding(18.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
-                    Text("Name", style = MaterialTheme.typography.labelMedium)
-                    Text(settings.displaySetting.userNickname.ifBlank { "No nickname yet" })
-                    Text("Profile", style = MaterialTheme.typography.labelMedium)
+                    Text("昵称", style = MaterialTheme.typography.labelMedium)
+                    Text(settings.displaySetting.userNickname.ifBlank { "还没有设置昵称" })
+                    Text("资料", style = MaterialTheme.typography.labelMedium)
                     Text(
-                        "This is the first profile entry. Birthday, goals, preferences, and health summaries can be added later.",
+                        text = "这里先放个人资料入口，后面可以继续加生日、目标、偏好、健康摘要。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -217,22 +235,24 @@ private fun DesktopHero(
             modifier = Modifier.fillMaxSize().padding(18.dp),
             verticalArrangement = Arrangement.SpaceBetween,
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                modifier = Modifier.clickable(onClick = onOpenChat),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 UIAvatar(
-                    name = assistant.name.ifBlank { "Lulu" },
+                    name = assistant.name.ifBlank { "露露" },
                     value = assistant.avatar,
                     modifier = Modifier.size(58.dp),
-                    onClick = onOpenChat,
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = assistant.name.ifBlank { "Lulu" },
+                        text = assistant.name.ifBlank { "露露" },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        text = "Tap to chat",
+                        text = "点我聊天",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -244,7 +264,7 @@ private fun DesktopHero(
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 2,
                 maxLines = 3,
-                label = { Text("Today") },
+                label = { Text("今日心情") },
             )
         }
     }
@@ -296,20 +316,20 @@ private fun ChatRoomRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             UIAvatar(
-                name = assistant.name.ifBlank { "Assistant" },
+                name = assistant.name.ifBlank { "露露" },
                 value = assistant.avatar,
                 modifier = Modifier.size(48.dp),
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = assistant.name.ifBlank { "Assistant" },
+                    text = assistant.name.ifBlank { "露露" },
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 Text(
-                    text = conversation?.title?.ifBlank { "Tap to continue" } ?: "No messages yet",
+                    text = conversation?.title?.ifBlank { "点开继续聊天" } ?: "还没有聊天记录",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
@@ -335,9 +355,9 @@ private data class DesktopApp(
 private fun relativeTime(instant: Instant): String {
     val duration = Duration.between(instant, Instant.now()).abs()
     return when {
-        duration.toMinutes() < 1 -> "now"
-        duration.toHours() < 1 -> "${duration.toMinutes()}m"
-        duration.toDays() < 1 -> "${duration.toHours()}h"
-        else -> "${duration.toDays()}d"
+        duration.toMinutes() < 1 -> "刚刚"
+        duration.toHours() < 1 -> "${duration.toMinutes()}分钟前"
+        duration.toDays() < 1 -> "${duration.toHours()}小时前"
+        else -> "${duration.toDays()}天前"
     }
 }

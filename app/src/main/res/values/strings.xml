@@ -69,7 +69,7 @@
   <string name="assistant_page_current_assistant">Current Assistant</string>
   <string name="assistant_page_custom_bodies">Custom Body</string>
   <string name="assistant_page_custom_headers">Custom Headers</string>
-  <string name="assistant_page_default_assistant">Default Assistant</string>
+  <string name="assistant_page_default_assistant">Default Role</string>
   <string name="assistant_page_delete">Delete</string>
   <string name="assistant_page_delete_body">Delete Body</string>
   <string name="assistant_page_delete_dialog_text">Are you sure you want to delete this assistant? This action cannot be undone.</string>
@@ -121,7 +121,7 @@
   <string name="assistant_page_remove">Remove</string>
   <string name="assistant_page_remove_background">Remove Background</string>
   <string name="assistant_page_save">Save</string>
-  <string name="assistant_page_search_placeholder">Search assistants</string>
+  <string name="assistant_page_search_placeholder">Search roles</string>
   <string name="assistant_page_select_background">Select Background Image</string>
   <string name="assistant_page_select_from_gallery">Select from Gallery</string>
   <string name="assistant_page_stream_output">Stream Output</string>
@@ -147,7 +147,7 @@
   <string name="assistant_page_thinking_budget">Thinking Budget</string>
   <string name="assistant_page_time_reminder">Time Reminder</string>
   <string name="assistant_page_time_reminder_desc">Automatically inject time reminders before messages with large time gaps to help AI understand conversation intervals</string>
-  <string name="assistant_page_title">Assistant Settings</string>
+  <string name="assistant_page_title">Role Settings</string>
   <string name="assistant_page_top_p">Top P</string>
   <string name="assistant_page_top_p_value">Top P: %s</string>
   <string name="assistant_page_top_p_warning">Please don\'t modify this value unless you know what you\'re doing</string>
@@ -550,7 +550,7 @@
   <string name="safe_mode_copy">Copy</string>
   <string name="safe_mode_crash_report">Crash Report</string>
   <string name="safe_mode_current_assistant">Current assistant: %s</string>
-  <string name="safe_mode_default_assistant">Default Assistant</string>
+  <string name="safe_mode_default_assistant">Default Role</string>
   <string name="safe_mode_description">The app crashed on the last launch. You can switch to a different assistant to resolve the issue.</string>
   <string name="safe_mode_switch_assistant">Switch Assistant</string>
   <string name="safe_mode_title">Safe Mode</string>

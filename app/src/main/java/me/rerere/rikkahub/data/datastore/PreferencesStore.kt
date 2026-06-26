@@ -267,12 +267,7 @@ class SettingsStore(
                     )
                 } else provider
             }.toMutableList()
-            val assistants = it.assistants.ifEmpty { DEFAULT_ASSISTANTS }.toMutableList()
-            DEFAULT_ASSISTANTS.forEach { defaultAssistant ->
-                if (assistants.none { it.id == defaultAssistant.id }) {
-                    assistants.add(defaultAssistant.copy())
-                }
-            }
+            val assistants = it.assistants.toMutableList()
             val ttsProviders = it.ttsProviders.ifEmpty { DEFAULT_TTS_PROVIDERS }.toMutableList()
             DEFAULT_TTS_PROVIDERS.forEach { defaultTTSProvider ->
                 if (ttsProviders.none { provider -> provider.id == defaultTTSProvider.id }) {
@@ -672,7 +667,9 @@ fun Settings.getCurrentChatModel(): Model? {
 }
 
 fun Settings.getCurrentAssistant(): Assistant {
-    return this.assistants.find { it.id == assistantId } ?: this.assistants.first()
+    return this.assistants.find { it.id == assistantId }
+        ?: this.assistants.firstOrNull()
+        ?: DEFAULT_ASSISTANTS.first()
 }
 
 fun Settings.getAssistantById(id: Uuid): Assistant? {
@@ -718,14 +715,9 @@ internal val DEFAULT_ASSISTANT_ID = Uuid.parse("0950e2dc-9bd5-4801-afa3-aa887aa3
 internal val DEFAULT_ASSISTANTS = listOf(
     Assistant(
         id = DEFAULT_ASSISTANT_ID,
-        name = "",
-        systemPrompt = ""
-    ),
-    Assistant(
-        id = Uuid.parse("3d47790c-c415-4b90-9388-751128adb0a0"),
-        name = "",
+        name = "露露",
         systemPrompt = """
-            You are a helpful assistant, called {{char}}, based on model {{model_name}}.
+            You are {{char}}, based on model {{model_name}}.
 
             ## Info
             - Time: {{cur_datetime}}
@@ -756,8 +748,6 @@ private val DEFAULT_TTS_PROVIDERS = listOf(
         voice = "alloy",
     )
 )
-
-internal val DEFAULT_ASSISTANTS_IDS = DEFAULT_ASSISTANTS.map { it.id }
 
 val DEFAULT_MODE_INJECTIONS = listOf(
     PromptInjection.ModeInjection(
