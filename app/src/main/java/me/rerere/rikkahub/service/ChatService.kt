@@ -78,6 +78,7 @@ import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
 import me.rerere.rikkahub.data.ai.transformers.VoiceMessageTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
@@ -96,6 +97,7 @@ import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
 import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
+import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
@@ -590,6 +592,8 @@ class ChatService(
             // check invalid messages
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
+            val availableTools = buildAvailableTools(settings, assistant).deduplicateByToolName().withProactiveCooldown()
+            val proactiveContext = collectProactiveToolContext(conversation.currentMessages, availableTools)
 
             // start generating
             val session = getOrCreateSession(conversationId)
@@ -603,7 +607,7 @@ class ChatService(
                     } else {
                         it
                     }
-                }.withProactiveToolInstruction(assistant),
+                }.withProactiveToolInstruction(assistant, proactiveContext),
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 memories = if (assistant.useGlobalMemory) {
@@ -616,42 +620,7 @@ class ChatService(
                     add(templateTransformer)
                 },
                 outputTransformers = outputTransformers,
-                tools = buildList {
-                    if (settings.enableWebSearch) {
-                        addAll(createSearchTools(settings))
-                    }
-                    addAll(localTools.getTools(assistant.localTools))
-                    // System tools (location, notifications, calendar, alarm, camera)
-                    val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
-                    if (systemToolsOptions.isNotEmpty()) {
-                        val systemTools = SystemTools(context, settings)
-                        addAll(systemTools.getTools(systemToolsOptions))
-                    }
-                    if (assistant.enabledSkills.isNotEmpty()) {
-                        addAll(
-                            createSkillTools(
-                                enabledSkills = assistant.enabledSkills,
-                                allSkills = skillManager.listSkills(),
-                                skillManager = skillManager,
-                            )
-                        )
-                    }
-                    mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
-                        add(
-                            Tool(
-                                name = "mcp__" + tool.name,
-                                description = tool.description ?: "",
-                                parameters = { tool.inputSchema },
-                                needsApproval = tool.needsApproval,
-                                execute = {
-                                    mcpManager.callTool(serverId, tool.name, it.jsonObject)
-                                },
-                            )
-                        )
-                    }
-                    // Plugin tools
-                    addAll(pluginToolProvider.getTools())
-                }.deduplicateByToolName().withProactiveCooldown(),
+                tools = availableTools,
                 pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
             ).onCompletion {
                 // 取消 Live Update 通知
@@ -783,7 +752,89 @@ class ChatService(
         )
     }
 
-    private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant): List<UIMessage> {
+    private fun buildAvailableTools(settings: Settings, assistant: Assistant): List<Tool> = buildList {
+        if (settings.enableWebSearch) {
+            addAll(createSearchTools(settings))
+        }
+        addAll(localTools.getTools(assistant.localTools))
+
+        val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
+        if (systemToolsOptions.isNotEmpty()) {
+            val systemTools = SystemTools(context, settings)
+            addAll(systemTools.getTools(systemToolsOptions))
+        }
+
+        if (assistant.enabledSkills.isNotEmpty()) {
+            addAll(
+                createSkillTools(
+                    enabledSkills = assistant.enabledSkills,
+                    allSkills = skillManager.listSkills(),
+                    skillManager = skillManager,
+                )
+            )
+        }
+
+        mcpManager.getAllAvailableTools().forEach { (serverId, tool) ->
+            if (assistant.mcpServers.contains(serverId)) {
+                add(
+                    Tool(
+                        name = "mcp__" + tool.name,
+                        description = tool.description ?: "",
+                        parameters = { tool.inputSchema },
+                        needsApproval = tool.needsApproval,
+                        execute = {
+                            mcpManager.callTool(serverId, tool.name, it.jsonObject)
+                        },
+                    )
+                )
+            }
+        }
+
+        addAll(pluginToolProvider.getTools())
+    }
+
+    private suspend fun collectProactiveToolContext(messages: List<UIMessage>, tools: List<Tool>): String {
+        val latestUserText = messages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
+        if (latestUserText.isBlank()) return ""
+        val recentTools = proactiveToolCooldowns
+            .filterValues { java.time.Duration.between(it, Instant.now()).toMillis() < 5.minutes.inWholeMilliseconds }
+            .keys
+            .toSet()
+        val plan = ProactiveToolPlanner.plan(
+            userText = latestUserText,
+            availableToolNames = tools.map { it.name }.toSet(),
+            recentlyUsedToolNames = recentTools,
+        )
+        if (plan.isEmpty()) return ""
+
+        val toolsByName = tools.associateBy { it.name }
+        val results = plan.mapNotNull { request ->
+            val tool = toolsByName[request.toolName] ?: return@mapNotNull null
+            val output = runCatching {
+                val args = JsonInstant.parseToJsonElement(request.argumentsJson)
+                val parts = tool.execute(args)
+                parts.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text }
+            }.getOrElse { error ->
+                val message = (error.message ?: error::class.simpleName.orEmpty()).replace("\"", "'")
+                """{"success":false,"error":"$message"}"""
+            }
+            """
+            - tool: ${request.toolName}
+              reason: ${request.reason}
+              result: $output
+            """.trimIndent()
+        }
+
+        if (results.isEmpty()) return ""
+        return buildString {
+            appendLine("以下是程序在本轮回复前主动感知到的工具结果。")
+            appendLine("它们不是用户命令你查看的，而是你像真人一样主动留意到的上下文。")
+            appendLine("请自然使用这些信息，不要说“我调用了工具”。")
+            append(results.joinToString("\n"))
+        }
+    }
+
+    private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant, proactiveContext: String): List<UIMessage> {
         val instruction = buildString {
             appendLine("你正在扮演${assistant.name.ifBlank { "当前角色" }}。")
             appendLine("在回复前，请像真实的人一样主动判断是否需要查看你可用的工具，而不是只在用户明确命令时才查看。")
@@ -792,6 +843,10 @@ class ChatService(
             appendLine("同一个工具在 5 分钟内不要重复主动调用，除非用户明确要求。")
             appendLine("工具结果只作为你的感知和上下文，不要机械地说“我调用了工具”或“根据工具结果”。")
             appendLine("最终回复只能写角色真正会说出口的话，保持自然、贴合人设，并尽量分成几句短句。")
+            if (proactiveContext.isNotBlank()) {
+                appendLine()
+                append(proactiveContext)
+            }
         }.trim()
         return listOf(UIMessage.system(instruction)) + this
     }
