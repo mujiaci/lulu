@@ -126,6 +126,8 @@ internal fun persistChatError(error: ChatError) {
     )
 }
 
+internal fun shouldGenerateTitle(title: String, force: Boolean): Boolean = force
+
 private val inputTransformers by lazy {
     listOf(
         TimeReminderTransformer,
@@ -692,9 +694,6 @@ class ChatService(
             }
 
             launchWithConversationReference(conversationId) {
-                generateTitle(conversationId, finalConversation)
-            }
-            launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
             }
         }
@@ -917,12 +916,7 @@ class ChatService(
         conversation: Conversation,
         force: Boolean = false
     ) {
-        val shouldGenerate = when {
-            force -> true
-            conversation.title.isBlank() -> true
-            else -> false
-        }
-        if (!shouldGenerate) return
+        if (!shouldGenerateTitle(conversation.title, force)) return
 
         runCatching {
             val settings = settingsStore.settingsFlow.first()
