@@ -92,7 +92,7 @@ class ChatVM(
 
         // 记住对话ID, 方便下次启动恢复
         viewModelScope.launch {
-            generationDoneFlow.collect { conversationId ->
+            selectGenerationDoneFlowForInit(chatService.generationDoneFlow).collect { conversationId ->
                 if (conversationId == _conversationId) {
                     recordLuluStateSnapshot()
                 }
@@ -379,3 +379,5 @@ class ChatVM(
     }
 
 }
+
+internal fun selectGenerationDoneFlowForInit(flow: SharedFlow<Uuid>): SharedFlow<Uuid> = flow
