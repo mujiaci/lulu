@@ -64,6 +64,7 @@ import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
+import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
@@ -607,7 +608,10 @@ class ChatService(
             // check invalid messages
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
-            val availableTools = buildAvailableTools(settings, assistant).deduplicateByToolName().withProactiveCooldown()
+            val availableTools = buildAvailableTools(settings, assistant)
+                .deduplicateByToolName()
+                .withHumanLikeToolPrompts()
+                .withProactiveCooldown()
             val proactiveContext = collectProactiveToolContext(conversation.currentMessages, availableTools)
             val memoryContext = memoryBankService.buildRecallContext(assistant.id.toString())
 
