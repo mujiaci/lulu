@@ -715,7 +715,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
 
             // 记忆
-            if (assistant.enableMemory) {
+            if (false && assistant.enableMemory) {
                 val memories = if (assistant.useGlobalMemory) {
                     memoryRepository.getGlobalMemories()
                 } else {
