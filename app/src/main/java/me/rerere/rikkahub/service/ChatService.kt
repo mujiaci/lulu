@@ -103,7 +103,6 @@ import me.rerere.rikkahub.data.model.markResolvedLuluThoughts
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.LuluPerceptionCollector
 import me.rerere.rikkahub.data.service.MemoryBankService
@@ -276,7 +275,6 @@ class ChatService(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
-    private val memoryRepository: MemoryRepository,
     private val memoryBankService: MemoryBankService,
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
@@ -625,11 +623,6 @@ class ChatService(
                 .withProactiveToolInstruction(assistant, proactiveContext),
             assistant = assistant,
             conversationSystemPrompt = conversation.customSystemPrompt,
-            memories = if (assistant.useGlobalMemory) {
-                memoryRepository.getGlobalMemories()
-            } else {
-                memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
-            },
             inputTransformers = buildList {
                 addAll(inputTransformers)
                 add(templateTransformer)
@@ -869,11 +862,6 @@ class ChatService(
                     .withProactiveToolInstruction(assistant, proactiveContext),
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
-                memories = if (assistant.useGlobalMemory) {
-                    memoryRepository.getGlobalMemories()
-                } else {
-                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
-                },
                 inputTransformers = buildList {
                     addAll(inputTransformers)
                     add(templateTransformer)

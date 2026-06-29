@@ -3,8 +3,6 @@ package me.rerere.rikkahub.data.ai.tools
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Geocoder
-import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
@@ -15,6 +13,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.service.AmapService
+import me.rerere.rikkahub.data.service.LocationService
 import me.rerere.rikkahub.data.service.RikkaNotificationListenerService
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -76,15 +75,20 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                     ))
                 }
                 try {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                    val loc = lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
-                        ?: lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                        ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                        ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
-
+                    val apiKey = settings.systemToolsSetting.amapApiKey
+                    val locationService = LocationService(context, AmapService(apiKey))
+                    val locationResult = if (apiKey.isNotBlank()) {
+                        runBlocking { locationService.getCurrentLocation(apiKey) }
+                    } else {
+                        runBlocking { locationService.getCoordinatesOnly() }
+                    }
+                    val loc = locationResult.getOrNull()
                     if (loc == null) {
                         return@Tool listOf(UIMessagePart.Text(
-                            buildJsonObject { put("success", false); put("error", "Unable to get location") }.toString()
+                            buildJsonObject {
+                                put("success", false)
+                                put("error", locationResult.exceptionOrNull()?.message ?: "Unable to get fresh location")
+                            }.toString()
                         ))
                     }
 
@@ -94,49 +98,13 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                         put("longitude", loc.longitude)
                         put("altitude", loc.altitude)
                         put("accuracy", loc.accuracy.toDouble())
-                        put("timestamp", loc.time)
-                        put("time", dateFormat.format(Date(loc.time)))
-
-                        val apiKey = settings.systemToolsSetting.amapApiKey
-                        var addressResolved = false
-
-                        if (apiKey.isNotBlank()) {
-                            try {
-                                val amapService = AmapService(apiKey)
-                                val addressResult = runBlocking { amapService.getAddressFromGps(loc.latitude, loc.longitude) }
-                                if (addressResult.success) {
-                                    addressResolved = true
-                                    put("address", addressResult.formattedAddress ?: "")
-                                    put("province", addressResult.province ?: "")
-                                    put("city", addressResult.city ?: "")
-                                    put("district", addressResult.district ?: "")
-                                    put("street", addressResult.street ?: "")
-                                    put("neighborhood", addressResult.neighborhood ?: "")
-                                    put("building", addressResult.building ?: "")
-                                }
-                            } catch (_: Exception) { }
-                        }
-
-                        if (!addressResolved) {
-                            try {
-                                val geocoder = Geocoder(context, Locale.getDefault())
-                                val addresses = geocoder.getFromLocation(loc.latitude, loc.longitude, 1)
-                                if (!addresses.isNullOrEmpty()) {
-                                    val addr = addresses[0]
-                                    val addressLines = (0..addr.maxAddressLineIndex).mapNotNull { addr.getAddressLine(it) }
-                                    put("address", addressLines.joinToString(", ").ifBlank { addr.featureName ?: "" })
-                                    put("country", addr.countryName ?: "")
-                                    put("province", addr.adminArea ?: "")
-                                    put("city", addr.locality ?: "")
-                                    put("district", addr.subLocality ?: "")
-                                    put("street", addr.thoroughfare ?: "")
-                                } else {
-                                    put("address", "Unknown address")
-                                }
-                            } catch (e: Exception) {
-                                put("address", "Unknown address (geocoder failed: ${e.message})")
-                            }
-                        }
+                        put("timestamp", loc.timestamp)
+                        put("time", dateFormat.format(Date(loc.timestamp)))
+                        put("fresh_within_minutes", 10)
+                        put("address", loc.address.ifBlank { "Unknown address" })
+                        put("city", loc.city)
+                        put("district", loc.district)
+                        put("street", loc.street)
                     }
                     listOf(UIMessagePart.Text(result.toString()))
                 } catch (e: Exception) {

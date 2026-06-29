@@ -12,11 +12,15 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
-import kotlin.coroutines.resumeWithException
+
+private const val MAX_LAST_KNOWN_LOCATION_AGE_MS = 10 * 60 * 1000L
 
 data class LocationInfo(
     val latitude: Double,
     val longitude: Double,
+    val altitude: Double = 0.0,
+    val accuracy: Float = 0f,
+    val timestamp: Long = 0L,
     val address: String = "",
     val city: String = "",
     val district: String = "",
@@ -60,6 +64,9 @@ class LocationService(
                 LocationInfo(
                     latitude = location.latitude,
                     longitude = location.longitude,
+                    altitude = location.altitude,
+                    accuracy = location.accuracy,
+                    timestamp = location.time,
                     address = address.formattedAddress ?: "",
                     city = address.city ?: address.province ?: "",
                     district = address.district ?: "",
@@ -88,7 +95,10 @@ class LocationService(
             if (location != null) {
                 LocationInfo(
                     latitude = location.latitude,
-                    longitude = location.longitude
+                    longitude = location.longitude,
+                    altitude = location.altitude,
+                    accuracy = location.accuracy,
+                    timestamp = location.time,
                 )
             } else {
                 throw IllegalStateException("无法获取位置信息")
@@ -135,7 +145,12 @@ class LocationService(
         val providers = locationManager.getProviders(true)
         return providers.mapNotNull { provider ->
             locationManager.getLastKnownLocation(provider)
-        }.maxByOrNull { it.accuracy }
+        }
+            .filter { it.isFreshEnough() }
+            .minWithOrNull(
+                compareBy<Location> { it.accuracy }
+                    .thenByDescending { it.time }
+            )
     }
 
     @SuppressLint("MissingPermission")
@@ -183,3 +198,6 @@ class LocationService(
         }
     }
 }
+
+internal fun Location.isFreshEnough(nowMillis: Long = System.currentTimeMillis()): Boolean =
+    time > 0L && nowMillis - time <= MAX_LAST_KNOWN_LOCATION_AGE_MS
