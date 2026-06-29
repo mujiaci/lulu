@@ -4,51 +4,91 @@ import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-/**
- * 记忆库条目实体
- * 存储每条记忆的元数据和内容
- */
 @Entity(tableName = "memory_bank")
 data class MemoryBankEntity(
     @PrimaryKey(true)
     val id: Int = 0,
-    
-    /** 记忆内容 */
+
     @ColumnInfo("content")
     val content: String = "",
-    
-    /** 记忆类型: message, phase_summary, daily_summary, manual */
+
+    /** Legacy bucket: message, phase_summary, daily_summary, manual. */
     @ColumnInfo("type")
     val type: String = "message",
-    
-    /** 关联的对话ID（可选） */
+
+    @ColumnInfo("title")
+    val title: String? = null,
+
+    /** Role-centered kind: role_emotion, body_sense, promise, relationship, user_preference. */
+    @ColumnInfo("memory_kind")
+    val memoryKind: String? = null,
+
+    @ColumnInfo("role_feeling")
+    val roleFeeling: String? = null,
+
+    @ColumnInfo("body_sense")
+    val bodySense: String? = null,
+
+    @ColumnInfo("unspoken_thought")
+    val unspokenThought: String? = null,
+
+    @ColumnInfo("user_signal")
+    val userSignal: String? = null,
+
+    @ColumnInfo("relationship_effect")
+    val relationshipEffect: String? = null,
+
+    @ColumnInfo("importance", defaultValue = "3")
+    val importance: Int = 3,
+
+    @ColumnInfo("confidence", defaultValue = "1.0")
+    val confidence: Double = 1.0,
+
+    @ColumnInfo("tags_json")
+    val tagsJson: String? = null,
+
+    @ColumnInfo("embedding_text")
+    val embeddingText: String? = null,
+
+    @ColumnInfo("source_message_node_ids_json")
+    val sourceMessageNodeIdsJson: String? = null,
+
+    @ColumnInfo("evidence_message_node_ids_json")
+    val evidenceMessageNodeIdsJson: String? = null,
+
+    @ColumnInfo("deprecated", defaultValue = "0")
+    val deprecated: Boolean = false,
+
+    @ColumnInfo("deprecated_reason")
+    val deprecatedReason: String? = null,
+
+    @ColumnInfo("last_recalled_at")
+    val lastRecalledAt: Long? = null,
+
+    @ColumnInfo("recall_count", defaultValue = "0")
+    val recallCount: Int = 0,
+
+    @ColumnInfo("pinned", defaultValue = "0")
+    val pinned: Boolean = false,
+
     @ColumnInfo("conversation_id")
     val conversationId: String? = null,
-    
-    /** 关联的助手ID */
+
     @ColumnInfo("assistant_id")
     val assistantId: String? = null,
-    
-    /** 消息角色: user, assistant */
+
     @ColumnInfo("role")
     val role: String? = null,
-    
-    /** 创建时间戳 */
+
     @ColumnInfo("created_at")
     val createdAt: Long = System.currentTimeMillis(),
-    
-    /** 所属日期（用于每日总结分组），格式 yyyy-MM-dd */
+
     @ColumnInfo("date_group")
     val dateGroup: String? = null,
-    
-    /** 向量化状态: pending, done, failed */
+
     @ColumnInfo("vector_status")
     val vectorStatus: String = "pending",
-    
-    /** 向量化重试次数 */
+
     @ColumnInfo("vector_retry_count")
     val vectorRetryCount: Int = 0,
 )
-
-
-
