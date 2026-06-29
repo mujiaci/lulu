@@ -49,12 +49,15 @@ import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
+import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.Settings
@@ -289,8 +292,9 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 绝对不要提及任何数据来源、工具使用、传感器数据、位置服务、应用使用统计等技术细节")
         sb.appendLine("- 不要说\"根据xxx\"、\"我注意到xxx数据\"之类暴露信息来源的话")
         sb.appendLine("- 直接以朋友聊天的语气开口，就像你突然想到了什么想跟对方说")
-        sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，只输出纯文本的消息内容")
-        sb.appendLine("- 不要调用任何工具或函数，只输出纯文本回复")
+        sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，最终消息只输出纯文本")
+        sb.appendLine("- 可以为了判断用户状态主动调用安全的读取类工具，例如时间、位置、应用使用、电量、健康、通知或当前音乐")
+        sb.appendLine("- 短信正文、摄像头、闹钟、日历写入、日志写入、音乐控制等隐私或会改变设备状态的动作，后台主动消息里不要直接执行；可以自然询问用户要不要你帮忙")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
         return sb.toString()
     }
@@ -358,6 +362,28 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
         private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
+        private val PROACTIVE_SAFE_TOOL_NAMES = setOf(
+            "get_time_info",
+            "get_location",
+            "explore_nearby",
+            "get_notifications",
+            "get_app_usage",
+            "get_gadgetbridge_data",
+            "get_battery_info",
+        )
+    }
+
+    private fun isSafeProactiveToolCall(toolName: String, input: String): Boolean {
+        if (toolName in PROACTIVE_SAFE_TOOL_NAMES) return true
+        if (toolName == "control_music") {
+            return runCatching {
+                json.parseToJsonElement(input.ifBlank { "{}" })
+                    .jsonObject["action"]
+                    ?.jsonPrimitive
+                    ?.contentOrNull == "get_now_playing"
+            }.getOrDefault(false)
+        }
+        return false
     }
 
     // 输入转换器（与 ChatService 保持一致）
@@ -723,7 +749,9 @@ addAll(localTools.getTools(assistant.localTools))
             
             // 插件工具
             addAll(pluginToolProvider.getTools())
-        }.deduplicateByToolName()
+        }
+            .deduplicateByToolName()
+            .withHumanLikeToolPrompts()
     }
 
     /**
@@ -852,12 +880,12 @@ addAll(localTools.getTools(assistant.localTools))
                 }
 
                 // 检查是否需要审批
-                if (toolDef.needsApproval) {
+                if (!isSafeProactiveToolCall(toolDef.name, toolCall.input) || toolDef.needsApproval) {
                     // 后台模式下，需要审批的工具自动拒绝
-                    Log.w(TAG, "Tool ${toolCall.toolName} needs approval, auto-denying in proactive mode")
+                    Log.w(TAG, "Tool ${toolCall.toolName} is not safe for background proactive mode, auto-denying")
                     executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"Tool execution denied: requires user approval in proactive mode"}""")),
-                        approvalState = ToolApprovalState.Denied("Proactive mode: requires approval")
+                        output = listOf(UIMessagePart.Text("""{"error":"Tool execution denied: background proactive mode only allows safe read-only perception tools"}""")),
+                        approvalState = ToolApprovalState.Denied("Proactive mode: unsafe or requires approval")
                     ))
                 } else {
                     // 执行工具

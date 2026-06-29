@@ -87,6 +87,8 @@
   <string name="assistant_page_local_tools_clipboard_title">剪贴板</string>
   <string name="assistant_page_local_tools_javascript_engine_desc">使用 QuickJS 引擎执行 JavaScript 代码，进行计算和脚本处理</string>
   <string name="assistant_page_local_tools_javascript_engine_title">JavaScript 引擎</string>
+  <string name="assistant_page_local_tools_lulu_journal_desc">允许助手在确认后把私密日志保存到应用内</string>
+  <string name="assistant_page_local_tools_lulu_journal_title">露露日志</string>
   <string name="assistant_page_local_tools_time_info_desc">从设备获取当前日期、星期、时间和时区信息</string>
   <string name="assistant_page_local_tools_time_info_title">时间信息</string>
   <string name="assistant_page_local_tools_tts_desc">让AI使用设备TTS引擎为您朗读文本</string>

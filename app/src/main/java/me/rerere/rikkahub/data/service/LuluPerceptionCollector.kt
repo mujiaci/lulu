@@ -8,12 +8,23 @@ import android.os.BatteryManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import me.rerere.rikkahub.data.ai.tools.SystemTools
+import me.rerere.rikkahub.data.ai.tools.createMusicTool
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
+import me.rerere.rikkahub.data.model.LuluActionCue
 import me.rerere.rikkahub.data.model.LuluAppUsageState
 import me.rerere.rikkahub.data.model.LuluDeviceState
 import me.rerere.rikkahub.data.model.LuluHealthState
+import me.rerere.rikkahub.data.model.LuluLocationState
+import me.rerere.rikkahub.data.model.LuluMusicState
 import me.rerere.rikkahub.data.model.LuluPerceptionInput
+import me.rerere.ai.ui.UIMessagePart
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 
 class LuluPerceptionCollector(
     private val context: Context,
@@ -36,6 +47,16 @@ class LuluPerceptionCollector(
             } else {
                 null
             },
+            locationState = if (
+                (systemTools.locationAccess || systemTools.locationExploreEnabled) &&
+                SystemTools.hasLocationPermission(context)
+            ) {
+                collectLocationState(settings)
+            } else {
+                null
+            },
+            musicState = if (systemTools.musicEnabled) collectMusicState() else null,
+            actionCues = inferActionCues(userText),
         )
     }
 
@@ -91,4 +112,60 @@ class LuluPerceptionCollector(
             )
         }.getOrNull()
     }
+
+    private suspend fun collectLocationState(settings: Settings): LuluLocationState? = runCatching {
+        val apiKey = settings.systemToolsSetting.amapApiKey
+        val locationService = LocationService(context, AmapService(apiKey))
+        val location = if (apiKey.isNotBlank()) {
+            locationService.getCurrentLocation(apiKey).getOrNull()
+        } else {
+            locationService.getCoordinatesOnly().getOrNull()
+        } ?: return@runCatching null
+
+        LuluLocationState(
+            address = location.address.takeIf { it.isNotBlank() },
+            latitude = location.latitude,
+            longitude = location.longitude,
+        )
+    }.getOrNull()
+
+    private suspend fun collectMusicState(): LuluMusicState? = runCatching {
+        val output = createMusicTool(context).execute(
+            buildJsonObject {
+                put("action", "get_now_playing")
+            }
+        )
+            .filterIsInstance<UIMessagePart.Text>()
+            .firstOrNull()
+            ?.text
+            ?: return@runCatching null
+        val json = Json.parseToJsonElement(output).jsonObject
+        if (json["success"]?.jsonPrimitive?.contentOrNull != "true") return@runCatching null
+        val title = json["title"]?.jsonPrimitive?.contentOrNull?.takeIf { it != "Unknown" }
+        val artist = json["artist"]?.jsonPrimitive?.contentOrNull?.takeIf { it != "Unknown" }
+        if (title.isNullOrBlank() && artist.isNullOrBlank()) return@runCatching null
+        LuluMusicState(
+            title = title,
+            artist = artist,
+            isPlaying = json["is_playing"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull(),
+            appName = json["app_name"]?.jsonPrimitive?.contentOrNull,
+        )
+    }.getOrNull()
+
+    private fun inferActionCues(userText: String): Set<LuluActionCue> {
+        val text = userText.lowercase()
+        val cues = mutableSetOf<LuluActionCue>()
+        if (text.containsAny("在哪", "位置", "附近", "周边", "出门", "出去")) cues += LuluActionCue.LOCATION_CONTEXT
+        if (text.containsAny("附近", "周边", "推荐", "吃什么", "去哪")) cues += LuluActionCue.NEARBY_CONTEXT
+        if (text.containsAny("消息", "通知", "短信", "未读", "微信", "qq")) cues += LuluActionCue.MESSAGE_CONTEXT
+        if (text.containsAny("闹钟", "叫我", "提醒我", "记得叫", "起床")) cues += LuluActionCue.ALARM_CANDIDATE
+        if (text.containsAny("日程", "日历", "上课", "有课", "会议", "开会")) cues += LuluActionCue.CALENDAR_CANDIDATE
+        if (text.containsAny("音乐", "听歌", "播放", "暂停", "切歌")) cues += LuluActionCue.MUSIC_CONTEXT
+        if (text.containsAny("拍照", "摄像头", "看一下", "看看桌面", "看看周围")) cues += LuluActionCue.CAMERA_CANDIDATE
+        if (text.containsAny("日志", "日记", "记录下来", "记下来", "写下来")) cues += LuluActionCue.JOURNAL_CANDIDATE
+        return cues
+    }
+
+    private fun String.containsAny(vararg words: String): Boolean =
+        words.any { it in this }
 }

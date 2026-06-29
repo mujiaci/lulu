@@ -60,6 +60,9 @@ data class LuluPerceptionInput(
     val deviceState: LuluDeviceState? = null,
     val healthState: LuluHealthState? = null,
     val appUsageState: LuluAppUsageState? = null,
+    val locationState: LuluLocationState? = null,
+    val musicState: LuluMusicState? = null,
+    val actionCues: Set<LuluActionCue> = emptySet(),
 )
 
 data class LuluDeviceState(
@@ -78,6 +81,46 @@ data class LuluAppUsageState(
     val topApps: List<String> = emptyList(),
     val screenMinutesToday: Int? = null,
 )
+
+data class LuluLocationState(
+    val address: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+)
+
+data class LuluMusicState(
+    val title: String? = null,
+    val artist: String? = null,
+    val isPlaying: Boolean? = null,
+    val appName: String? = null,
+)
+
+@Serializable
+enum class LuluActionCue(val label: String) {
+    @SerialName("location_context")
+    LOCATION_CONTEXT("位置线索"),
+
+    @SerialName("nearby_context")
+    NEARBY_CONTEXT("周边探索"),
+
+    @SerialName("message_context")
+    MESSAGE_CONTEXT("消息线索"),
+
+    @SerialName("alarm_candidate")
+    ALARM_CANDIDATE("可提醒"),
+
+    @SerialName("calendar_candidate")
+    CALENDAR_CANDIDATE("可写日程"),
+
+    @SerialName("music_context")
+    MUSIC_CONTEXT("音乐状态"),
+
+    @SerialName("camera_candidate")
+    CAMERA_CANDIDATE("可看环境"),
+
+    @SerialName("journal_candidate")
+    JOURNAL_CANDIDATE("可写日志"),
+}
 
 @Serializable
 enum class LuluTimeLabel(val label: String) {
@@ -131,6 +174,15 @@ enum class LuluUserSignal(val label: String) {
 
     @SerialName("heavy_phone_use")
     HEAVY_PHONE_USE("屏幕时间偏长"),
+
+    @SerialName("location_context")
+    LOCATION_CONTEXT("有位置线索"),
+
+    @SerialName("message_context")
+    MESSAGE_CONTEXT("有消息线索"),
+
+    @SerialName("music_context")
+    MUSIC_CONTEXT("有音乐线索"),
 }
 
 @Serializable
@@ -230,6 +282,9 @@ fun buildLuluPerception(input: LuluPerceptionInput): LuluPerception {
     if (input.healthState?.hasSleepDebt() == true) signals += LuluUserSignal.SLEEP_DEBT
     if (input.healthState?.hasElevatedHeartRate() == true) signals += LuluUserSignal.ELEVATED_HEART_RATE
     if (input.appUsageState?.hasHeavyPhoneUse() == true) signals += LuluUserSignal.HEAVY_PHONE_USE
+    if (input.locationState != null) signals += LuluUserSignal.LOCATION_CONTEXT
+    if (input.musicState != null) signals += LuluUserSignal.MUSIC_CONTEXT
+    if (input.actionCues.contains(LuluActionCue.MESSAGE_CONTEXT)) signals += LuluUserSignal.MESSAGE_CONTEXT
     val timeLabel = when (hourOfDay) {
         in 0..5 -> LuluTimeLabel.LATE_NIGHT
         in 6..10 -> LuluTimeLabel.MORNING
@@ -256,6 +311,9 @@ fun buildLuluPerception(input: LuluPerceptionInput): LuluPerception {
             input.deviceState?.summaryText()?.let { append(" / $it") }
             input.healthState?.summaryText()?.let { append(" / $it") }
             input.appUsageState?.summaryText()?.let { append(" / $it") }
+            input.locationState?.summaryText()?.let { append(" / $it") }
+            input.musicState?.summaryText()?.let { append(" / $it") }
+            input.actionCues.summaryText()?.let { append(" / $it") }
         },
     )
 }
@@ -299,6 +357,32 @@ private fun LuluAppUsageState.summaryText(): String? = buildList {
     }
     topApps.take(3).takeIf { it.isNotEmpty() }?.let { apps -> add("常用：${apps.joinToString("、")}") }
 }.joinToString("，").takeIf { it.isNotBlank() }
+
+private fun LuluLocationState.summaryText(): String? = buildList {
+    address?.takeIf { it.isNotBlank() }?.let { add("位置：$it") }
+    if (address.isNullOrBlank() && latitude != null && longitude != null) {
+        add("坐标：$latitude,$longitude")
+    }
+}.joinToString("，").takeIf { it.isNotBlank() }
+
+private fun LuluMusicState.summaryText(): String? = buildList {
+    val song = buildString {
+        title?.takeIf { it.isNotBlank() }?.let { append(it) }
+        artist?.takeIf { it.isNotBlank() }?.let {
+            if (isNotBlank()) append(" - ")
+            append(it)
+        }
+    }
+    if (song.isNotBlank()) {
+        add(if (isPlaying == true) "正在听：$song" else "音乐：$song")
+    }
+    appName?.takeIf { it.isNotBlank() }?.let { add("音乐应用：$it") }
+}.joinToString("，").takeIf { it.isNotBlank() }
+
+private fun Set<LuluActionCue>.summaryText(): String? =
+    takeIf { it.isNotEmpty() }
+        ?.joinToString("、") { it.label }
+        ?.let { "动作线索：$it" }
 
 fun buildLuluExpressionPlan(
     state: LuluState,

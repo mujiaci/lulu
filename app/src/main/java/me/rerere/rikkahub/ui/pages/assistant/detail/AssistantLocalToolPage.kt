@@ -180,6 +180,20 @@ private fun AssistantLocalToolContent(
                 }
             )
             item(
+                headlineContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_lulu_journal_title))
+                },
+                supportingContent = {
+                    Text(stringResource(R.string.assistant_page_local_tools_lulu_journal_desc))
+                },
+                trailingContent = {
+                    Switch(
+                        checked = assistant.localTools.contains(LocalToolOption.LuluJournal),
+                        onCheckedChange = { toggleLocalTool(LocalToolOption.LuluJournal, it) }
+                    )
+                }
+            )
+            item(
                 headlineContent = { Text("允许跳过回复") },
                 supportingContent = { Text("允许AI在认为无需回复时跳过，回复 [SKIP] 的消息将被隐藏") },
                 trailingContent = {

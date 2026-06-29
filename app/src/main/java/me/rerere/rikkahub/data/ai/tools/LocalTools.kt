@@ -22,6 +22,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
+import java.io.File
 
 @Serializable
 sealed class LocalToolOption {
@@ -52,6 +53,10 @@ sealed class LocalToolOption {
     @Serializable
     @SerialName("calendar")
     data object Calendar : LocalToolOption()
+
+    @Serializable
+    @SerialName("lulu_journal")
+    data object LuluJournal : LocalToolOption()
 
     @Serializable
     @SerialName("allow_skip_reply")
@@ -317,6 +322,63 @@ class LocalTools(private val context: Context) {
         )
     }
 
+    val luluJournalTool by lazy {
+        Tool(
+            name = "write_lulu_journal",
+            description = """
+                Write a short private journal entry for the character.
+                Use only when the user explicitly asks you to record, log, remember as a journal, or save an event.
+                This stores the entry in the app private files directory and does not send it elsewhere.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("title", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Short entry title")
+                        })
+                        put("content", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Journal content to save")
+                        })
+                        put("mood", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional mood or feeling label")
+                        })
+                    },
+                    required = listOf("content")
+                )
+            },
+            needsApproval = true,
+            execute = {
+                val params = it.jsonObject
+                val content = params["content"]?.jsonPrimitive?.contentOrNull?.trim()
+                    ?: error("content is required")
+                require(content.isNotBlank()) { "content is blank" }
+                val now = ZonedDateTime.now()
+                val payload = buildJsonObject {
+                    put("created_at", now.toString())
+                    put("timestamp_ms", now.toInstant().toEpochMilli())
+                    put("title", params["title"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                    put("content", content)
+                    put("mood", params["mood"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                }
+                val journalDir = File(context.filesDir, "lulu").apply { mkdirs() }
+                val journalFile = File(journalDir, "lulu_journal.jsonl")
+                journalFile.appendText(payload.toString() + "\n")
+                listOf(
+                    UIMessagePart.Text(
+                        buildJsonObject {
+                            put("success", true)
+                            put("path", journalFile.absolutePath)
+                            put("message", "Journal entry saved")
+                        }.toString()
+                    )
+                )
+            },
+        )
+    }
+
     fun getTools(options: List<LocalToolOption>): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (options.contains(LocalToolOption.JavascriptEngine)) {
@@ -339,6 +401,9 @@ class LocalTools(private val context: Context) {
         }
         if (options.contains(LocalToolOption.Calendar)) {
             tools.add(createCalendarTool(context))
+        }
+        if (options.contains(LocalToolOption.LuluJournal)) {
+            tools.add(luluJournalTool)
         }
         return tools
     }

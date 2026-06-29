@@ -1161,7 +1161,9 @@ class ChatService(
         if (plan.isEmpty()) return ""
 
         val toolsByName = tools.associateBy { it.name }
-        val results = plan.mapNotNull { request ->
+        val executableRequests = plan.filter { it.autoExecutable }
+        val actionCandidates = plan.filterNot { it.autoExecutable }
+        val results = executableRequests.mapNotNull { request ->
             val tool = toolsByName[request.toolName] ?: return@mapNotNull null
             val output = runCatching {
                 val args = JsonInstant.parseToJsonElement(request.argumentsJson)
@@ -1178,12 +1180,24 @@ class ChatService(
             """.trimIndent()
         }
 
-        if (results.isEmpty()) return ""
+        if (results.isEmpty() && actionCandidates.isEmpty()) return ""
         return buildString {
-            appendLine("以下是程序在本轮回复前主动感知到的工具结果。")
-            appendLine("它们不是用户命令你查看的，而是你像真人一样主动留意到的上下文。")
-            appendLine("请自然使用这些信息，不要说“我调用了工具”。")
-            append(results.joinToString("\n"))
+            if (results.isNotEmpty()) {
+                appendLine("以下是程序在本轮回复前主动感知到的工具结果。")
+                appendLine("它们不是用户命令你查看的，而是你像真人一样主动留意到的上下文。")
+                appendLine("请自然使用这些信息，不要说“我调用了工具”。")
+                appendLine(results.joinToString("\n"))
+            }
+            if (actionCandidates.isNotEmpty()) {
+                if (results.isNotEmpty()) appendLine()
+                appendLine("以下是你可以主动提出的候选动作，但不要在后台直接执行。")
+                appendLine("这些动作涉及隐私或会改变设备状态，只有用户明确同意后才可以调用。")
+                actionCandidates.forEach { request ->
+                    appendLine("- tool: ${request.toolName}")
+                    appendLine("  reason: ${request.reason}")
+                    appendLine("  suggested_args: ${request.argumentsJson}")
+                }
+            }
         }
     }
 
@@ -1193,6 +1207,7 @@ class ChatService(
             appendLine("在回复前，请像真实的人一样主动判断是否需要查看你可用的工具，而不是只在用户明确命令时才查看。")
             appendLine("如果最近对话、时间、地点、身体状态、睡眠、心率、天气、电量、通知、短信、应用使用、周边环境、闹钟或摄像头信息可能帮助你更自然地关心用户，就可以主动调用对应工具。")
             appendLine("不要为了展示工具而调用工具；如果没有明显帮助，直接回复。")
+            appendLine("涉及短信正文、摄像头、闹钟、日历写入、日志写入、音乐播放控制等隐私或会改变设备状态的动作，必须先自然确认用户愿意，再调用工具。")
             appendLine("同一个工具在 5 分钟内不要重复主动调用，除非用户明确要求。")
             appendLine("工具结果只作为你的感知和上下文，不要机械地说“我调用了工具”或“根据工具结果”。")
             appendLine("最终回复只能写角色真正会说出口的话，保持自然、贴合人设，并尽量分成几句短句。")
