@@ -14,12 +14,25 @@ data class LuluThought(
     val assistantId: Uuid,
     val content: String,
     val source: LuluThoughtSource = LuluThoughtSource.CHAT,
+    val category: LuluThoughtCategory = LuluThoughtCategory.SHORT_TERM,
     val importance: Int = 3,
     val createdAt: Long = System.currentTimeMillis(),
     val expiresAt: Long = createdAt + LULU_THOUGHT_TTL_MILLIS,
     val expressed: Boolean = false,
     val canSurface: Boolean = true,
 )
+
+@Serializable
+enum class LuluThoughtCategory(val label: String) {
+    @SerialName("short_term")
+    SHORT_TERM("当前想法"),
+
+    @SerialName("concern")
+    CONCERN("心事"),
+
+    @SerialName("pending_action")
+    PENDING_ACTION("未完成动作"),
+}
 
 @Serializable
 enum class LuluThoughtSource {
@@ -108,7 +121,7 @@ fun List<LuluThought>.thoughtHistory(assistantId: Uuid, nowMillis: Long = System
         thought.assistantId == assistantId &&
             thought.canSurface &&
             !thought.expressed &&
-            thought.expiresAt > nowMillis
+            (thought.expiresAt > nowMillis || thought.category == LuluThoughtCategory.CONCERN)
     }
         .sortedWith(compareByDescending<LuluThought> { it.importance }.thenByDescending { it.createdAt })
         .take(LULU_THOUGHT_LIMIT_PER_ASSISTANT)
@@ -120,7 +133,7 @@ fun List<LuluThought>.normalizedLuluThoughts(
     filter { thought ->
         thought.assistantId in validAssistantIds &&
             thought.content.isNotBlank() &&
-            (thought.expiresAt > nowMillis || thought.importance >= 5)
+            (thought.expiresAt > nowMillis || thought.category == LuluThoughtCategory.CONCERN)
     }
         .groupBy { it.assistantId }
         .values
@@ -209,7 +222,17 @@ fun buildLuluThoughtFromTurn(
     nowMillis: Long = System.currentTimeMillis(),
 ): LuluThought? {
     val perception = buildLuluPerception(userText)
+    val hasReturnPromise = listOf("等下回来", "一会儿回来", "待会回来", "回来再说").any { it in userText }
+    val hasStudy = LuluUserSignal.STUDYING in perception.userSignals
+    val category = when {
+        hasReturnPromise || hasStudy -> LuluThoughtCategory.PENDING_ACTION
+        LuluUserSignal.SAD in perception.userSignals -> LuluThoughtCategory.CONCERN
+        else -> LuluThoughtCategory.SHORT_TERM
+    }
     val content = when {
+        hasReturnPromise && hasStudy -> "他去学习了，我想等他回来时轻轻接一下。"
+        hasReturnPromise -> "他说等下回来，我想记得等他回来。"
+        hasStudy -> "他现在要学习，我先别打扰太多。"
         LuluUserSignal.TIRED in perception.userSignals -> "他现在听起来很累，我想先让他缓一缓。"
         LuluUserSignal.SAD in perception.userSignals -> "他好像不太舒服，我想多留意一点。"
         state.mood == LuluMood.HAPPY -> "刚才的气氛很好，我想把这种轻快记住。"
@@ -218,8 +241,17 @@ fun buildLuluThoughtFromTurn(
     return LuluThought(
         assistantId = assistantId,
         content = content,
-        importance = if (LuluUserSignal.SAD in perception.userSignals) 4 else 3,
+        category = category,
+        importance = when (category) {
+            LuluThoughtCategory.CONCERN -> 5
+            LuluThoughtCategory.PENDING_ACTION -> 4
+            LuluThoughtCategory.SHORT_TERM -> 3
+        },
         createdAt = nowMillis,
-        expiresAt = nowMillis + LULU_THOUGHT_TTL_MILLIS,
+        expiresAt = if (category == LuluThoughtCategory.CONCERN) {
+            nowMillis + LULU_THOUGHT_TTL_MILLIS * 7
+        } else {
+            nowMillis + LULU_THOUGHT_TTL_MILLIS
+        },
     )
 }

@@ -13,12 +13,19 @@ data class LuluState(
     val statusText: String = "在发呆",
     val innerVoice: String = "今天也想被好好陪着。",
     val mood: LuluMood = LuluMood.CALM,
+    val moodIntensity: Float = 0.35f,
     val energy: LuluEnergy = LuluEnergy.NORMAL,
+    val energyIntensity: Float = 0.5f,
     val relationship: LuluRelationship = LuluRelationship.FAMILIAR,
+    val relationshipIntensity: Float = 0.45f,
     val mode: LuluMode = LuluMode.COMPANION,
     val updatedAt: Long = 0L,
+    val sinceAt: Long = updatedAt,
     val reason: String = "默认状态",
 )
+
+fun LuluState.durationMillis(nowMillis: Long = System.currentTimeMillis()): Long =
+    (nowMillis - sinceAt).coerceAtLeast(0L)
 
 @Serializable
 enum class LuluMood(val label: String) {
@@ -141,6 +148,19 @@ fun buildLuluStateFromTurn(
     val energy = previous?.energy?.moveToward(targetEnergy) ?: targetEnergy
     val relationship = previous?.relationship ?: LuluRelationship.FAMILIAR
     val mode = previous?.mode?.moveToward(targetMode) ?: targetMode
+    val moodIntensity = previous?.moodIntensity.nextIntensity(
+        targetChanged = previous.mood != targetMood,
+        strongSignal = hasSadSignal || hasHappySignal || isLateNight,
+    ) ?: targetMood.defaultIntensity()
+    val energyIntensity = previous?.energyIntensity.nextIntensity(
+        targetChanged = previous.energy != targetEnergy,
+        strongSignal = hasSadSignal || isLateNight || isMorning,
+    ) ?: targetEnergy.defaultIntensity()
+    val relationshipIntensity = previous?.relationshipIntensity ?: relationship.defaultIntensity()
+    val sinceAt = previous
+        ?.takeIf { it.mood == mood && it.energy == energy && it.mode == mode }
+        ?.sinceAt
+        ?: nowMillis
 
     return LuluState(
         assistantId = assistantId,
@@ -153,10 +173,14 @@ fun buildLuluStateFromTurn(
         },
         innerVoice = buildInnerVoice(mood = mood, userText = userText, assistantText = loweredAssistantText),
         mood = mood,
+        moodIntensity = moodIntensity,
         energy = energy,
+        energyIntensity = energyIntensity,
         relationship = relationship,
+        relationshipIntensity = relationshipIntensity,
         mode = mode,
         updatedAt = nowMillis,
+        sinceAt = sinceAt,
         reason = buildString {
             if (previous != null && (mood != targetMood || energy != targetEnergy || mode != targetMode)) {
                 append("状态惯性：")
@@ -187,6 +211,38 @@ private fun LuluMode.moveToward(target: LuluMode): LuluMode {
     if (this == LuluMode.COMPANION && target == LuluMode.RESTING) return LuluMode.RESTING
     if (this == LuluMode.COMPANION && target == LuluMode.LEARNING) return LuluMode.LEARNING
     return target
+}
+
+private fun Float?.nextIntensity(targetChanged: Boolean, strongSignal: Boolean): Float {
+    val current = this ?: 0.45f
+    val delta = when {
+        strongSignal -> 0.18f
+        targetChanged -> 0.10f
+        else -> -0.04f
+    }
+    return (current + delta).coerceIn(0.15f, 1.0f)
+}
+
+private fun LuluMood.defaultIntensity(): Float = when (this) {
+    LuluMood.CALM -> 0.35f
+    LuluMood.HAPPY -> 0.65f
+    LuluMood.SOFT -> 0.55f
+    LuluMood.LONELY -> 0.7f
+    LuluMood.WORRIED -> 0.72f
+}
+
+private fun LuluEnergy.defaultIntensity(): Float = when (this) {
+    LuluEnergy.LOW -> 0.35f
+    LuluEnergy.NORMAL -> 0.5f
+    LuluEnergy.HIGH -> 0.7f
+    LuluEnergy.SLEEPY -> 0.6f
+}
+
+private fun LuluRelationship.defaultIntensity(): Float = when (this) {
+    LuluRelationship.RESERVED -> 0.25f
+    LuluRelationship.FAMILIAR -> 0.45f
+    LuluRelationship.CLOSE -> 0.7f
+    LuluRelationship.ATTACHED -> 0.86f
 }
 
 private fun buildInnerVoice(

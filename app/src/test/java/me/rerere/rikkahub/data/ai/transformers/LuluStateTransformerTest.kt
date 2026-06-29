@@ -8,6 +8,7 @@ import me.rerere.rikkahub.data.model.LuluMood
 import me.rerere.rikkahub.data.model.LuluRelationship
 import me.rerere.rikkahub.data.model.LuluState
 import me.rerere.rikkahub.data.model.LuluThought
+import me.rerere.rikkahub.data.model.LuluThoughtCategory
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -28,10 +29,14 @@ class LuluStateTransformerTest {
             statusText = "有点困了",
             innerVoice = "夜里想安静陪着你。",
             mood = LuluMood.SOFT,
+            moodIntensity = 0.62f,
             energy = LuluEnergy.SLEEPY,
+            energyIntensity = 0.70f,
             relationship = LuluRelationship.CLOSE,
+            relationshipIntensity = 0.81f,
             mode = LuluMode.RESTING,
             updatedAt = 1234L,
+            sinceAt = 1000L,
         )
 
         val result = applyLuluStateContext(
@@ -42,6 +47,7 @@ class LuluStateTransformerTest {
                 LuluThought(
                     assistantId = assistantId,
                     content = "我想等他先说完，再轻轻接住。",
+                    category = LuluThoughtCategory.PENDING_ACTION,
                     importance = 4,
                     createdAt = 1_000L,
                     expiresAt = 99_999L,
@@ -57,8 +63,10 @@ class LuluStateTransformerTest {
         assertTrue(injected.contains("有点困了"))
         assertTrue(injected.contains("夜里想安静陪着你。"))
         assertTrue(injected.contains("精力：有点困"))
+        assertTrue(injected.contains("强度 0.70"))
+        assertTrue(injected.contains("状态持续"))
         assertTrue(injected.contains("当前感知"))
-        assertTrue(injected.contains("我想等他先说完"))
+        assertTrue(injected.contains("[未完成动作] 我想等他先说完"))
         assertTrue(injected.contains("表达建议"))
     }
 

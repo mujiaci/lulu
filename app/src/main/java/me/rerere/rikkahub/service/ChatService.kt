@@ -93,6 +93,11 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.appendLuluState
+import me.rerere.rikkahub.data.model.appendLuluThoughts
+import me.rerere.rikkahub.data.model.buildLuluStateFromTurn
+import me.rerere.rikkahub.data.model.buildLuluThoughtFromTurn
+import me.rerere.rikkahub.data.model.luluStateHistory
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
@@ -175,6 +180,45 @@ internal fun Conversation.withoutVoiceCallInstructionLeaks(): Conversation {
     } else {
         copy(messageNodes = cleanedNodes, updateAt = Instant.now())
     }
+}
+
+internal fun Settings.recordLuluPresenceTurn(
+    assistantId: Uuid,
+    userText: String,
+    assistantText: String,
+    nowMillis: Long = System.currentTimeMillis(),
+    hourOfDay: Int = java.time.LocalDateTime.now().hour,
+): Settings {
+    val cleanUserText = userText.trim()
+    val cleanAssistantText = assistantText.trim()
+    if (cleanAssistantText.isBlank()) return this
+    if (assistants.none { it.id == assistantId }) return this
+
+    val previousState = luluStates.luluStateHistory(assistantId).firstOrNull()
+    val nextState = buildLuluStateFromTurn(
+        assistantId = assistantId,
+        previous = previousState,
+        userText = cleanUserText,
+        assistantText = cleanAssistantText,
+        nowMillis = nowMillis,
+        hourOfDay = hourOfDay,
+    )
+    val nextThought = buildLuluThoughtFromTurn(
+        assistantId = assistantId,
+        userText = cleanUserText,
+        state = nextState,
+        nowMillis = nowMillis,
+    )
+
+    val validAssistantIds = assistants.map { it.id }.toSet()
+    return copy(
+        luluStates = luluStates.appendLuluState(nextState),
+        luluThoughts = luluThoughts.appendLuluThoughts(
+            thoughts = listOfNotNull(nextThought),
+            validAssistantIds = validAssistantIds,
+            nowMillis = nowMillis,
+        ),
+    )
 }
 
 private fun String.isVoiceCallInternalInstruction(): Boolean {
@@ -508,6 +552,16 @@ class ChatService(
             assistantMessage = visibleAssistantMessage,
         )
         saveConversation(conversationId, cleanedConversation)
+        val settings = settingsStore.settingsFlow.first()
+        val assistant = settings.getAssistantById(cleanedConversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        settingsStore.update { currentSettings ->
+            currentSettings.recordLuluPresenceTurn(
+                assistantId = assistant.id,
+                userText = visibleUserText.orEmpty(),
+                assistantText = reply,
+            )
+        }
 
         return reply
     }
@@ -845,6 +899,19 @@ class ChatService(
         }.onSuccess {
             val finalConversation = getConversationFlow(conversationId).value
             saveConversation(conversationId, finalConversation)
+            val lastUserText = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.USER }
+                ?.toText()
+                .orEmpty()
+            val lastAssistantText = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                ?.toText()
+                .orEmpty()
+            settingsStore.update { currentSettings ->
+                currentSettings.recordLuluPresenceTurn(
+                    assistantId = assistant.id,
+                    userText = lastUserText,
+                    assistantText = lastAssistantText,
+                )
+            }
             launchAffectiveMemoryExtraction(
                 conversationId = conversationId,
                 conversation = finalConversation,

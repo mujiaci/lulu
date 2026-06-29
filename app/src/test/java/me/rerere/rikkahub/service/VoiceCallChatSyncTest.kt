@@ -3,7 +3,12 @@ package me.rerere.rikkahub.service
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.TokenUsage
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.LuluMood
+import me.rerere.rikkahub.data.model.LuluThoughtCategory
+import me.rerere.rikkahub.data.model.currentLuluState
 import me.rerere.rikkahub.data.model.toMessageNode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -93,5 +98,43 @@ class VoiceCallChatSyncTest {
         assertEquals(2, cleaned.currentMessages.size)
         assertEquals(listOf("喂，我在。", "喂"), cleaned.currentMessages.map { it.toText() })
         assertFalse(cleaned.currentMessages.any { it.toText().contains("请只输出") })
+    }
+
+    @Test
+    fun `presence turn records state and thought after assistant reply`() {
+        val assistantId = Uuid.parse("99999999-9999-9999-9999-999999999999")
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+        )
+
+        val updated = settings.recordLuluPresenceTurn(
+            assistantId = assistantId,
+            userText = "我今天真的难过到想哭",
+            assistantText = "我在这里陪你。",
+            nowMillis = 10_000L,
+            hourOfDay = 21,
+        )
+
+        assertEquals(LuluMood.WORRIED, updated.luluStates.currentLuluState(assistantId).mood)
+        assertEquals(1, updated.luluThoughts.size)
+        assertEquals(LuluThoughtCategory.CONCERN, updated.luluThoughts.single().category)
+        assertTrue(updated.luluThoughts.single().content.contains("不太舒服"))
+    }
+
+    @Test
+    fun `presence turn ignores blank assistant reply`() {
+        val assistantId = Uuid.parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+        )
+
+        val updated = settings.recordLuluPresenceTurn(
+            assistantId = assistantId,
+            userText = "我好累",
+            assistantText = "",
+        )
+
+        assertTrue(updated.luluStates.isEmpty())
+        assertTrue(updated.luluThoughts.isEmpty())
     }
 }

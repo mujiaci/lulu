@@ -63,6 +63,46 @@ class LuluPresenceTest {
     }
 
     @Test
+    fun `concerns survive expiry while normal thoughts expire`() {
+        val oldConcern = LuluThought(
+            assistantId = assistantId,
+            content = "他最近总是很累，我有点放不下。",
+            category = LuluThoughtCategory.CONCERN,
+            importance = 5,
+            createdAt = 0L,
+            expiresAt = 100L,
+        )
+        val oldNormalThought = LuluThought(
+            assistantId = assistantId,
+            content = "普通旧想法",
+            category = LuluThoughtCategory.SHORT_TERM,
+            importance = 3,
+            createdAt = 0L,
+            expiresAt = 100L,
+        )
+
+        val normalized = listOf(oldConcern, oldNormalThought).normalizedLuluThoughts(
+            validAssistantIds = setOf(assistantId),
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(listOf("他最近总是很累，我有点放不下。"), normalized.map { it.content })
+    }
+
+    @Test
+    fun `pending action is generated for study promise`() {
+        val thought = buildLuluThoughtFromTurn(
+            assistantId = assistantId,
+            userText = "我去学习一会儿，等下回来",
+            state = LuluState(assistantId = assistantId),
+            nowMillis = 1_000L,
+        )
+
+        assertEquals(LuluThoughtCategory.PENDING_ACTION, thought?.category)
+        assertTrue(thought?.content.orEmpty().contains("等他回来"))
+    }
+
+    @Test
     fun `perception tags late night and tired user text`() {
         val perception = buildLuluPerception(
             userText = "我好累，想睡觉",
@@ -88,5 +128,29 @@ class LuluPresenceTest {
         assertEquals(LuluExpressionLength.SHORT, plan.length)
         assertTrue(plan.typingDelayMillis >= 1_200L)
         assertTrue(plan.guidance.contains("短句"))
+    }
+
+    @Test
+    fun `state tracks intensity and duration`() {
+        val previous = LuluState(
+            assistantId = assistantId,
+            mood = LuluMood.WORRIED,
+            moodIntensity = 0.5f,
+            updatedAt = 1_000L,
+            sinceAt = 1_000L,
+        )
+
+        val next = buildLuluStateFromTurn(
+            assistantId = assistantId,
+            previous = previous,
+            userText = "我还是有点累",
+            assistantText = "我在。",
+            nowMillis = 31_000L,
+            hourOfDay = 22,
+        )
+
+        assertTrue(next.moodIntensity > previous.moodIntensity)
+        assertEquals(1_000L, next.sinceAt)
+        assertTrue(next.durationMillis(31_000L) >= 30_000L)
     }
 }

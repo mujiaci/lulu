@@ -7,6 +7,7 @@ import me.rerere.rikkahub.data.model.LuluThought
 import me.rerere.rikkahub.data.model.buildLuluExpressionPlan
 import me.rerere.rikkahub.data.model.buildLuluPerception
 import me.rerere.rikkahub.data.model.currentLuluState
+import me.rerere.rikkahub.data.model.durationMillis
 import me.rerere.rikkahub.data.model.thoughtHistory
 import kotlin.uuid.Uuid
 
@@ -57,18 +58,32 @@ internal fun buildLuluPresenceContext(
     appendLine("这是露露此刻的内在状态、感知和未说出口的想法，只作为角色参考。不要机械复述这些字段。")
     appendLine("当前状态：${state.statusText}")
     appendLine("心声：${state.innerVoice}")
-    appendLine("心情：${state.mood.label}")
-    appendLine("精力：${state.energy.label}")
-    appendLine("亲密感：${state.relationship.label}")
+    appendLine("心情：${state.mood.label}（强度 ${state.moodIntensity.formatPresenceIntensity()}）")
+    appendLine("精力：${state.energy.label}（强度 ${state.energyIntensity.formatPresenceIntensity()}）")
+    appendLine("亲密感：${state.relationship.label}（强度 ${state.relationshipIntensity.formatPresenceIntensity()}）")
     appendLine("行动状态：${state.mode.label}")
+    appendLine("状态持续：约 ${state.durationMillis().formatPresenceDuration()}")
     appendLine("变化原因：${state.reason}")
     appendLine("当前感知：${perception.summary}")
     if (thoughts.isNotEmpty()) {
         appendLine("未说出口的想法：")
         thoughts.forEach { thought ->
-            appendLine("- ${thought.content}")
+            appendLine("- [${thought.category.label}] ${thought.content}")
         }
     }
     appendLine("表达建议：${expression.guidance}")
     append("</lulu_presence>")
+}
+
+private fun Float.formatPresenceIntensity(): String =
+    "%.2f".format(coerceIn(0f, 1f))
+
+private fun Long.formatPresenceDuration(): String {
+    val minutes = this / 60_000L
+    return when {
+        minutes < 1 -> "刚刚"
+        minutes < 60 -> "${minutes} 分钟"
+        minutes < 60 * 24 -> "${minutes / 60} 小时"
+        else -> "${minutes / (60 * 24)} 天"
+    }
 }
