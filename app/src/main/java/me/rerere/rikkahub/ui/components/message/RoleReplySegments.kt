@@ -64,18 +64,7 @@ fun String.extractSpeakableRoleText(): String =
         .trim()
 
 fun buildSpeakableMessageText(message: UIMessage, onlyReadQuoted: Boolean): String? {
-    val rawText = message.toText().ifBlank {
-        message.parts
-            .filterIsInstance<UIMessagePart.Tool>()
-            .lastOrNull { it.toolName == "text_to_speech" }
-            ?.input
-            ?.let { input ->
-                runCatching {
-                    JsonInstant.parseToJsonElement(input).jsonObject["text"]?.jsonPrimitive?.contentOrNull
-                }.getOrNull()
-            }
-            .orEmpty()
-    }
+    val rawText = message.toText().ifBlank { message.extractTextToSpeechToolText() }
     val selectedText = if (onlyReadQuoted) {
         rawText.extractQuotedContentAsText() ?: rawText
     } else {
@@ -86,6 +75,18 @@ fun buildSpeakableMessageText(message: UIMessage, onlyReadQuoted: Boolean): Stri
     return (withoutSpeakingLines.extractSpeakableRoleText().ifBlank { speakingFallback.extractSpeakableRoleText() })
         .takeIf { it.isNotBlank() }
 }
+
+private fun UIMessage.extractTextToSpeechToolText(): String =
+    parts
+        .filterIsInstance<UIMessagePart.Tool>()
+        .lastOrNull { it.toolName == "text_to_speech" }
+        ?.input
+        ?.let { input ->
+            runCatching {
+                JsonInstant.parseToJsonElement(input).jsonObject["text"]?.jsonPrimitive?.contentOrNull
+            }.getOrNull()
+        }
+        .orEmpty()
 
 fun String.splitIntoVisualBubbles(): List<String> {
     val text = trim()

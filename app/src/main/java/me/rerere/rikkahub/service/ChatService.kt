@@ -24,7 +24,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -36,7 +35,9 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
@@ -155,6 +156,30 @@ internal fun appendVoiceCallVisibleTurn(
         messageNodes = conversation.messageNodes + visibleNodes,
         updateAt = Instant.now(),
     )
+}
+
+internal fun Conversation.withoutVoiceCallInstructionLeaks(): Conversation {
+    val cleanedNodes = messageNodes.filterNot { node ->
+        val message = node.currentMessage
+        message.role == MessageRole.USER && message.toText().isVoiceCallInternalInstruction()
+    }
+    return if (cleanedNodes.size == messageNodes.size) {
+        this
+    } else {
+        copy(messageNodes = cleanedNodes, updateAt = Instant.now())
+    }
+}
+
+private fun String.isVoiceCallInternalInstruction(): Boolean {
+    val text = trim()
+    if (text.isBlank()) return false
+    val hasVoiceCallContext = text.contains("电话接通") ||
+        text.contains("语音电话") ||
+        text.contains("来自用户的语音电话")
+    val hasOutputRule = text.contains("请只输出") &&
+        text.contains("不要输出动作") &&
+        text.contains("不要加标签")
+    return hasVoiceCallContext && hasOutputRule
 }
 
 private val inputTransformers by lazy {
@@ -345,7 +370,12 @@ class ChatService(
         // 总是从数据库重新加载最新数据，确保能显示主动消息等新内容
         val conversation = conversationRepo.getConversationById(conversationId)
         if (conversation != null) {
-            updateConversation(conversationId, conversation)
+            val cleanedConversation = conversation.withoutVoiceCallInstructionLeaks()
+            if (cleanedConversation !== conversation) {
+                saveConversation(conversationId, cleanedConversation)
+            } else {
+                updateConversation(conversationId, cleanedConversation)
+            }
             settingsStore.updateAssistant(conversation.assistantId)
         } else {
             // 新建对话, 并添加预设消息
@@ -439,29 +469,23 @@ class ChatService(
         if (trimmed.isBlank()) return null
 
         initializeConversation(conversationId)
-        val beforeConversation = getConversationFlow(conversationId).value
-        val beforeAssistantMessageId = beforeConversation.currentMessages
-            .lastOrNull { it.role == MessageRole.ASSISTANT }
-            ?.id
+        val beforeConversation = getConversationFlow(conversationId).value.withoutVoiceCallInstructionLeaks()
+        saveConversation(conversationId, beforeConversation)
 
-        sendMessage(
-            conversationId = conversationId,
-            content = listOf(UIMessagePart.Text(trimmed)),
-            answer = true,
-        )
-
-        withTimeoutOrNull(120_000) {
-            generationDoneFlow.filter { it == conversationId }.first()
-        } ?: run {
-            saveConversation(conversationId, beforeConversation)
-            return null
-        }
-
-        val reply = getConversationFlow(conversationId).value.currentMessages
-            .lastOrNull { it.role == MessageRole.ASSISTANT && it.id != beforeAssistantMessageId }
-            ?.toText()
+        val reply = runCatching {
+            withTimeoutOrNull(120_000) {
+                generateHiddenVoiceCallReply(
+                    conversationId = conversationId,
+                    conversation = beforeConversation,
+                    text = trimmed,
+                )
+            }
+        }.onFailure {
+            addError(it, conversationId, title = context.getString(R.string.error_title_generation))
+        }.getOrNull()
             ?.trim()
             ?.takeIf { it.isNotBlank() }
+            ?: return null
 
         val cleanedConversation = appendVoiceCallVisibleTurn(
             conversation = beforeConversation,
@@ -472,6 +496,76 @@ class ChatService(
 
         return reply
     }
+
+    private suspend fun generateHiddenVoiceCallReply(
+        conversationId: Uuid,
+        conversation: Conversation,
+        text: String,
+    ): String? {
+        val settings = settingsStore.settingsFlow.first()
+        val assistant = settings.getAssistantById(conversation.assistantId)
+            ?: settings.getCurrentAssistant()
+        val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId) ?: return null
+        val processedContent = preprocessUserInputParts(listOf(UIMessagePart.Text(text)), assistant)
+        val hiddenMessages = conversation.currentMessages + UIMessage(
+            role = MessageRole.USER,
+            parts = processedContent,
+        )
+        val availableTools = buildAvailableTools(settings, assistant)
+            .deduplicateByToolName()
+            .withHumanLikeToolPrompts()
+            .withProactiveCooldown()
+        val latestUserText = hiddenMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
+        val proactiveContext = collectProactiveToolContext(hiddenMessages, availableTools)
+        val memoryContext = memoryBankService.buildRecallContext(
+            assistantId = assistant.id.toString(),
+            query = latestUserText,
+        )
+        var generatedMessages = hiddenMessages
+
+        generationHandler.generateText(
+            settings = settings,
+            model = model,
+            processingStatus = MutableStateFlow<String?>(null),
+            messages = hiddenMessages
+                .withMemoryRecallContext(memoryContext)
+                .withProactiveToolInstruction(assistant, proactiveContext),
+            assistant = assistant,
+            conversationSystemPrompt = conversation.customSystemPrompt,
+            memories = if (assistant.useGlobalMemory) {
+                memoryRepository.getGlobalMemories()
+            } else {
+                memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
+            },
+            inputTransformers = buildList {
+                addAll(inputTransformers)
+                add(templateTransformer)
+            },
+            outputTransformers = outputTransformers,
+            tools = availableTools,
+            pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
+        ).collect { chunk ->
+            when (chunk) {
+                is GenerationChunk.Messages -> generatedMessages = chunk.messages
+            }
+        }
+
+        return generatedMessages
+            .lastOrNull { it.role == MessageRole.ASSISTANT }
+            ?.let { message -> message.extractTextToSpeechToolText().ifBlank { message.toText() } }
+    }
+
+    private fun UIMessage.extractTextToSpeechToolText(): String =
+        parts
+            .filterIsInstance<UIMessagePart.Tool>()
+            .lastOrNull { it.toolName == "text_to_speech" }
+            ?.input
+            ?.let { input ->
+                runCatching {
+                    JsonInstant.parseToJsonElement(input).jsonObject["text"]?.jsonPrimitive?.contentOrNull
+                }.getOrNull()
+            }
+            .orEmpty()
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
         launchWithConversationReference(conversationId) {

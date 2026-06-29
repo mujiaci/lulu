@@ -178,7 +178,7 @@ fun VoiceCallPage(
             stage = CallStage.Active
             val opening = chatService.sendVoiceCallTurn(
                 conversationId = Uuid.parse(conversationId),
-                text = VOICE_CALL_OPENING_PROMPT,
+                text = buildVoiceCallOpeningPrompt(assistantName),
                 visibleUserText = null,
             )
             assistantSay(
@@ -874,8 +874,12 @@ private fun miniStatusText(stage: CallStage, isSpeaking: Boolean): String {
     }
 }
 
-private const val VOICE_CALL_OPENING_PROMPT =
-    "电话接通了，你先和我说句话吧。请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"
+private fun buildVoiceCallOpeningPrompt(assistantName: String): String =
+    """
+    这是一个来自用户的语音电话，现在电话已经接通。
+    你是$assistantName，请你主动先开口和用户说第一句话，不要等用户先说话。
+    请只输出你要说出口的话，不要复述这段说明，不要输出动作、心理、环境、感受，也不要加标签。
+    """.trimIndent()
 
 private const val VOICE_CALL_REPLY_PROMPT =
     "请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"

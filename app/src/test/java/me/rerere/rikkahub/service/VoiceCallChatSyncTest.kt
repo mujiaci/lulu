@@ -1,7 +1,9 @@
 package me.rerere.rikkahub.service
 
 import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.toMessageNode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -45,5 +47,26 @@ class VoiceCallChatSyncTest {
         assertEquals(1, updated.currentMessages.size)
         assertTrue(updated.currentMessages.all { it.role == MessageRole.ASSISTANT })
         assertEquals("喂，我在呢。", updated.currentMessages.single().toText())
+    }
+    @Test
+    fun `voice call prompt leak cleanup removes internal instructions`() {
+        val conversationId = Uuid.parse("55555555-5555-5555-5555-555555555555")
+        val assistantId = Uuid.parse("66666666-6666-6666-6666-666666666666")
+        val leakedPrompt = "电话接通了，你先和我说句话吧。请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"
+        val conversation = Conversation.ofId(
+            id = conversationId,
+            assistantId = assistantId,
+            messages = listOf(
+                UIMessage.user(leakedPrompt).toMessageNode(),
+                UIMessage.assistant("喂，我在。").toMessageNode(),
+                UIMessage.user("喂").toMessageNode(),
+            ),
+        )
+
+        val cleaned = conversation.withoutVoiceCallInstructionLeaks()
+
+        assertEquals(2, cleaned.currentMessages.size)
+        assertEquals(listOf("喂，我在。", "喂"), cleaned.currentMessages.map { it.toText() })
+        assertFalse(cleaned.currentMessages.any { it.toText().contains("请只输出") })
     }
 }
