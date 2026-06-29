@@ -299,4 +299,40 @@ class MemoryBankContextTest {
 
         assertEquals(7, selected.size)
     }
+
+    @Test
+    fun `select memory recall items expands to a related memory`() {
+        val memories = listOf(
+            MemoryBankEntity(
+                id = 1,
+                content = "用户正在写论文大纲，希望露露帮她拆成更小的步骤。",
+                memoryKind = "user_preference",
+                relatedMemoryIdsJson = """["2"]""",
+                importance = 5,
+                createdAt = 300L,
+            ),
+            MemoryBankEntity(
+                id = 2,
+                content = "露露答应过下次继续检查参考文献格式。",
+                memoryKind = "promise",
+                importance = 1,
+                createdAt = 100L,
+            ),
+            MemoryBankEntity(
+                id = 3,
+                content = "用户喜欢雨天窝在床上聊天。",
+                memoryKind = "user_preference",
+                importance = 4,
+                createdAt = 200L,
+            ),
+        )
+
+        val selected = selectMemoryRecallItems(
+            memories = memories,
+            query = "论文大纲卡住了",
+            maxItems = 1,
+        )
+
+        assertEquals(listOf(1, 2), selected.map { it.id })
+    }
 }

@@ -4,6 +4,8 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
@@ -355,8 +357,31 @@ internal fun selectMemoryRecallItems(
         .sortedByDescending { memory -> memory.recallScore(queryTerms, queryVector) }
         .deduplicateNearVectors()
     val limit = maxItems ?: sorted.dynamicRecallLimit(queryVector)
-    return sorted.take(limit)
+    val direct = sorted.take(limit)
+    return direct.expandRelatedMemories(sorted, maxRelatedItems = 1)
 }
+
+private fun List<MemoryBankEntity>.expandRelatedMemories(
+    candidates: List<MemoryBankEntity>,
+    maxRelatedItems: Int,
+): List<MemoryBankEntity> {
+    if (maxRelatedItems <= 0 || isEmpty()) return this
+    val selectedIds = mapTo(mutableSetOf()) { it.id }
+    val candidateById = candidates.associateBy { it.id.toString() }
+    val related = asSequence()
+        .flatMap { memory -> memory.relatedMemoryIds().asSequence() }
+        .mapNotNull { relatedId -> candidateById[relatedId] }
+        .filter { it.id !in selectedIds }
+        .distinctBy { it.id }
+        .take(maxRelatedItems)
+        .toList()
+    return this + related
+}
+
+private fun MemoryBankEntity.relatedMemoryIds(): List<String> =
+    runCatching {
+        JsonInstant.decodeFromString(ListSerializer(String.serializer()), relatedMemoryIdsJson.orEmpty())
+    }.getOrDefault(emptyList())
 
 private fun List<MemoryBankEntity>.dynamicRecallLimit(queryVector: List<Float>): Int {
     if (queryVector.isEmpty()) return 6
