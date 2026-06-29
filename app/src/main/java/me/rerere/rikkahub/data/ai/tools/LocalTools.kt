@@ -16,8 +16,6 @@ import kotlinx.serialization.json.put
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.rikkahub.data.event.AppEvent
-import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import java.time.ZoneId
@@ -60,7 +58,7 @@ sealed class LocalToolOption {
     data object AllowSkipReply : LocalToolOption()
 }
 
-class LocalTools(private val context: Context, private val eventBus: AppEventBus) {
+class LocalTools(private val context: Context) {
     val javascriptTool by lazy {
         Tool(
             name = "eval_javascript",
@@ -220,10 +218,10 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
         Tool(
             name = "text_to_speech",
             description = """
-                Speak text aloud to the user using the device's text-to-speech engine.
-                Use this when the user asks you to read something aloud, or when audio output is appropriate.
-                The tool returns immediately; audio plays in the background on the device.
-                Provide natural, readable text without markdown formatting.
+                Prepare text for the user's manual chat playback button.
+                Use this only when the user asks for spoken audio or when a short voice clip is clearly appropriate.
+                The tool does not auto-play audio; it creates a replayable voice bar in the chat UI.
+                Provide natural, readable text without markdown formatting, and do not repeat the same text again in the assistant reply.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
@@ -239,9 +237,11 @@ class LocalTools(private val context: Context, private val eventBus: AppEventBus
             execute = {
                 val text = it.jsonObject["text"]?.jsonPrimitive?.contentOrNull
                     ?: error("text is required")
-                eventBus.emit(AppEvent.Speak(text))
                 val payload = buildJsonObject {
                     put("success", true)
+                    put("queued", false)
+                    put("text", text)
+                    put("message", "Audio is ready in the chat playback control. Do not repeat the same text in the assistant reply.")
                 }
                 listOf(UIMessagePart.Text(payload.toString()))
             }

@@ -131,6 +131,29 @@ internal fun persistChatError(error: ChatError) {
 
 internal fun shouldGenerateTitle(title: String, force: Boolean): Boolean = force
 
+internal fun appendVoiceCallVisibleTurn(
+    conversation: Conversation,
+    userText: String?,
+    assistantText: String?,
+): Conversation {
+    val visibleNodes = buildList {
+        val cleanUserText = userText?.trim().orEmpty()
+        val cleanAssistantText = assistantText?.trim().orEmpty()
+        if (cleanUserText.isNotBlank()) {
+            add(UIMessage.user(cleanUserText).toMessageNode())
+        }
+        if (cleanAssistantText.isNotBlank()) {
+            add(UIMessage.assistant(cleanAssistantText).toMessageNode())
+        }
+    }
+    if (visibleNodes.isEmpty()) return conversation
+
+    return conversation.copy(
+        messageNodes = conversation.messageNodes + visibleNodes,
+        updateAt = Instant.now(),
+    )
+}
+
 private val inputTransformers by lazy {
     listOf(
         TimeReminderTransformer,
@@ -404,11 +427,17 @@ class ChatService(
 
     // ---- 添加主动消息 ----
 
-    suspend fun sendVoiceCallTurn(conversationId: Uuid, text: String): String? {
+    suspend fun sendVoiceCallTurn(
+        conversationId: Uuid,
+        text: String,
+        visibleUserText: String? = text,
+    ): String? {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return null
 
-        val beforeAssistantMessageId = getConversationFlow(conversationId).value.currentMessages
+        initializeConversation(conversationId)
+        val beforeConversation = getConversationFlow(conversationId).value
+        val beforeAssistantMessageId = beforeConversation.currentMessages
             .lastOrNull { it.role == MessageRole.ASSISTANT }
             ?.id
 
@@ -420,13 +449,25 @@ class ChatService(
 
         withTimeoutOrNull(120_000) {
             generationDoneFlow.filter { it == conversationId }.first()
-        } ?: return null
+        } ?: run {
+            saveConversation(conversationId, beforeConversation)
+            return null
+        }
 
-        return getConversationFlow(conversationId).value.currentMessages
+        val reply = getConversationFlow(conversationId).value.currentMessages
             .lastOrNull { it.role == MessageRole.ASSISTANT && it.id != beforeAssistantMessageId }
             ?.toText()
             ?.trim()
             ?.takeIf { it.isNotBlank() }
+
+        val cleanedConversation = appendVoiceCallVisibleTurn(
+            conversation = beforeConversation,
+            userText = visibleUserText,
+            assistantText = reply,
+        )
+        saveConversation(conversationId, cleanedConversation)
+
+        return reply
     }
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {

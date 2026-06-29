@@ -1,5 +1,13 @@
 package me.rerere.rikkahub.ui.components.message
 
+import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.utils.extractQuotedContentAsText
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+
 enum class RoleReplyKind(val label: String, val speakable: Boolean) {
     Speech("语言", true),
     Action("动作", false),
@@ -55,6 +63,30 @@ fun String.extractSpeakableRoleText(): String =
         .joinToString("\n") { it.text }
         .trim()
 
+fun buildSpeakableMessageText(message: UIMessage, onlyReadQuoted: Boolean): String? {
+    val rawText = message.toText().ifBlank {
+        message.parts
+            .filterIsInstance<UIMessagePart.Tool>()
+            .lastOrNull { it.toolName == "text_to_speech" }
+            ?.input
+            ?.let { input ->
+                runCatching {
+                    JsonInstant.parseToJsonElement(input).jsonObject["text"]?.jsonPrimitive?.contentOrNull
+                }.getOrNull()
+            }
+            .orEmpty()
+    }
+    val selectedText = if (onlyReadQuoted) {
+        rawText.extractQuotedContentAsText() ?: rawText
+    } else {
+        rawText
+    }
+    val withoutSpeakingLines = selectedText.removeGeneratedSpeakingLines()
+    val speakingFallback = selectedText.extractGeneratedSpeakingLines()
+    return (withoutSpeakingLines.extractSpeakableRoleText().ifBlank { speakingFallback.extractSpeakableRoleText() })
+        .takeIf { it.isNotBlank() }
+}
+
 fun String.splitIntoVisualBubbles(): List<String> {
     val text = trim()
     if (text.isBlank()) return listOf("")
@@ -107,3 +139,25 @@ private fun String.trimNonSpeechMarks(): String =
         .removePrefix("*").removeSuffix("*")
         .removePrefix("＊").removeSuffix("＊")
         .trim()
+
+private fun String.removeGeneratedSpeakingLines(): String =
+    lines()
+        .filterNot { line ->
+            line.trimStart().isGeneratedSpeakingLine()
+        }
+        .joinToString("\n")
+
+private fun String.extractGeneratedSpeakingLines(): String =
+    lines()
+        .mapNotNull { line ->
+            val clean = line.trimStart()
+            when {
+                clean.startsWith("speaking:", ignoreCase = true) -> clean.substringAfter(":").trim()
+                clean.startsWith("speaking：", ignoreCase = true) -> clean.substringAfter("：").trim()
+                else -> null
+            }
+        }
+        .joinToString("\n")
+
+private fun String.isGeneratedSpeakingLine(): Boolean =
+    startsWith("speaking:", ignoreCase = true) || startsWith("speaking：", ignoreCase = true)

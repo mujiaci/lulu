@@ -60,7 +60,6 @@ import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.utils.copyMessageToClipboard
-import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import me.rerere.rikkahub.utils.toLocalString
 import java.util.Locale
 
@@ -132,15 +131,10 @@ fun ColumnScope.ChatMessageActionButtons(
                         indication = LocalIndication.current,
                         onClick = {
                             if (!isSpeaking) {
-                                val text = message.toText()
-                                val textToSpeak = if (settings.displaySetting.ttsOnlyReadQuoted) {
-                                    text.extractQuotedContentAsText() ?: text
-                                } else {
-                                    text
-                                }.extractSpeakableRoleText()
-                                if (textToSpeak.isNotBlank()) {
-                                    tts.speak(textToSpeak)
-                                }
+                                buildSpeakableMessageText(
+                                    message = message,
+                                    onlyReadQuoted = settings.displaySetting.ttsOnlyReadQuoted,
+                                )?.let { tts.speak(it) }
                             } else {
                                 tts.stop()
                             }

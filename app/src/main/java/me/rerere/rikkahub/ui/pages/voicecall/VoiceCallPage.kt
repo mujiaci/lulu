@@ -178,7 +178,8 @@ fun VoiceCallPage(
             stage = CallStage.Active
             val opening = chatService.sendVoiceCallTurn(
                 conversationId = Uuid.parse(conversationId),
-                text = "电话接通了，你先和我说句话吧。请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。",
+                text = VOICE_CALL_OPENING_PROMPT,
+                visibleUserText = null,
             )
             assistantSay(
                 text = opening?.takeIf { it.isNotBlank() }
@@ -205,7 +206,8 @@ fun VoiceCallPage(
                     saveLine(VoiceCallLine(role = VoiceCallRole.User, text = finalText))
                     val reply = chatService.sendVoiceCallTurn(
                         conversationId = Uuid.parse(conversationId),
-                        text = "$finalText\n\n请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。",
+                        text = "$finalText\n\n$VOICE_CALL_REPLY_PROMPT",
+                        visibleUserText = finalText,
                     )
                     assistantSay(
                         text = reply ?: "我刚刚有点没接住，你再轻轻说一遍，好不好？",
@@ -779,7 +781,7 @@ private fun MiniCallWindow(
             Column {
                 Text(assistantName, style = MaterialTheme.typography.labelLarge)
                 Text(
-                    if (isSpeaking) "Speaking" else stage.name.lowercase(),
+                    miniStatusText(stage, isSpeaking),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -800,15 +802,15 @@ private fun statusText(
 ): String {
     if (isHistoryOnly) return "已保存的通话记录"
     if (stage == CallStage.Idle) return "准备通话"
-    if (sleepMode) return "Sleep mode"
+    if (sleepMode) return "哄睡中"
     if (stage == CallStage.Connecting) return "正在接通"
     if (stage == CallStage.Ended) return "已挂断"
-    if (isSpeaking) return "Speaking"
+    if (isSpeaking) return "正在说话"
     return when (asrStatus) {
         ASRStatus.Connecting -> "正在准备麦克风"
         ASRStatus.Listening -> "正在倾听"
-        ASRStatus.Stopping -> "Thinking"
-        ASRStatus.Error -> "Mic error"
+        ASRStatus.Stopping -> "正在思考"
+        ASRStatus.Error -> "麦克风异常"
         ASRStatus.Idle -> "准备倾听"
     }
 }
@@ -840,27 +842,43 @@ private suspend fun speakInSegments(tts: CustomTtsState, text: String) {
 private fun buildSleepTalkSegments(assistantName: String): List<String> {
     return listOf(
         "${assistantName}在这里陪着你。你不需要回答，闭上眼睛听就好。",
-        "Tonight you can stop trying so hard. You are safe, and you are loved.",
-        "Breathe in gently. Hold it for a small moment. Now breathe out a little longer.",
-        "You made it through today. That is enough. Let the bed take more of your weight.",
-        "Imagine a warm room with quiet rain outside.",
-        "The blanket is pulled up to your shoulder, and a small light is still on.",
-        "If there are unfinished things in your head, let them wait at the door.",
+        "今晚可以不用再那么用力了。你是安全的，也有人好好惦记着你。",
+        "轻轻吸一口气，停一小会儿，再慢慢呼出去。",
+        "今天已经撑过来了，这样就够了。把身体的重量交给床吧。",
+        "想象一个暖暖的小房间，窗外有很轻的雨声。",
+        "被子拉到肩膀旁边，旁边还有一盏很柔和的小灯。",
+        "如果脑子里还有没做完的事，就先让它们在门口等一等。",
         "不需要急着睡着，也不需要回应我。",
-        "Relax your forehead. Let your jaw loosen. Let your shoulders fall.",
-        "Your hands can unclench. Your chest can soften. Your legs and feet can become heavy.",
-        "Let me tell you a little scene. We are walking beside a calm lake at night.",
-        "Across the water, there are warm window lights, and every step is slow and quiet.",
-        "You do not have to perform, explain, or be useful right now.",
-        "You do not have to earn care. You can simply exist here, and still be precious.",
-        "If a thought comes up, let it pass like a small cloud.",
-        "You can come back to my voice, the pillow, and the next slow breath.",
-        "If sleep comes, you can follow it.",
-        "If sleep is still far away, I will not rush you.",
-        "I will stay soft and close. Nothing sharp, nothing urgent.",
-        "Just warmth, safety, and the feeling that someone is staying beside you.",
+        "额头放松一点，下巴松开一点，肩膀也慢慢落下来。",
+        "手可以不用攥着了，胸口可以软一点，腿和脚都变得沉沉的。",
+        "我给你讲一个小画面。我们晚上沿着很安静的湖边散步。",
+        "水面那边有暖暖的窗灯，每一步都很慢，很轻。",
+        "现在你不用表现得很好，也不用解释什么，更不用证明自己有用。",
+        "被在乎不是要靠努力换来的。你只是待在这里，也很珍贵。",
+        "如果有念头冒出来，就让它像一小片云一样飘过去。",
+        "你可以回到我的声音里，回到枕头上，回到下一次慢慢的呼吸里。",
+        "如果困意来了，就顺着它走。",
+        "如果睡意还远，我也不会催你。",
+        "我会轻轻地、近近地陪着你。没有刺耳的东西，也没有着急的事。",
+        "只剩下暖和、安全，还有有人在你身边停着的感觉。",
     )
 }
+
+private fun miniStatusText(stage: CallStage, isSpeaking: Boolean): String {
+    if (isSpeaking) return "正在说话"
+    return when (stage) {
+        CallStage.Idle -> "待机"
+        CallStage.Connecting -> "接通中"
+        CallStage.Active -> "通话中"
+        CallStage.Ended -> "已挂断"
+    }
+}
+
+private const val VOICE_CALL_OPENING_PROMPT =
+    "电话接通了，你先和我说句话吧。请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"
+
+private const val VOICE_CALL_REPLY_PROMPT =
+    "请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"
 
 
 private fun formatTime(value: Long): String {
