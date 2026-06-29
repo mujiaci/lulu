@@ -87,6 +87,8 @@ class MemoryBankServiceExtractionTest {
         assertTrue(context.contains("拆成更小的步骤"))
         assertTrue(context.contains("雨天窝在床上聊天"))
         assertEquals(listOf(7, 8), dao.recalledIds)
+        assertEquals("""["8"]""", dao.relatedMemoryUpdates[7])
+        assertEquals("""["7"]""", dao.relatedMemoryUpdates[8])
         assertTrue(dao.recalledAt > 0L)
     }
 }
@@ -96,6 +98,7 @@ private class RecordingMemoryBankDAO(
 ) : MemoryBankDAO {
     val inserted = mutableListOf<MemoryBankEntity>()
     val recalledIds = mutableListOf<Int>()
+    val relatedMemoryUpdates = mutableMapOf<Int, String?>()
     var recalledAt: Long = 0L
 
     override suspend fun insertMemory(memory: MemoryBankEntity): Long {
@@ -171,6 +174,10 @@ private class RecordingMemoryBankDAO(
     override suspend fun markMemoriesRecalled(ids: List<Int>, recalledAt: Long) {
         recalledIds += ids
         this.recalledAt = recalledAt
+    }
+
+    override suspend fun updateRelatedMemoryIds(id: Int, relatedMemoryIdsJson: String?) {
+        relatedMemoryUpdates[id] = relatedMemoryIdsJson
     }
 
     override suspend fun updateVectorStatus(id: Int, status: String, retryCount: Int) = unsupported()

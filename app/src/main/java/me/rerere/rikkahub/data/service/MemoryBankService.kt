@@ -268,6 +268,7 @@ class MemoryBankService(
                 ids = recalledIds,
                 recalledAt = System.currentTimeMillis(),
             )
+            learnRecallCooccurrence(selected)
         }
         buildMemoryRecallContextFromSelected(selected)
     }
@@ -298,6 +299,25 @@ class MemoryBankService(
                 ),
             ).embeddings.firstOrNull().orEmpty()
         }.getOrDefault(emptyList())
+    }
+
+    private suspend fun learnRecallCooccurrence(memories: List<MemoryBankEntity>) {
+        val validMemories = memories.filter { it.id > 0 }
+        if (validMemories.size < 2) return
+        val selectedIds = validMemories.map { it.id.toString() }
+        validMemories.forEach { memory ->
+            val relatedIds = (memory.relatedMemoryIds() + selectedIds)
+                .filter { it != memory.id.toString() }
+                .distinct()
+                .take(8)
+            memoryBankDAO.updateRelatedMemoryIds(
+                id = memory.id,
+                relatedMemoryIdsJson = JsonInstant.encodeToString(
+                    ListSerializer(String.serializer()),
+                    relatedIds,
+                ),
+            )
+        }
     }
 }
 

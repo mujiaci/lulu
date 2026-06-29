@@ -121,6 +121,9 @@ interface MemoryBankDAO {
     )
     suspend fun markMemoriesRecalled(ids: List<Int>, recalledAt: Long)
 
+    @Query("UPDATE memory_bank SET related_memory_ids_json = :relatedMemoryIdsJson WHERE id = :id")
+    suspend fun updateRelatedMemoryIds(id: Int, relatedMemoryIdsJson: String?)
+
     @Query("UPDATE memory_bank SET vector_status = :status, vector_retry_count = :retryCount WHERE id = :id")
     suspend fun updateVectorStatus(id: Int, status: String, retryCount: Int)
 
