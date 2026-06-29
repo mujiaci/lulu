@@ -913,6 +913,12 @@ class ChatService(
                     conversationId = conversationId.toString(),
                     createdAt = System.currentTimeMillis(),
                 )
+                runCatching {
+                    memoryBankService.processPendingVectors()
+                }.onFailure { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "Memory vectorization failed after extraction for conversation=$conversationId", error)
+                }
                 Logging.log(
                     TAG,
                     "Saved ${candidates.size} affective memories for conversation=$conversationId reason=${plan.reason}",
