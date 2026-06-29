@@ -66,6 +66,7 @@ import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TITLE_PROMPT
 import me.rerere.rikkahub.data.ai.prompts.DEFAULT_TRANSLATION_PROMPT
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.FormItem
@@ -442,8 +443,8 @@ private fun DefaultImageGenerationModelSetting(
 
 private fun Settings.memoryModelName(modelId: Uuid?): String? =
     modelId
-        ?.let { findModelById(it) }
-        ?.let { model -> model.displayName.ifBlank { model.modelId } }
+        ?.let { id -> findModelById(id) }
+        ?.let { model -> model.displayName.takeIf { it.isNotBlank() } ?: model.modelId }
 
 @Composable
 private fun MemoryEngineDiagnostics(lines: List<String>) {
