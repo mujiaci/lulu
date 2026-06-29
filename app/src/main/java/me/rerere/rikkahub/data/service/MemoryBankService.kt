@@ -267,7 +267,7 @@ class MemoryBankService(
                 recalledAt = System.currentTimeMillis(),
             )
         }
-        buildMemoryRecallContext(selected)
+        buildMemoryRecallContextFromSelected(selected)
     }
 
     private suspend fun buildQueryEmbedding(query: String): List<Float> {
@@ -303,7 +303,7 @@ internal fun buildMemoryRecallContext(
     memories: List<MemoryBankEntity>,
     query: String = "",
     queryVector: List<Float> = emptyList(),
-    maxItems: Int = 6,
+    maxItems: Int? = null,
     maxContentLength: Int = 120,
 ): String {
     val selected = selectMemoryRecallItems(
@@ -312,6 +312,13 @@ internal fun buildMemoryRecallContext(
         queryVector = queryVector,
         maxItems = maxItems,
     )
+    return buildMemoryRecallContextFromSelected(selected, maxContentLength)
+}
+
+private fun buildMemoryRecallContextFromSelected(
+    selected: List<MemoryBankEntity>,
+    maxContentLength: Int = 120,
+): String {
     if (selected.isEmpty()) return ""
 
     val sections = listOf(
@@ -340,14 +347,27 @@ internal fun selectMemoryRecallItems(
     memories: List<MemoryBankEntity>,
     query: String = "",
     queryVector: List<Float> = emptyList(),
-    maxItems: Int = 6,
+    maxItems: Int? = null,
 ): List<MemoryBankEntity> {
     val queryTerms = query.recallQueryTerms()
-    return memories
+    val sorted = memories
         .filter { it.content.isNotBlank() && !it.deprecated }
         .sortedByDescending { memory -> memory.recallScore(queryTerms, queryVector) }
         .deduplicateNearVectors()
-        .take(maxItems)
+    val limit = maxItems ?: sorted.dynamicRecallLimit(queryVector)
+    return sorted.take(limit)
+}
+
+private fun List<MemoryBankEntity>.dynamicRecallLimit(queryVector: List<Float>): Int {
+    if (queryVector.isEmpty()) return 6
+    val bestSimilarity = maxOfOrNull { memory ->
+        cosineSimilarity(queryVector, decodeMemoryVector(memory.embeddingVectorJson))
+    } ?: 0.0
+    return when {
+        bestSimilarity >= 0.70 -> 3
+        bestSimilarity >= 0.50 -> 5
+        else -> 7
+    }
 }
 
 private fun MemoryBankEntity.recallSectionTitle(): String = when (memoryKind ?: type) {

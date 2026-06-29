@@ -244,4 +244,59 @@ class MemoryBankContextTest {
 
         assertEquals(listOf(1), selected.map { it.id })
     }
+
+    @Test
+    fun `select memory recall items uses dynamic top k from best vector similarity`() {
+        val memories = (1..8).map { index ->
+            MemoryBankEntity(
+                id = index,
+                content = "memory-$index",
+                memoryKind = "user_preference",
+                embeddingVectorJson = when (index) {
+                    1 -> encodeMemoryVector(listOf(0.8f, 0.2f, 0f))
+                    2 -> encodeMemoryVector(listOf(0.6f, -0.8f, 0f))
+                    3 -> encodeMemoryVector(listOf(0.6f, 0f, 0.8f))
+                    else -> encodeMemoryVector(listOf(0f, index.toFloat(), 0f))
+                },
+                createdAt = index.toLong(),
+            )
+        }
+
+        val selected = selectMemoryRecallItems(
+            memories = memories,
+            queryVector = listOf(1f, 0f, 0f),
+        )
+
+        assertEquals(3, selected.size)
+    }
+
+    @Test
+    fun `select memory recall items expands dynamic top k when vector match is weak`() {
+        val vectors = listOf(
+            listOf(0.49f, 1.0f, 0.0f),
+            listOf(0.49f, 0.0f, 1.0f),
+            listOf(0.49f, -1.0f, 0.0f),
+            listOf(0.49f, 0.0f, -1.0f),
+            listOf(0.49f, 0.7f, 0.7f),
+            listOf(0.49f, -0.7f, 0.7f),
+            listOf(0.49f, 0.7f, -0.7f),
+            listOf(0.49f, -0.7f, -0.7f),
+        )
+        val memories = vectors.mapIndexed { index, vector ->
+            MemoryBankEntity(
+                id = index + 1,
+                content = "memory-${index + 1}",
+                memoryKind = "user_preference",
+                embeddingVectorJson = encodeMemoryVector(vector),
+                createdAt = index.toLong(),
+            )
+        }
+
+        val selected = selectMemoryRecallItems(
+            memories = memories,
+            queryVector = listOf(1f, 0f, 0f),
+        )
+
+        assertEquals(7, selected.size)
+    }
 }
