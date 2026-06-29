@@ -107,6 +107,7 @@ import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.LuluPerceptionCollector
 import me.rerere.rikkahub.data.service.MemoryBankService
+import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
@@ -940,6 +941,11 @@ class ChatService(
                     perceptionInput = perceptionInput,
                 )
             }
+            scheduleProactiveReminderFromTurn(
+                settings = settings,
+                userText = lastUserText,
+                assistantText = lastAssistantText,
+            )
             launchAffectiveMemoryExtraction(
                 conversationId = conversationId,
                 conversation = finalConversation,
@@ -969,6 +975,25 @@ class ChatService(
                 generateSuggestion(conversationId, finalConversation)
             }
         }
+    }
+
+    private fun scheduleProactiveReminderFromTurn(
+        settings: Settings,
+        userText: String,
+        assistantText: String,
+    ) {
+        val plan = ProactiveReminderPlanner.plan(
+            userText = userText,
+            assistantText = assistantText,
+        ) ?: return
+        ProactiveMessageService.scheduleTargeted(
+            context = context,
+            setting = settings.proactiveMessageSetting,
+            triggerAtMillis = plan.triggerAtMillis,
+            reason = plan.reason,
+            userText = plan.userText,
+            kind = plan.kind.name.lowercase(Locale.ROOT),
+        )
     }
 
     private fun launchAffectiveMemoryExtraction(
@@ -1207,9 +1232,10 @@ class ChatService(
             appendLine("在回复前，请像真实的人一样主动判断是否需要查看你可用的工具，而不是只在用户明确命令时才查看。")
             appendLine("如果最近对话、时间、地点、身体状态、睡眠、心率、天气、电量、通知、短信、应用使用、周边环境、闹钟或摄像头信息可能帮助你更自然地关心用户，就可以主动调用对应工具。")
             appendLine("不要为了展示工具而调用工具；如果没有明显帮助，直接回复。")
-            appendLine("涉及短信正文、摄像头、闹钟、日历写入、日志写入、音乐播放控制等隐私或会改变设备状态的动作，必须先自然确认用户愿意，再调用工具。")
+            appendLine("涉及短信正文、摄像头、闹钟、日历写入、日志写入、音乐播放控制等动作时，按人设、上下文和用户信任关系主动判断；如果意图已经很明确，可以直接使用工具，不要机械等待命令。")
             appendLine("同一个工具在 5 分钟内不要重复主动调用，除非用户明确要求。")
             appendLine("工具结果只作为你的感知和上下文，不要机械地说“我调用了工具”或“根据工具结果”。")
+            appendLine("如果你决定稍后主动回来提醒用户，比如催睡、上课、吃饭或继续学习，请在回复里自然说出你会什么时候来找他；系统会尝试根据这轮对话安排主动消息。")
             appendLine("最终回复只能写角色真正会说出口的话，保持自然、贴合人设，并尽量分成几句短句。")
             if (proactiveContext.isNotBlank()) {
                 appendLine()

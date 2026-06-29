@@ -55,9 +55,7 @@ import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.Settings
@@ -87,9 +85,17 @@ class ProactiveMessageService : KoinComponent {
         const val TAG = "ProactiveMessageService"
         const val ACTION_PROACTIVE_MESSAGE = "me.rerere.rikkahub.PROACTIVE_MESSAGE"
         private const val REQUEST_CODE = 10001
+        private const val TARGETED_REQUEST_CODE = 10002
 
         internal const val PREFS_NAME = "proactive_message_prefs"
         private const val KEY_NEXT_TRIGGER_TIME = "next_trigger_time"
+        internal const val KEY_TARGETED_TRIGGER_TIME = "targeted_trigger_time"
+        internal const val KEY_TARGETED_REASON = "targeted_reason"
+        internal const val KEY_TARGETED_USER_TEXT = "targeted_user_text"
+        internal const val KEY_TARGETED_KIND = "targeted_kind"
+        internal const val EXTRA_TARGETED_REASON = "targeted_reason"
+        internal const val EXTRA_TARGETED_USER_TEXT = "targeted_user_text"
+        internal const val EXTRA_TARGETED_KIND = "targeted_kind"
 
         fun scheduleNext(context: Context, setting: ProactiveMessageSetting) {
             if (!setting.enabled) {
@@ -154,6 +160,52 @@ class ProactiveMessageService : KoinComponent {
             ProactiveMessageWorker.scheduleNext(context, setting)
         }
 
+        fun scheduleTargeted(
+            context: Context,
+            setting: ProactiveMessageSetting,
+            triggerAtMillis: Long,
+            reason: String,
+            userText: String,
+            kind: String,
+        ) {
+            if (!setting.enabled || triggerAtMillis <= java.lang.System.currentTimeMillis()) return
+
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_NEXT_TRIGGER_TIME, triggerAtMillis)
+                .putLong(KEY_TARGETED_TRIGGER_TIME, triggerAtMillis)
+                .putString(KEY_TARGETED_REASON, reason)
+                .putString(KEY_TARGETED_USER_TEXT, userText)
+                .putString(KEY_TARGETED_KIND, kind)
+                .apply()
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
+                action = ACTION_PROACTIVE_MESSAGE
+                putExtra(EXTRA_TARGETED_REASON, reason)
+                putExtra(EXTRA_TARGETED_USER_TEXT, userText)
+                putExtra(EXTRA_TARGETED_KIND, kind)
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                TARGETED_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                }
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            }
+
+            Log.d(TAG, "Scheduled targeted proactive message kind=$kind at ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(triggerAtMillis))}")
+        }
+
         fun getNextTriggerTime(context: Context): Long? {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val triggerTime = prefs.getLong(KEY_NEXT_TRIGGER_TIME, 0L)
@@ -199,9 +251,23 @@ class ProactiveMessageService : KoinComponent {
         }
     }
 
-    suspend fun buildProactiveContext(context: Context, settings: Settings): String {
+    suspend fun buildProactiveContext(
+        context: Context,
+        settings: Settings,
+        targetedReason: String? = null,
+        targetedUserText: String? = null,
+        targetedKind: String? = null,
+    ): String {
         val sb = StringBuilder()
         sb.appendLine("[主动消息上下文]")
+        if (!targetedReason.isNullOrBlank()) {
+            sb.appendLine("这次不是随机主动消息，而是露露刚才自己决定稍后回来确认的一次目标消息。")
+            sb.appendLine("目标类型: ${targetedKind.orEmpty()}")
+            sb.appendLine("触发原因: $targetedReason")
+            if (!targetedUserText.isNullOrBlank()) {
+                sb.appendLine("当时用户说过: $targetedUserText")
+            }
+        }
 
         // Time since last chat
         try {
@@ -293,8 +359,9 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 不要说\"根据xxx\"、\"我注意到xxx数据\"之类暴露信息来源的话")
         sb.appendLine("- 直接以朋友聊天的语气开口，就像你突然想到了什么想跟对方说")
         sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，最终消息只输出纯文本")
-        sb.appendLine("- 可以为了判断用户状态主动调用安全的读取类工具，例如时间、位置、应用使用、电量、健康、通知或当前音乐")
-        sb.appendLine("- 短信正文、摄像头、闹钟、日历写入、日志写入、音乐控制等隐私或会改变设备状态的动作，后台主动消息里不要直接执行；可以自然询问用户要不要你帮忙")
+        sb.appendLine("- 可以为了判断用户状态主动调用工具，例如时间、位置、应用使用、电量、健康、通知、短信、当前音乐、闹钟、日历或日志。")
+        sb.appendLine("- 工具调用要符合角色当下目的：比如催睡就优先看时间、电量、应用使用；确认上课就优先看时间、位置、应用使用。")
+        sb.appendLine("- 如果工具能帮你更像真人一样判断用户状态，就大胆用；最终说出口的话仍然要自然，不要暴露工具细节。")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
         return sb.toString()
     }
@@ -323,7 +390,20 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
         when (intent.action) {
             ProactiveMessageService.ACTION_PROACTIVE_MESSAGE -> {
                 Log.d(ProactiveMessageService.TAG, "Starting ProactiveMessageTriggerService...")
-                val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java)
+                val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
+                    putExtra(
+                        ProactiveMessageService.EXTRA_TARGETED_REASON,
+                        intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_REASON)
+                    )
+                    putExtra(
+                        ProactiveMessageService.EXTRA_TARGETED_USER_TEXT,
+                        intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_USER_TEXT)
+                    )
+                    putExtra(
+                        ProactiveMessageService.EXTRA_TARGETED_KIND,
+                        intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_KIND)
+                    )
+                }
                 context.startForegroundService(serviceIntent)
             }
             Intent.ACTION_BOOT_COMPLETED -> {
@@ -362,28 +442,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
         private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
-        private val PROACTIVE_SAFE_TOOL_NAMES = setOf(
-            "get_time_info",
-            "get_location",
-            "explore_nearby",
-            "get_notifications",
-            "get_app_usage",
-            "get_gadgetbridge_data",
-            "get_battery_info",
-        )
-    }
-
-    private fun isSafeProactiveToolCall(toolName: String, input: String): Boolean {
-        if (toolName in PROACTIVE_SAFE_TOOL_NAMES) return true
-        if (toolName == "control_music") {
-            return runCatching {
-                json.parseToJsonElement(input.ifBlank { "{}" })
-                    .jsonObject["action"]
-                    ?.jsonPrimitive
-                    ?.contentOrNull == "get_now_playing"
-            }.getOrDefault(false)
-        }
-        return false
     }
 
     // 输入转换器（与 ChatService 保持一致）
@@ -420,6 +478,29 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             try {
                 val settings = settingsStore.settingsFlow.first()
                 val proactiveSetting = settings.proactiveMessageSetting
+                val prefs = getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
+                val targetedTriggerTime = prefs.getLong(ProactiveMessageService.KEY_TARGETED_TRIGGER_TIME, 0L)
+                val canRestoreTargeted = targetedTriggerTime > 0L &&
+                    System.currentTimeMillis() >= targetedTriggerTime - TimeUnit.MINUTES.toMillis(2)
+                val targetedReason = intent?.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_REASON)
+                    ?: if (canRestoreTargeted) {
+                        prefs.getString(ProactiveMessageService.KEY_TARGETED_REASON, null)
+                    } else {
+                        null
+                    }
+                val targetedUserText = intent?.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_USER_TEXT)
+                    ?: if (canRestoreTargeted) {
+                        prefs.getString(ProactiveMessageService.KEY_TARGETED_USER_TEXT, null)
+                    } else {
+                        null
+                    }
+                val targetedKind = intent?.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_KIND)
+                    ?: if (canRestoreTargeted) {
+                        prefs.getString(ProactiveMessageService.KEY_TARGETED_KIND, null)
+                    } else {
+                        null
+                    }
+                val isTargetedTrigger = !targetedReason.isNullOrBlank()
 
                 if (!proactiveSetting.enabled) {
                     stopSelf()
@@ -427,10 +508,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 // 去重判断：防止 AlarmManager 和 WorkManager 在同一窗口内重复触发
-                val prefs = getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
                 val lastTriggeredTime = prefs.getLong("last_triggered_time", 0L)
                 val minIntervalMs = proactiveSetting.minIntervalMinutes.coerceAtLeast(1) * 60 * 1000L
-                if (System.currentTimeMillis() - lastTriggeredTime < minIntervalMs) {
+                if (!isTargetedTrigger && System.currentTimeMillis() - lastTriggeredTime < minIntervalMs) {
                     Log.d(TAG, "Duplicate trigger within min interval, skipping")
                     ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
                     stopSelf()
@@ -463,7 +543,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 // 构建上下文
                 val contextStr = proactiveMessageService.buildProactiveContext(
-                    this@ProactiveMessageTriggerService, settings
+                    context = this@ProactiveMessageTriggerService,
+                    settings = settings,
+                    targetedReason = targetedReason,
+                    targetedUserText = targetedUserText,
+                    targetedKind = targetedKind,
                 )
 
                 // 获取历史消息
@@ -595,6 +679,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                 }
 
+                if (isTargetedTrigger) {
+                    prefs.edit()
+                        .remove(ProactiveMessageService.KEY_TARGETED_TRIGGER_TIME)
+                        .remove(ProactiveMessageService.KEY_TARGETED_REASON)
+                        .remove(ProactiveMessageService.KEY_TARGETED_USER_TEXT)
+                        .remove(ProactiveMessageService.KEY_TARGETED_KIND)
+                        .apply()
+                }
                 ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
             } catch (e: Exception) {
                 Log.e(ProactiveMessageService.TAG, "Failed to trigger proactive message", e)
@@ -880,12 +972,12 @@ addAll(localTools.getTools(assistant.localTools))
                 }
 
                 // 检查是否需要审批
-                if (!isSafeProactiveToolCall(toolDef.name, toolCall.input) || toolDef.needsApproval) {
+                if (toolDef.needsApproval) {
                     // 后台模式下，需要审批的工具自动拒绝
-                    Log.w(TAG, "Tool ${toolCall.toolName} is not safe for background proactive mode, auto-denying")
+                    Log.w(TAG, "Tool ${toolCall.toolName} needs approval, auto-denying in proactive mode")
                     executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"Tool execution denied: background proactive mode only allows safe read-only perception tools"}""")),
-                        approvalState = ToolApprovalState.Denied("Proactive mode: unsafe or requires approval")
+                        output = listOf(UIMessagePart.Text("""{"error":"Tool execution denied: requires user approval in proactive mode"}""")),
+                        approvalState = ToolApprovalState.Denied("Proactive mode: requires approval")
                     ))
                 } else {
                     // 执行工具
