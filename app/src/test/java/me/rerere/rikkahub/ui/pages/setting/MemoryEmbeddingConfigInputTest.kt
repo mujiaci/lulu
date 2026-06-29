@@ -46,4 +46,14 @@ class MemoryEmbeddingConfigInputTest {
         assertTrue(lines.any { it.contains("Qwen/Qwen3-Reranker-8B") })
         assertTrue(lines.any { it.contains("gpt-4o-mini") })
     }
+
+    @Test
+    fun defaultModelSettingSectionsExposeMemoryAndImageEntrancesWithoutTitleSummary() {
+        val sections = defaultModelSettingSections()
+
+        assertTrue(ModelSettingSection.MEMORY_RERANK in sections)
+        assertTrue(ModelSettingSection.MEMORY_EXTRACTION in sections)
+        assertTrue(ModelSettingSection.IMAGE_GENERATION in sections)
+        assertTrue(ModelSettingSection.TITLE_SUMMARY !in sections)
+    }
 }

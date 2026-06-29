@@ -7,6 +7,7 @@ import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.View
 import me.rerere.hugeicons.stroke.FileZip
+import me.rerere.hugeicons.stroke.Image01
 import me.rerere.hugeicons.stroke.Mortarboard01
 import me.rerere.hugeicons.stroke.Message01
 import me.rerere.hugeicons.stroke.MessageMultiple01
@@ -98,36 +99,50 @@ fun SettingModelPage(vm: SettingVM = koinViewModel()) {
             contentPadding = contentPadding + PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            item {
-                DefaultChatModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultMemoryEmbeddingModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultTitleModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultSuggestionModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultTranslationModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultOcrModelSetting(settings = settings, vm = vm)
-            }
-
-            item {
-                DefaultCompressModelSetting(settings = settings, vm = vm)
+            defaultModelSettingSections().forEach { section ->
+                item {
+                    when (section) {
+                        ModelSettingSection.CHAT -> DefaultChatModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.MEMORY_EMBEDDING -> DefaultMemoryEmbeddingModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.MEMORY_RERANK -> DefaultMemoryRerankModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.MEMORY_EXTRACTION -> DefaultMemoryExtractionModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.IMAGE_GENERATION -> DefaultImageGenerationModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.SUGGESTION -> DefaultSuggestionModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.TRANSLATION -> DefaultTranslationModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.OCR -> DefaultOcrModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.COMPRESS -> DefaultCompressModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.TITLE_SUMMARY -> DefaultTitleModelSetting(settings = settings, vm = vm)
+                    }
+                }
             }
         }
     }
 }
+
+internal enum class ModelSettingSection {
+    CHAT,
+    MEMORY_EMBEDDING,
+    MEMORY_RERANK,
+    MEMORY_EXTRACTION,
+    IMAGE_GENERATION,
+    SUGGESTION,
+    TRANSLATION,
+    OCR,
+    COMPRESS,
+    TITLE_SUMMARY,
+}
+
+internal fun defaultModelSettingSections(): List<ModelSettingSection> = listOf(
+    ModelSettingSection.CHAT,
+    ModelSettingSection.MEMORY_EMBEDDING,
+    ModelSettingSection.MEMORY_RERANK,
+    ModelSettingSection.MEMORY_EXTRACTION,
+    ModelSettingSection.IMAGE_GENERATION,
+    ModelSettingSection.SUGGESTION,
+    ModelSettingSection.TRANSLATION,
+    ModelSettingSection.OCR,
+    ModelSettingSection.COMPRESS,
+)
 
 @Composable
 private fun DefaultMemoryEmbeddingModelSetting(
@@ -226,56 +241,6 @@ private fun DefaultMemoryEmbeddingModelSetting(
 
                 FormItem(
                     label = {
-                        Text(stringResource(R.string.setting_model_page_memory_extraction_model))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_memory_extraction_model_desc))
-                    }
-                ) {
-                    ModelSelector(
-                        modelId = config.extractionModelId,
-                        type = ModelType.CHAT,
-                        onSelect = { model ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    memoryEmbeddingConfig = config.copy(
-                                        extractionModelId = model.id.takeUnless { model.modelId.isBlank() }
-                                    )
-                                )
-                            )
-                        },
-                        providers = settings.providers,
-                        allowClear = true,
-                    )
-                }
-
-                FormItem(
-                    label = {
-                        Text(stringResource(R.string.setting_model_page_memory_rerank_model))
-                    },
-                    description = {
-                        Text(stringResource(R.string.setting_model_page_memory_rerank_model_desc))
-                    }
-                ) {
-                    ModelSelector(
-                        modelId = config.rerankModelId,
-                        type = ModelType.RERANK,
-                        onSelect = { model ->
-                            vm.updateSettings(
-                                settings.copy(
-                                    memoryEmbeddingConfig = config.copy(
-                                        rerankModelId = model.id.takeUnless { model.modelId.isBlank() }
-                                    )
-                                )
-                            )
-                        },
-                        providers = settings.providers,
-                        allowClear = true,
-                    )
-                }
-
-                FormItem(
-                    label = {
                         Text(stringResource(R.string.setting_model_page_memory_rerank_candidates))
                     },
                     description = {
@@ -361,6 +326,118 @@ private fun DefaultMemoryEmbeddingModelSetting(
             }
         }
     }
+}
+
+@Composable
+private fun DefaultMemoryRerankModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    val config = settings.memoryEmbeddingConfig
+    ModelFeatureCard(
+        title = {
+            Text(stringResource(R.string.setting_model_page_memory_rerank_model), maxLines = 1)
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_memory_rerank_model_desc))
+        },
+        icon = {
+            Icon(HugeIcons.Database02, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = config.rerankModelId,
+                    type = ModelType.RERANK,
+                    onSelect = { model ->
+                        vm.updateSettings(
+                            settings.copy(
+                                memoryEmbeddingConfig = config.copy(
+                                    rerankModelId = model.id.takeUnless { model.modelId.isBlank() }
+                                )
+                            )
+                        )
+                    },
+                    providers = settings.providers,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun DefaultMemoryExtractionModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    val config = settings.memoryEmbeddingConfig
+    ModelFeatureCard(
+        title = {
+            Text(stringResource(R.string.setting_model_page_memory_extraction_model), maxLines = 1)
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_memory_extraction_model_desc))
+        },
+        icon = {
+            Icon(HugeIcons.Mortarboard01, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = config.extractionModelId,
+                    type = ModelType.CHAT,
+                    onSelect = { model ->
+                        vm.updateSettings(
+                            settings.copy(
+                                memoryEmbeddingConfig = config.copy(
+                                    extractionModelId = model.id.takeUnless { model.modelId.isBlank() }
+                                )
+                            )
+                        )
+                    },
+                    providers = settings.providers,
+                    allowClear = true,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun DefaultImageGenerationModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    ModelFeatureCard(
+        title = {
+            Text(stringResource(R.string.setting_model_page_image_generation_model), maxLines = 1)
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_image_generation_model_desc))
+        },
+        icon = {
+            Icon(HugeIcons.Image01, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = settings.imageGenerationModelId,
+                    type = ModelType.IMAGE,
+                    onSelect = { model ->
+                        vm.updateSettings(
+                            settings.copy(
+                                imageGenerationModelId = model.id
+                            )
+                        )
+                    },
+                    providers = settings.providers,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+        }
+    )
 }
 
 private fun Settings.memoryModelName(modelId: Uuid?): String? =
