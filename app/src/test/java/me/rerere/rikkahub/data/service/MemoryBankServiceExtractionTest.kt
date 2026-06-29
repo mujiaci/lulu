@@ -91,14 +91,61 @@ class MemoryBankServiceExtractionTest {
         assertEquals("""["7"]""", dao.relatedMemoryUpdates[8])
         assertTrue(dao.recalledAt > 0L)
     }
+
+    @Test
+    fun `light maintenance deprecates lower scored near duplicate vector memory`() = runBlocking {
+        val dao = RecordingMemoryBankDAO(
+            recentMemories = listOf(
+                MemoryBankEntity(
+                    id = 1,
+                    content = "用户正在写论文大纲，希望露露帮她拆成更小的步骤。",
+                    memoryKind = "user_preference",
+                    embeddingVectorJson = encodeMemoryVector(listOf(1f, 0f, 0f)),
+                    importance = 5,
+                    confidence = 0.9,
+                    createdAt = 200L,
+                ),
+                MemoryBankEntity(
+                    id = 2,
+                    content = "用户论文大纲卡住了，需要露露温柔地一步步梳理。",
+                    memoryKind = "user_preference",
+                    embeddingVectorJson = encodeMemoryVector(listOf(0.96f, 0.04f, 0f)),
+                    importance = 2,
+                    confidence = 0.7,
+                    createdAt = 100L,
+                ),
+                MemoryBankEntity(
+                    id = 3,
+                    content = "露露答应下次继续检查参考文献格式。",
+                    memoryKind = "promise",
+                    embeddingVectorJson = encodeMemoryVector(listOf(0f, 1f, 0f)),
+                    importance = 3,
+                    createdAt = 50L,
+                ),
+            )
+        )
+        val service = MemoryBankService(
+            memoryBankDAO = dao,
+            okHttpClient = null,
+            context = null,
+        )
+
+        val result = service.runLightMaintenance()
+
+        assertEquals(1, result.deprecatedDuplicateCount)
+        assertEquals(2, dao.deprecatedUpdates.single().id)
+        assertEquals("1", dao.deprecatedUpdates.single().supersededByMemoryId)
+    }
 }
 
 private class RecordingMemoryBankDAO(
     private val assistantMemories: List<MemoryBankEntity> = emptyList(),
+    private val recentMemories: List<MemoryBankEntity> = emptyList(),
 ) : MemoryBankDAO {
     val inserted = mutableListOf<MemoryBankEntity>()
     val recalledIds = mutableListOf<Int>()
     val relatedMemoryUpdates = mutableMapOf<Int, String?>()
+    val deprecatedUpdates = mutableListOf<DeprecatedMemoryUpdate>()
     var recalledAt: Long = 0L
 
     override suspend fun insertMemory(memory: MemoryBankEntity): Long {
@@ -147,7 +194,7 @@ private class RecordingMemoryBankDAO(
     override suspend fun getCountByVectorStatus(status: String): Int = 0
     override suspend fun getCountByAssistant(assistantId: String): Int = 0
     override suspend fun getCountByAssistantAndType(assistantId: String, type: String): Int = 0
-    override suspend fun getRecentMemories(limit: Int): List<MemoryBankEntity> = emptyList()
+    override suspend fun getRecentMemories(limit: Int): List<MemoryBankEntity> = recentMemories.take(limit)
     override suspend fun searchMemoriesByKeyword(keyword: String, limit: Int): List<MemoryBankEntity> = emptyList()
     override suspend fun searchMemoriesByKeywordAndType(
         keyword: String,
@@ -180,6 +227,20 @@ private class RecordingMemoryBankDAO(
         relatedMemoryUpdates[id] = relatedMemoryIdsJson
     }
 
+    override suspend fun markMemoryDeprecated(
+        id: Int,
+        deprecatedReason: String?,
+        supersededByMemoryId: String?,
+        correctedAt: Long?,
+    ) {
+        deprecatedUpdates += DeprecatedMemoryUpdate(
+            id = id,
+            deprecatedReason = deprecatedReason,
+            supersededByMemoryId = supersededByMemoryId,
+            correctedAt = correctedAt,
+        )
+    }
+
     override suspend fun updateVectorStatus(id: Int, status: String, retryCount: Int) = unsupported()
     override suspend fun updateVectorResult(
         id: Int,
@@ -192,3 +253,10 @@ private class RecordingMemoryBankDAO(
 
     private fun unsupported(): Nothing = error("Unexpected DAO call")
 }
+
+private data class DeprecatedMemoryUpdate(
+    val id: Int,
+    val deprecatedReason: String?,
+    val supersededByMemoryId: String?,
+    val correctedAt: Long?,
+)

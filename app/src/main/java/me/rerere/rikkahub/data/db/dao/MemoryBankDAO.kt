@@ -124,6 +124,23 @@ interface MemoryBankDAO {
     @Query("UPDATE memory_bank SET related_memory_ids_json = :relatedMemoryIdsJson WHERE id = :id")
     suspend fun updateRelatedMemoryIds(id: Int, relatedMemoryIdsJson: String?)
 
+    @Query(
+        """
+        UPDATE memory_bank
+        SET deprecated = 1,
+            deprecated_reason = :deprecatedReason,
+            superseded_by_memory_id = :supersededByMemoryId,
+            corrected_at = :correctedAt
+        WHERE id = :id
+        """
+    )
+    suspend fun markMemoryDeprecated(
+        id: Int,
+        deprecatedReason: String?,
+        supersededByMemoryId: String?,
+        correctedAt: Long?,
+    )
+
     @Query("UPDATE memory_bank SET vector_status = :status, vector_retry_count = :retryCount WHERE id = :id")
     suspend fun updateVectorStatus(id: Int, status: String, retryCount: Int)
 

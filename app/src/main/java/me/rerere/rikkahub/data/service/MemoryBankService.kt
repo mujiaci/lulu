@@ -39,6 +39,10 @@ class MemoryBankService(
         val failedCount: Int = 0,
     )
 
+    data class MaintenanceResult(
+        val deprecatedDuplicateCount: Int = 0,
+    )
+
     val recallCount: Int = 5
 
     suspend fun getAssistantIds(): List<String> = withContext(Dispatchers.IO) {
@@ -133,6 +137,22 @@ class MemoryBankService(
 
     suspend fun rebuildIndex() {
         // No-op: vector index removed. Structured embedding fields are stored for the next memory phase.
+    }
+
+    suspend fun runLightMaintenance(limit: Int = 200): MaintenanceResult = withContext(Dispatchers.IO) {
+        val memories = memoryBankDAO.getRecentMemories(limit)
+            .filter { !it.deprecated && it.content.isNotBlank() }
+        val deprecated = selectNearDuplicateMemoriesForDeprecation(memories)
+        val now = System.currentTimeMillis()
+        deprecated.forEach { duplicate ->
+            memoryBankDAO.markMemoryDeprecated(
+                id = duplicate.deprecated.id,
+                deprecatedReason = "near_duplicate:${duplicate.keep.id}",
+                supersededByMemoryId = duplicate.keep.id.toString(),
+                correctedAt = now,
+            )
+        }
+        MaintenanceResult(deprecatedDuplicateCount = deprecated.size)
     }
 
     suspend fun processPendingVectors() {
@@ -321,6 +341,11 @@ class MemoryBankService(
     }
 }
 
+private data class DuplicateMemoryDeprecation(
+    val deprecated: MemoryBankEntity,
+    val keep: MemoryBankEntity,
+)
+
 internal fun buildMemoryRecallContext(
     memories: List<MemoryBankEntity>,
     query: String = "",
@@ -414,6 +439,39 @@ private fun List<MemoryBankEntity>.dynamicRecallLimit(queryVector: List<Float>):
         else -> 7
     }
 }
+
+private fun selectNearDuplicateMemoriesForDeprecation(
+    memories: List<MemoryBankEntity>,
+): List<DuplicateMemoryDeprecation> {
+    val active = memories
+        .filter { decodeMemoryVector(it.embeddingVectorJson).isNotEmpty() }
+        .sortedByDescending { it.maintenanceKeepScore() }
+    val keepers = mutableListOf<MemoryBankEntity>()
+    val deprecated = mutableListOf<DuplicateMemoryDeprecation>()
+    active.forEach { candidate ->
+        val duplicateOf = keepers.firstOrNull { keeper ->
+            cosineSimilarity(
+                decodeMemoryVector(candidate.embeddingVectorJson),
+                decodeMemoryVector(keeper.embeddingVectorJson),
+            ) > MEMORY_DUPLICATE_VECTOR_THRESHOLD
+        }
+        if (duplicateOf != null) {
+            deprecated += DuplicateMemoryDeprecation(
+                deprecated = candidate,
+                keep = duplicateOf,
+            )
+        } else {
+            keepers += candidate
+        }
+    }
+    return deprecated
+}
+
+private fun MemoryBankEntity.maintenanceKeepScore(): Double =
+    importance.coerceIn(1, 5) * 100.0 +
+        confidence.coerceIn(0.0, 1.0) * 50.0 +
+        recallCount * 10.0 +
+        createdAt.coerceAtLeast(0L) / 1_000_000_000_000.0
 
 private fun MemoryBankEntity.recallSectionTitle(): String = when (memoryKind ?: type) {
     "role_emotion" -> "最近情感记忆"
