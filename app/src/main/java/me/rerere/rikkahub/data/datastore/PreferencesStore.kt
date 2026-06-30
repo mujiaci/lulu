@@ -725,6 +725,18 @@ fun Settings.getAssistantById(id: Uuid): Assistant? {
     return this.assistants.find { it.id == id }
 }
 
+fun Settings.getProactiveMessageSetting(assistantId: Uuid? = null): ProactiveMessageSetting {
+    val assistant = assistantId?.let { getAssistantById(it) }
+        ?: assistants.firstOrNull { it.proactiveMessageSetting.enabled }
+        ?: getCurrentAssistant()
+    val roleSetting = assistant.proactiveMessageSetting
+    return if (roleSetting.enabled || roleSetting.assistantId.isNotBlank()) {
+        roleSetting.forAssistant(assistant.id.toString())
+    } else {
+        proactiveMessageSetting.forAssistant(assistant.id.toString())
+    }
+}
+
 fun Settings.getQuickMessagesOfAssistant(assistant: Assistant) =
     quickMessages.filter { it.id in assistant.quickMessageIds }
 
@@ -732,6 +744,20 @@ fun Settings.getSelectedTTSProvider(): TTSProviderSetting? {
     return selectedTTSProviderId?.let { id ->
         ttsProviders.find { it.id == id }
     } ?: ttsProviders.firstOrNull()
+}
+
+fun Settings.getAssistantTTSProvider(assistantId: Uuid): TTSProviderSetting? {
+    val provider = getSelectedTTSProvider()
+    val voiceId = assistants
+        .firstOrNull { it.id == assistantId }
+        ?.ttsVoiceId
+        ?.trim()
+        .orEmpty()
+    return when {
+        voiceId.isBlank() -> provider
+        provider is TTSProviderSetting.MiniMax -> provider.copy(voiceId = voiceId)
+        else -> provider
+    }
 }
 
 fun Settings.getSelectedASRProvider(): ASRProviderSetting? {

@@ -11,6 +11,7 @@ import kotlinx.coroutines.delay
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.getAssistantTTSProvider
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.ui.components.message.buildSpeakableMessageText
@@ -65,7 +66,7 @@ fun TTSAutoPlay(setting: Settings, conversation: Conversation, loading: Boolean)
             .takeIf { it.isNotBlank() }
         spokenMessageIds = spokenMessageIds + target.map { it.id }
         if (text == null) return@LaunchedEffect
-        tts.speak(text)
+        tts.speak(text, providerOverride = setting.getAssistantTTSProvider(conversation.assistantId))
     }
 }
 

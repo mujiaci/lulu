@@ -61,7 +61,7 @@ interface CustomTtsState {
     val totalChunks: StateFlow<Int>
     val playbackState: StateFlow<PlaybackState>
 
-    fun speak(text: String, flushCalled: Boolean = true)
+    fun speak(text: String, flushCalled: Boolean = true, providerOverride: TTSProviderSetting? = null)
     fun stop()
     fun pause()
     fun resume()
@@ -93,9 +93,9 @@ private class CustomTtsStateImpl(
         controller.setProvider(provider)
     }
 
-    override fun speak(text: String, flushCalled: Boolean) {
+    override fun speak(text: String, flushCalled: Boolean, providerOverride: TTSProviderSetting?) {
         val processed = text.stripMarkdown()
-        controller.speak(processed, flushCalled)
+        controller.speak(processed, flushCalled, providerOverride)
     }
 
     override fun stop() {

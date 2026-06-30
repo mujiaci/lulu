@@ -9,3 +9,6 @@ data class ProactiveMessageSetting(
     val maxIntervalMinutes: Int = 90,
     val assistantId: String = "",
 )
+
+fun ProactiveMessageSetting.forAssistant(assistantId: String): ProactiveMessageSetting =
+    copy(assistantId = assistantId)

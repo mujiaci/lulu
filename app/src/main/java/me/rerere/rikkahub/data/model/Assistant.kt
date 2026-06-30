@@ -8,6 +8,7 @@ import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -24,6 +25,8 @@ data class Assistant(
     val contextMessageSize: Int = 60,
     val streamOutput: Boolean = true,
     val autoPlayVoice: Boolean = false,
+    val ttsVoiceId: String = "",
+    val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
     val enableMemory: Boolean = false,
     val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,

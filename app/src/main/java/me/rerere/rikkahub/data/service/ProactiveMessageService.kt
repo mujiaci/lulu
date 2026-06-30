@@ -72,6 +72,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.RouteActivity
@@ -120,6 +121,7 @@ class ProactiveMessageService : KoinComponent {
         internal const val EXTRA_TARGETED_REASON = "targeted_reason"
         internal const val EXTRA_TARGETED_USER_TEXT = "targeted_user_text"
         internal const val EXTRA_TARGETED_KIND = "targeted_kind"
+        internal const val EXTRA_ASSISTANT_ID = "assistant_id"
 
         fun scheduleNext(context: Context, setting: ProactiveMessageSetting) {
             if (!setting.enabled) {
@@ -136,11 +138,13 @@ class ProactiveMessageService : KoinComponent {
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
                 .putLong(KEY_NEXT_TRIGGER_TIME, triggerTime)
+                .putString(EXTRA_ASSISTANT_ID, setting.assistantId)
                 .apply()
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                putExtra(EXTRA_ASSISTANT_ID, setting.assistantId)
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
@@ -188,8 +192,9 @@ class ProactiveMessageService : KoinComponent {
             context: Context,
             settings: Settings,
             minutesSinceLastChat: Long? = null,
+            assistantId: Uuid? = null,
         ) {
-            val setting = settings.proactiveMessageSetting
+            val setting = settings.getProactiveMessageSetting(assistantId)
             if (!setting.enabled) {
                 cancel(context)
                 return
@@ -232,11 +237,13 @@ class ProactiveMessageService : KoinComponent {
                 .edit()
                 .putLong(KEY_NEXT_TRIGGER_TIME, triggerAtMillis)
                 .putString("next_trigger_reason", logReason)
+                .putString(EXTRA_ASSISTANT_ID, setting.assistantId)
                 .apply()
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                putExtra(EXTRA_ASSISTANT_ID, setting.assistantId)
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
@@ -275,11 +282,13 @@ class ProactiveMessageService : KoinComponent {
                 .putString(KEY_TARGETED_REASON, reason)
                 .putString(KEY_TARGETED_USER_TEXT, userText)
                 .putString(KEY_TARGETED_KIND, kind)
+                .putString(EXTRA_ASSISTANT_ID, setting.assistantId)
                 .apply()
 
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                putExtra(EXTRA_ASSISTANT_ID, setting.assistantId)
                 putExtra(EXTRA_TARGETED_REASON, reason)
                 putExtra(EXTRA_TARGETED_USER_TEXT, userText)
                 putExtra(EXTRA_TARGETED_KIND, kind)
@@ -446,7 +455,9 @@ class ProactiveMessageService : KoinComponent {
             // 先安排下一次（写入SP让UI立即显示），再立即触发
             scheduleNext(context, setting)
             // 立即触发：直接启动TriggerService
-            val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java)
+            val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
+                putExtra(EXTRA_ASSISTANT_ID, setting.assistantId)
+            }
             context.startForegroundService(serviceIntent)
         }
     }
@@ -668,6 +679,10 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                 Log.d(ProactiveMessageService.TAG, "Starting ProactiveMessageTriggerService...")
                 val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
                     putExtra(
+                        ProactiveMessageService.EXTRA_ASSISTANT_ID,
+                        intent.getStringExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID)
+                    )
+                    putExtra(
                         ProactiveMessageService.EXTRA_TARGETED_REASON,
                         intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_REASON)
                     )
@@ -688,7 +703,7 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                     try {
                         val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
                         val settings = settingsStore.settingsFlow.first()
-                        val proactiveSetting = settings.proactiveMessageSetting
+                        val proactiveSetting = settings.getProactiveMessageSetting()
                         if (proactiveSetting.enabled) {
                             ProactiveMessageService.scheduleNext(context, settings)
                         }
@@ -754,8 +769,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             var conversationId: kotlin.uuid.Uuid? = null
             try {
                 val settings = settingsStore.settingsFlow.first()
-                val proactiveSetting = settings.proactiveMessageSetting
                 val prefs = getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
+                val triggerAssistantId = intent?.getStringExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID)
+                    ?: prefs.getString(ProactiveMessageService.EXTRA_ASSISTANT_ID, null)
+                val triggerAssistantUuid = triggerAssistantId
+                    ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+                val proactiveSetting = settings.getProactiveMessageSetting(triggerAssistantUuid)
                 val targetedTriggerTime = prefs.getLong(ProactiveMessageService.KEY_TARGETED_TRIGGER_TIME, 0L)
                 val canRestoreTargeted = targetedTriggerTime > 0L &&
                     System.currentTimeMillis() >= targetedTriggerTime - TimeUnit.MINUTES.toMillis(2)
@@ -789,7 +808,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val minIntervalMs = proactiveSetting.minIntervalMinutes.coerceAtLeast(1) * 60 * 1000L
                 if (!isTargetedTrigger && System.currentTimeMillis() - lastTriggeredTime < minIntervalMs) {
                     Log.d(TAG, "Duplicate trigger within min interval, skipping")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, settings)
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        assistantId = triggerAssistantUuid,
+                    )
                     stopSelf()
                     return@launch
                 }
@@ -804,7 +827,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 if (model == null) {
                     Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, settings)
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        assistantId = assistantUuid,
+                    )
                     stopSelf()
                     return@launch
                 }
@@ -849,6 +876,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         context = this@ProactiveMessageTriggerService,
                         settings = settings,
                         minutesSinceLastChat = minutesSinceLastChat,
+                        assistantId = assistantUuid,
                     )
                     stopSelf()
                     return@launch
@@ -935,6 +963,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         context = this@ProactiveMessageTriggerService,
                         settings = settings,
                         minutesSinceLastChat = minutesSinceLastChat,
+                        assistantId = assistantUuid,
                     )
                     stopSelf()
                     return@launch
@@ -1029,6 +1058,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             context = this@ProactiveMessageTriggerService,
                             settings = settings,
                             minutesSinceLastChat = 0L,
+                            assistantId = assistantUuid,
                         )
                     }
                 }
@@ -1037,6 +1067,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         context = this@ProactiveMessageTriggerService,
                         settings = settings,
                         minutesSinceLastChat = 0L,
+                        assistantId = assistantUuid,
                     )
                 }
             } catch (e: Exception) {

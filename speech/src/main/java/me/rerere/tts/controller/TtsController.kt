@@ -45,6 +45,7 @@ class TtsController(
 
     // Provider & 作业
     private var currentProvider: TTSProviderSetting? = null
+    private var sessionProvider: TTSProviderSetting? = null
     private var workerJob: Job? = null
     private var isPaused = false
 
@@ -106,9 +107,9 @@ class TtsController(
      * - flush=true: 清空当前进度并重新开始
      * - flush=false: 继续队列，追加朗读
      */
-    fun speak(text: String, flush: Boolean = true) {
+    fun speak(text: String, flush: Boolean = true, providerOverride: TTSProviderSetting? = null) {
         if (text.isBlank()) return
-        val provider = currentProvider
+        val provider = providerOverride ?: currentProvider
         if (provider == null) {
             _error.update { "No TTS provider selected" }
             return
@@ -119,11 +120,13 @@ class TtsController(
 
         if (flush) {
             internalReset()
+            sessionProvider = provider
             allChunks.addAll(newChunks)
             queue.addAll(newChunks)
             _currentChunk.update { 0 }
         } else {
             // 追加时，重映射 index 以保持全局顺序
+            sessionProvider = sessionProvider ?: provider
             val startIndex = (allChunks.lastOrNull()?.index ?: -1) + 1
             val remapped = newChunks.mapIndexed { i, c -> c.copy(index = startIndex + i) }
             allChunks.addAll(remapped)
@@ -154,6 +157,7 @@ class TtsController(
         allChunks.clear()
         cache.values.forEach { it.cancel(CancellationException("Reset")) }
         cache.clear()
+        sessionProvider = null
         lastPrefetchedIndex = -1
         _isSpeaking.update { false }
         _currentChunk.update { 0 }
@@ -204,6 +208,7 @@ class TtsController(
         allChunks.clear()
         cache.values.forEach { it.cancel(CancellationException("Stopped")) }
         cache.clear()
+        sessionProvider = null
         lastPrefetchedIndex = -1
         _isSpeaking.update { false }
         _error.update { null }
@@ -221,7 +226,7 @@ class TtsController(
 
     // region 内部：播放调度
     private fun startWorker() {
-        val provider = currentProvider
+        val provider = sessionProvider ?: currentProvider
         if (provider == null) {
             _error.update { "No TTS provider selected" }
             return
@@ -285,7 +290,7 @@ class TtsController(
     }
 
     private fun prefetchFrom(startIndex: Int) {
-        val provider = currentProvider ?: return
+        val provider = sessionProvider ?: currentProvider ?: return
         val begin = startIndex.coerceAtLeast(lastPrefetchedIndex + 1)
         val endExclusive = (begin + prefetchCount).coerceAtMost(allChunks.size)
         if (begin >= endExclusive) return

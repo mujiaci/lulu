@@ -1,5 +1,9 @@
 package me.rerere.rikkahub.ui.pages.assistant.detail
 
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -30,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.input.KeyboardType
@@ -37,7 +42,10 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.R
+import me.rerere.rikkahub.data.datastore.forAssistant
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.service.ProactiveMessageService
+import me.rerere.rikkahub.data.service.ProactiveMessageWorker
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
 import me.rerere.rikkahub.ui.components.ai.ReasoningButton
 import me.rerere.rikkahub.ui.components.ui.RikkaConfirmDialog
@@ -101,6 +109,7 @@ internal fun AssistantBasicContent(
     onUpdate: (Assistant) -> Unit,
     vm: AssistantDetailVM
 ) {
+    val context = LocalContext.current
     var showClearHistoryDialog by remember { mutableStateOf(false) }
 
     RikkaConfirmDialog(
@@ -458,6 +467,26 @@ internal fun AssistantBasicContent(
             FormItem(
                 modifier = Modifier.padding(8.dp),
                 label = {
+                    Text("MiniMax 音色 Voice ID")
+                },
+                description = {
+                    Text("只在当前 TTS 服务选择 MiniMax 时生效。留空就使用全局 MiniMax 音色。")
+                },
+            ) {
+                OutlinedTextField(
+                    value = assistant.ttsVoiceId,
+                    onValueChange = {
+                        onUpdate(assistant.copy(ttsVoiceId = it.trim()))
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("例如 female-shaonv") },
+                    singleLine = true,
+                )
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = {
                     Text(stringResource(R.string.assistant_page_thinking_budget))
                 },
             ) {
@@ -505,6 +534,138 @@ internal fun AssistantBasicContent(
                     }
                 )
             }
+        }
+
+        Card(
+            colors = CustomColors.cardColorsOnSurfaceContainer
+        ) {
+            val proactiveSetting = assistant.proactiveMessageSetting.forAssistant(assistant.id.toString())
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("主动消息") },
+                description = { Text("每个角色独立设置。开启后，这个角色会按自己的节奏主动来找你。") },
+                tail = {
+                    Switch(
+                        checked = proactiveSetting.enabled,
+                        onCheckedChange = { enabled ->
+                            val next = proactiveSetting.copy(enabled = enabled)
+                            onUpdate(assistant.copy(proactiveMessageSetting = next))
+                            if (enabled) {
+                                ProactiveMessageService.triggerNow(context, next)
+                            } else {
+                                ProactiveMessageService.cancel(context)
+                            }
+                        }
+                    )
+                },
+            )
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("最小间隔（分钟）") },
+                description = { Text("主动消息随机间隔的下限。") },
+            ) {
+                OutlinedTextField(
+                    value = proactiveSetting.minIntervalMinutes.toString(),
+                    onValueChange = { value ->
+                        value.toIntOrNull()
+                            ?.takeIf { it > 0 }
+                            ?.let { minutes ->
+                                onUpdate(
+                                    assistant.copy(
+                                        proactiveMessageSetting = proactiveSetting.copy(
+                                            minIntervalMinutes = minutes,
+                                            maxIntervalMinutes = proactiveSetting.maxIntervalMinutes.coerceAtLeast(minutes),
+                                        )
+                                    )
+                                )
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("最大间隔（分钟）") },
+                description = { Text("主动消息随机间隔的上限，必须大于等于最小间隔。") },
+            ) {
+                OutlinedTextField(
+                    value = proactiveSetting.maxIntervalMinutes.toString(),
+                    onValueChange = { value ->
+                        value.toIntOrNull()
+                            ?.takeIf { it >= proactiveSetting.minIntervalMinutes }
+                            ?.let { minutes ->
+                                onUpdate(
+                                    assistant.copy(
+                                        proactiveMessageSetting = proactiveSetting.copy(maxIntervalMinutes = minutes)
+                                    )
+                                )
+                            }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                )
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                HorizontalDivider()
+                val hasExactAlarm = ProactiveMessageWorker.canScheduleExactAlarms(context)
+                FormItem(
+                    modifier = Modifier.padding(8.dp),
+                    label = { Text("精确闹钟权限") },
+                    description = {
+                        Text(if (hasExactAlarm) "已允许精确调度。" else "未允许时会用备用调度，时间可能不够准。")
+                    },
+                    tail = {
+                        if (!hasExactAlarm) {
+                            TextButton(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(
+                                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                data = Uri.fromParts("package", context.packageName, null)
+                                            }
+                                        )
+                                    }
+                                }
+                            ) {
+                                Text("设置")
+                            }
+                        }
+                    },
+                )
+            }
+            HorizontalDivider()
+            val isIgnoringBattery = ProactiveMessageWorker.isIgnoringBatteryOptimizations(context)
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("电池优化") },
+                description = {
+                    Text(if (isIgnoringBattery) "已忽略电池优化，后台触发更稳定。" else "建议允许忽略电池优化，否则后台主动消息可能被系统限制。")
+                },
+                tail = {
+                    if (!isIgnoringBattery) {
+                        TextButton(
+                            onClick = {
+                                runCatching {
+                                    context.startActivity(
+                                        Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+                                            data = Uri.fromParts("package", context.packageName, null)
+                                        }
+                                    )
+                                }.onFailure {
+                                    context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                                }
+                            }
+                        ) {
+                            Text("授权")
+                        }
+                    }
+                },
+            )
         }
 
         Card(

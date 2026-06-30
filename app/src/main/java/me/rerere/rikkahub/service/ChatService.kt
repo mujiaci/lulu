@@ -92,6 +92,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
+import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
@@ -503,13 +504,15 @@ class ChatService(
         // 用户发送消息时重置主动消息计时器
         try {
             val settings = runBlocking { settingsStore.settingsFlow.first() }
-            val proactiveSetting = settings.proactiveMessageSetting
+            val currentAssistantId = getOrCreateSession(conversationId).state.value.assistantId
+            val proactiveSetting = settings.getProactiveMessageSetting(currentAssistantId)
             if (proactiveSetting.enabled) {
                 me.rerere.rikkahub.data.service.ProactiveMessageService.clearTargetedQueue(context)
                 me.rerere.rikkahub.data.service.ProactiveMessageService.scheduleNext(
                     context = context,
                     settings = settings,
                     minutesSinceLastChat = 0L,
+                    assistantId = currentAssistantId,
                 )
             }
         } catch (e: Exception) {
@@ -997,6 +1000,7 @@ class ChatService(
             }
             scheduleProactiveReminderFromTurn(
                 settings = settings,
+                assistant = assistant,
                 plans = scheduledPlans,
             )
             launchAffectiveMemoryExtraction(
@@ -1032,11 +1036,12 @@ class ChatService(
 
     private fun scheduleProactiveReminderFromTurn(
         settings: Settings,
+        assistant: Assistant,
         plans: List<ProactiveReminderPlan>,
     ) {
         ProactiveMessageService.replaceTargetedQueue(
             context = context,
-            setting = settings.proactiveMessageSetting,
+            setting = settings.getProactiveMessageSetting(assistant.id),
             plans = plans,
         )
     }
@@ -1427,6 +1432,7 @@ class ChatService(
 
     private fun scheduleChatTurnFollowUp(
         settings: Settings,
+        assistant: Assistant,
         latestUserText: String,
         plan: LuluChatTurnPlan,
     ) {
@@ -1442,7 +1448,7 @@ class ChatService(
             ?: "露露在本轮聊天里自主决定稍后再来确认用户状态。"
         ProactiveMessageService.scheduleTargeted(
             context = context,
-            setting = settings.proactiveMessageSetting,
+            setting = settings.getProactiveMessageSetting(assistant.id),
             triggerAtMillis = System.currentTimeMillis() + delayMinutes * 60_000L,
             reason = reason,
             userText = latestUserText.take(160),

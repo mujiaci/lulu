@@ -70,6 +70,7 @@ import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.getAssistantTTSProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.voicecall.VoiceCallLine
@@ -91,6 +92,7 @@ import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.service.VoiceCallForegroundService
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.tts.model.PlaybackStatus
+import me.rerere.tts.provider.TTSProviderSetting
 import org.koin.compose.koinInject
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -123,6 +125,9 @@ fun VoiceCallPage(
     val assistant = remember(settings, assistantId) {
         runCatching { settings.getAssistantById(Uuid.parse(assistantId)) }.getOrNull()
     }
+    val ttsProvider = remember(settings, assistant) {
+        assistant?.let { settings.getAssistantTTSProvider(it.id) }
+    }
     val assistantName = assistant?.name?.ifBlank { "Lulu" } ?: "Lulu"
     val isHistoryOnly = sessionId != null
     var session by remember(sessionId, conversationId, assistantId) { mutableStateOf<VoiceCallSession?>(null) }
@@ -149,7 +154,7 @@ fun VoiceCallPage(
                 scope.launch {
                     assistantTurnInProgress = true
                     try {
-                        speakInSegments(tts, speakableText)
+                        speakInSegments(tts, speakableText, ttsProvider)
                     } finally {
                         assistantTurnInProgress = false
                     }
@@ -303,7 +308,7 @@ fun VoiceCallPage(
                 val segment = segments[index % segments.size]
                 saveAssistantSleepLine(segment)
                 segment.extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
-                    tts.speak(it, flushCalled = true)
+                    tts.speak(it, flushCalled = true, providerOverride = ttsProvider)
                 }
                 waitForTtsPlayback(tts)
                 delay(180)
@@ -423,7 +428,7 @@ fun VoiceCallPage(
                 onStartCall = { startCall() },
                 onReplay = { line ->
                     line.text.extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
-                        scope.launch { speakInSegments(tts, it) }
+                        scope.launch { speakInSegments(tts, it, ttsProvider) }
                     }
                 },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -893,10 +898,14 @@ private suspend fun waitForTtsPlayback(tts: CustomTtsState) {
     }
 }
 
-private suspend fun speakInSegments(tts: CustomTtsState, text: String) {
+private suspend fun speakInSegments(
+    tts: CustomTtsState,
+    text: String,
+    providerOverride: TTSProviderSetting? = null,
+) {
     val segments = text.splitIntoVisualBubbles().filter { it.isNotBlank() }
     segments.forEachIndexed { index, segment ->
-        tts.speak(segment, flushCalled = index == 0)
+        tts.speak(segment, flushCalled = index == 0, providerOverride = providerOverride)
         waitForTtsPlayback(tts)
         delay(120)
     }

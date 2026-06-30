@@ -86,6 +86,7 @@ import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Play
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.getAssistantTTSProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
@@ -435,7 +436,13 @@ fun StudyPomodoroFocusPage(
             vm.completePomodoro(safeMinutes)
             val line = "这一轮完成了。你真的坐住了，奖励我已经替你收好啦。"
             coachReply = line
-            if (voiceEnabled) tts.speak(line, flushCalled = true)
+            if (voiceEnabled) {
+                tts.speak(
+                    text = line,
+                    flushCalled = true,
+                    providerOverride = settings.getAssistantTTSProvider(assistant.id),
+                )
+            }
         }
     }
 
@@ -496,7 +503,13 @@ fun StudyPomodoroFocusPage(
                             }
                             coachReply = line
                             waitingReply = false
-                            if (voiceEnabled) tts.speak(line, flushCalled = true)
+                            if (voiceEnabled) {
+                                tts.speak(
+                                    text = line,
+                                    flushCalled = true,
+                                    providerOverride = settings.getAssistantTTSProvider(assistant.id),
+                                )
+                            }
                         }
                     }
                 },

@@ -242,8 +242,9 @@ fun ChatMessage(
             ) {
                 ChatMessageActionButtons(
                     message = message,
-                    onRegenerate = onRegenerate,
                     node = node,
+                    assistant = assistant,
+                    onRegenerate = onRegenerate,
                     onUpdate = onUpdate,
                     onOpenActionSheet = {
                         showActionsSheet = true

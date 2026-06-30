@@ -257,12 +257,6 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         headlineContent = { Text("系统工具") },
                     )
                     item(
-                        onClick = { navController.navigate(Screen.SettingProactiveMessage) },
-                        leadingContent = { Icon(HugeIcons.WavingHand01, null) },
-                        supportingContent = { Text("AI 在设定间隔内主动发消息，有记忆有上下文") },
-                        headlineContent = { Text("主动消息") },
-                    )
-                    item(
                         onClick = { navController.navigate(Screen.Health) },
                         leadingContent = { Icon(HugeIcons.Pulse01, null) },
                         supportingContent = { Text("Gadgetbridge 健康数据查看") },

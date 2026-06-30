@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.ExistingWorkPolicy
 import kotlinx.coroutines.flow.first
+import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
@@ -68,6 +69,7 @@ class ProactiveMessageWorker(
             context.getSharedPreferences("proactive_message_prefs", Context.MODE_PRIVATE)
                 .edit()
                 .putLong("next_trigger_time", triggerTime)
+                .putString(ProactiveMessageService.EXTRA_ASSISTANT_ID, setting.assistantId)
                 .apply()
 
             Log.d(TAG, "Scheduled WorkManager proactive message in $safeDelayMinutes minutes")
@@ -103,7 +105,7 @@ class ProactiveMessageWorker(
 
         val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
         val settings = settingsStore.settingsFlow.first()
-        val proactiveSetting = settings.proactiveMessageSetting
+        val proactiveSetting = settings.getProactiveMessageSetting()
 
         if (!proactiveSetting.enabled) {
             Log.d(TAG, "Proactive message disabled, skipping")
@@ -121,7 +123,9 @@ class ProactiveMessageWorker(
         try {
             // Delegate to the existing trigger service logic
             // Start the foreground service which handles the actual AI generation
-            val serviceIntent = android.content.Intent(applicationContext, ProactiveMessageTriggerService::class.java)
+            val serviceIntent = android.content.Intent(applicationContext, ProactiveMessageTriggerService::class.java).apply {
+                putExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID, proactiveSetting.assistantId)
+            }
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 applicationContext.startForegroundService(serviceIntent)
