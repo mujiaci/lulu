@@ -7,6 +7,7 @@ data class StarWishState(
     val customOutfitPrompts: Map<String, StarWishOutfitPrompts> = emptyMap(),
     val imageLaunches: List<StarWishImageLaunch> = emptyList(),
     val theaterChapters: Map<String, List<StarWishTheaterChapter>> = emptyMap(),
+    val customTheaters: List<StarWishTheaterSeed> = emptyList(),
 )
 
 @Serializable
@@ -31,6 +32,14 @@ data class StarWishTheaterChapter(
     val title: String,
     val content: String,
     val createdAt: Long,
+)
+
+@Serializable
+data class StarWishTheaterSeed(
+    val id: String,
+    val title: String,
+    val prompt: String,
+    val createdAt: Long = 0L,
 )
 
 data class StarWishGeneratedImage(

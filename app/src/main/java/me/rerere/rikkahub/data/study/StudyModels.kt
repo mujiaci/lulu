@@ -26,6 +26,7 @@ data class StudyState(
     val manualShopRefreshDate: String? = null,
     val recentEvents: List<StudyEvent> = emptyList(),
     val activePlanDate: String? = null,
+    val internalTestGrantVersion: Int = 0,
 )
 
 @Serializable

@@ -73,6 +73,7 @@ import me.rerere.rikkahub.data.starwish.StarWishImageLaunch
 import me.rerere.rikkahub.data.starwish.StarWishOutfitPrompts
 import me.rerere.rikkahub.data.starwish.StarWishRules
 import me.rerere.rikkahub.data.starwish.StarWishScroll
+import me.rerere.rikkahub.data.starwish.StarWishTheaterSeed
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.ImagePreviewDialog
@@ -103,7 +104,8 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     var section by remember { mutableStateOf(StarWishSection.Scrolls) }
     var scrollSubsection by remember { mutableStateOf(ScrollSubsection.Prompts) }
     var selectedScroll by remember { mutableStateOf<StarWishScroll?>(null) }
-    var selectedTheater by remember { mutableStateOf<String?>(null) }
+    var selectedTheater by remember { mutableStateOf<StarWishTheaterSeed?>(null) }
+    var showAddTheater by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -195,17 +197,24 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                     }
                 }
                 StarWishSection.Theaters -> {
-                    items(StarWishRules.theaters) { theater ->
-                        val unlocked = StarWishRules.isTheaterUnlocked(studyState, theater)
-                        val credits = StarWishRules.chapterCredits(studyState, theater)
-                        val chapters = state.theaterChapters[theater].orEmpty().size
+                    item {
+                        TheaterWalletCard(
+                            rareFragments = studyState.inventory.universalRareFragments,
+                            onAdd = { showAddTheater = true },
+                        )
+                    }
+                    items(StarWishRules.allTheaters(state.customTheaters)) { theater ->
+                        val credits = StarWishRules.chapterCredits(studyState)
+                        val chapters = state.theaterChapters[theater.title].orEmpty().size
+                        val canCreate = studyState.inventory.universalRareFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER
+                        val hasChapter = chapters > 0
                         StarWishListRow(
-                            title = theater,
-                            subtitle = if (unlocked) "已点亮 · 章节 $chapters/$credits" else "未解锁 · 收集 5 枚同名剧场碎片",
-                            unlocked = unlocked,
-                            progress = ((studyState.inventory.rareFragments["rare:$theater"] ?: 0).coerceAtMost(5)) / 5f,
+                            title = theater.title,
+                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 10 稀有碎片续写" else "候选剧场 · 花 10 稀有碎片生成第一章",
+                            unlocked = canCreate || hasChapter,
+                            progress = (studyState.inventory.universalRareFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.BookOpen02,
-                            onClick = { if (unlocked) selectedTheater = theater },
+                            onClick = { if (canCreate || hasChapter) selectedTheater = theater },
                         )
                     }
                 }
@@ -239,14 +248,25 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     }
 
     selectedTheater?.let { theater ->
-        val credits = StarWishRules.chapterCredits(studyState, theater)
-        val chapters = state.theaterChapters[theater].orEmpty()
+        val credits = StarWishRules.chapterCredits(studyState)
+        val chapters = state.theaterChapters[theater.title].orEmpty()
         TheaterDetailDialog(
             theater = theater,
             credits = credits,
+            rareFragments = studyState.inventory.universalRareFragments,
             chapters = chapters,
             onDismiss = { selectedTheater = null },
-            onCreateChapter = { vm.createNextChapter(theater) },
+            onCreateChapter = { vm.createNextChapter(theater.title) },
+        )
+    }
+
+    if (showAddTheater) {
+        AddTheaterDialog(
+            onDismiss = { showAddTheater = false },
+            onAdd = { title, prompt ->
+                vm.addCustomTheater(title, prompt)
+                showAddTheater = false
+            },
         )
     }
 }
@@ -315,6 +335,34 @@ private fun StarWishListRow(
                 Text(if (unlocked) "进入" else "锁定", style = MaterialTheme.typography.labelMedium, color = if (unlocked) StarWishColors.inkBlue else MaterialTheme.colorScheme.outline)
             }
             LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+        }
+    }
+}
+
+@Composable
+private fun TheaterWalletCard(
+    rareFragments: Int,
+    onAdd: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.82f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Surface(shape = CircleShape, color = StarWishColors.mistBlue, modifier = Modifier.size(44.dp)) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(HugeIcons.BookOpen02, null, tint = StarWishColors.inkBlue)
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text("稀有碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("10 个稀有碎片可生成或续写 1 章。自定义剧场会先锁定，兑换后点亮。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            TextButton(onClick = onAdd) { Text("添加") }
         }
     }
 }
@@ -497,8 +545,9 @@ private fun ScrollDetailDialog(
 
 @Composable
 private fun TheaterDetailDialog(
-    theater: String,
+    theater: StarWishTheaterSeed,
     credits: Int,
+    rareFragments: Int,
     chapters: List<me.rerere.rikkahub.data.starwish.StarWishTheaterChapter>,
     onDismiss: () -> Unit,
     onCreateChapter: () -> Unit,
@@ -506,19 +555,20 @@ private fun TheaterDetailDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = onCreateChapter, enabled = chapters.size < credits) {
+            Button(onClick = onCreateChapter, enabled = rareFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER) {
                 Icon(HugeIcons.Play, null)
                 Spacer(Modifier.width(8.dp))
                 Text(if (chapters.isEmpty()) "生成第一章" else "续写下一章")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("收起") } },
-        title = { Text(theater) },
+        title = { Text(theater.title) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("章节资格 $credits 次 · 已生成 ${chapters.size} 章", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("稀有碎片 $rareFragments · 可兑换 $credits 章 · 已生成 ${chapters.size} 章", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(theater.prompt, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 5, overflow = TextOverflow.Ellipsis)
                 if (chapters.isEmpty()) {
-                    Text("解锁后可以生成第一章；之后每满 5 枚同名剧场碎片，就获得一次续写资格。")
+                    Text("花 10 个稀有碎片生成第一章；之后每次再花 10 个稀有碎片续写下一章。")
                 }
                 chapters.forEach {
                     Surface(color = StarWishColors.mistBlue.copy(alpha = 0.55f), shape = RoundedCornerShape(12.dp)) {
@@ -528,6 +578,44 @@ private fun TheaterDetailDialog(
                         }
                     }
                 }
+            }
+        },
+    )
+}
+
+@Composable
+private fun AddTheaterDialog(
+    onDismiss: () -> Unit,
+    onAdd: (String, String) -> Unit,
+) {
+    var title by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(onClick = { onAdd(title, prompt) }, enabled = title.isNotBlank() && prompt.isNotBlank()) {
+                Text("添加")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        title = { Text("添加小剧场") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("添加后会出现在小剧场列表里；未花稀有碎片生成章节前，它仍然只是候选。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("标题") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    label = { Text("剧情提示词") },
+                    minLines = 5,
+                    modifier = Modifier.fillMaxWidth(),
+                )
             }
         },
     )

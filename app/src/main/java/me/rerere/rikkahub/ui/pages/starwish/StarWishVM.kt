@@ -17,11 +17,12 @@ import me.rerere.rikkahub.data.starwish.StarWishRules
 import me.rerere.rikkahub.data.starwish.StarWishState
 import me.rerere.rikkahub.data.starwish.StarWishStore
 import me.rerere.rikkahub.data.starwish.StarWishTheaterChapter
+import me.rerere.rikkahub.data.starwish.StarWishTheaterSeed
 import me.rerere.rikkahub.data.study.StudyStore
 
 class StarWishVM(
     private val store: StarWishStore,
-    studyStore: StudyStore,
+    private val studyStore: StudyStore,
     private val genMediaRepository: GenMediaRepository,
     private val filesManager: FilesManager,
 ) : ViewModel() {
@@ -80,6 +81,16 @@ class StarWishVM(
 
     fun createNextChapter(theater: String) {
         viewModelScope.launch {
+            val seed = StarWishRules.allTheaters(state.value.customTheaters).firstOrNull { it.title == theater } ?: return@launch
+            val study = studyState.value
+            if (study.inventory.universalRareFragments < StarWishRules.RARE_FRAGMENTS_PER_CHAPTER) return@launch
+            studyStore.update { current ->
+                current.copy(
+                    inventory = current.inventory.copy(
+                        universalRareFragments = (current.inventory.universalRareFragments - StarWishRules.RARE_FRAGMENTS_PER_CHAPTER).coerceAtLeast(0),
+                    ),
+                )
+            }
             store.update { current ->
                 val chapters = current.theaterChapters[theater].orEmpty()
                 val nextChapter = chapters.size + 1
@@ -88,10 +99,27 @@ class StarWishVM(
                     theater = theater,
                     chapter = nextChapter,
                     title = "第 $nextChapter 章",
-                    content = StarWishRules.defaultTheaterChapter(theater, nextChapter),
+                    content = StarWishRules.defaultTheaterChapter(seed, nextChapter),
                     createdAt = System.currentTimeMillis(),
                 )
                 current.copy(theaterChapters = current.theaterChapters + (theater to (chapters + chapter)))
+            }
+        }
+    }
+
+    fun addCustomTheater(title: String, prompt: String) {
+        val cleanTitle = title.trim()
+        val cleanPrompt = prompt.trim()
+        if (cleanTitle.isBlank() || cleanPrompt.isBlank()) return
+        viewModelScope.launch {
+            val seed = StarWishTheaterSeed(
+                id = "custom-${System.currentTimeMillis()}-${cleanTitle.hashCode()}",
+                title = cleanTitle,
+                prompt = cleanPrompt,
+                createdAt = System.currentTimeMillis(),
+            )
+            store.update { current ->
+                current.copy(customTheaters = current.customTheaters + seed)
             }
         }
     }

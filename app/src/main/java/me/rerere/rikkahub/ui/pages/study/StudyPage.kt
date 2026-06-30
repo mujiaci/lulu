@@ -126,7 +126,7 @@ private enum class StudySection(val label: String) {
 
 private enum class CollectionSection(val label: String) {
     Scrolls("已解锁画卷"),
-    Theaters("已解锁剧场"),
+    Theaters("小剧场"),
 }
 
 @Composable
@@ -230,8 +230,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             inventory = state.inventory,
                             onUseUniversalNormal = vm::applyBestUniversalNormal,
                             onUseUniversalNormalTarget = vm::applyUniversalNormal,
-                            onUseUniversalRare = vm::applyBestUniversalRare,
-                            onUseUniversalRareTarget = vm::applyUniversalRare,
                             onUseUniversalEpic = vm::applyUniversalEpic,
                             onRedeemMcDonalds = vm::redeemMcDonalds,
                             onOpenImageGen = { navController.navigate(Screen.ImageGen()) },
@@ -970,8 +968,6 @@ private fun CollectionCard(
     inventory: StudyInventory,
     onUseUniversalNormal: () -> Unit,
     onUseUniversalNormalTarget: (String) -> Unit,
-    onUseUniversalRare: () -> Unit,
-    onUseUniversalRareTarget: (String) -> Unit,
     onUseUniversalEpic: () -> Unit,
     onRedeemMcDonalds: () -> Unit,
     onOpenImageGen: () -> Unit,
@@ -982,21 +978,16 @@ private fun CollectionCard(
         Text("收藏背包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
             InventoryMetric("普通碎片", inventory.normalFragments.values.sum().toString(), Modifier.weight(1f))
-            InventoryMetric("剧场碎片", inventory.rareFragments.values.sum().toString(), Modifier.weight(1f))
+            InventoryMetric("稀有碎片", inventory.universalRareFragments.toString(), Modifier.weight(1f))
             InventoryMetric("麦当劳", "${inventory.epicFragments}/2", Modifier.weight(1f))
         }
-        Text("通用普通 ${inventory.universalNormalFragments} · 通用稀有 ${inventory.universalRareFragments} · 通用史诗 ${inventory.universalEpicFragments}")
+        Text("通用普通 ${inventory.universalNormalFragments} · 稀有 ${inventory.universalRareFragments} · 通用史诗 ${inventory.universalEpicFragments}")
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             OutlinedButton(
                 onClick = onUseUniversalNormal,
                 enabled = inventory.universalNormalFragments > 0,
                 modifier = Modifier.weight(1f),
             ) { Text("补画卷") }
-            OutlinedButton(
-                onClick = onUseUniversalRare,
-                enabled = inventory.universalRareFragments > 0,
-                modifier = Modifier.weight(1f),
-            ) { Text("补剧场") }
             OutlinedButton(
                 onClick = onUseUniversalEpic,
                 enabled = inventory.universalEpicFragments > 0,
@@ -1018,7 +1009,7 @@ private fun CollectionCard(
             FilterChip(
                 selected = collectionSection == CollectionSection.Theaters,
                 onClick = { collectionSection = CollectionSection.Theaters },
-                label = { Text("已解锁剧场 ${inventory.unlockedTheaters.size}/12", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                label = { Text("小剧场 ${StudyRules.theaterNames.size}", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 modifier = Modifier.weight(1f),
             )
         }
@@ -1028,7 +1019,6 @@ private fun CollectionCard(
             selectedOutfit = selectedOutfit,
             onSelectOutfit = { selectedOutfit = if (selectedOutfit == it) null else it },
             onUseUniversalNormalTarget = onUseUniversalNormalTarget,
-            onUseUniversalRareTarget = onUseUniversalRareTarget,
             onOpenImageGen = onOpenImageGen,
         )
     }
@@ -1054,7 +1044,6 @@ private fun CollectionProgressList(
     selectedOutfit: String?,
     onSelectOutfit: (String) -> Unit,
     onUseUniversalNormalTarget: (String) -> Unit,
-    onUseUniversalRareTarget: (String) -> Unit,
     onOpenImageGen: () -> Unit,
 ) {
     when (section) {
@@ -1097,18 +1086,19 @@ private fun CollectionProgressList(
         }
         CollectionSection.Theaters -> {
             Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            Text("稀有碎片不再区分剧情。去星愿馆选择任意小剧场，花 10 个稀有碎片生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            CollectionProgressRow(
+                title = "当前稀有碎片",
+                detail = "${inventory.universalRareFragments}/10",
+                progress = (inventory.universalRareFragments.coerceAtMost(10)) / 10f,
+                unlocked = inventory.universalRareFragments >= 10,
+            )
             StudyRules.theaterNames.forEach { theater ->
-                val count = (inventory.rareFragments["rare:$theater"] ?: 0).coerceAtMost(5)
                 CollectionProgressRow(
                     title = theater,
-                    detail = if (theater in inventory.unlockedTheaters) "已解锁" else "$count/5 碎片",
-                    progress = count / 5f,
-                    unlocked = theater in inventory.unlockedTheaters,
-                    action = if (count < 5 && inventory.universalRareFragments > 0) {
-                        { TextButton(onClick = { onUseUniversalRareTarget("rare:$theater") }) { Text("用通用") } }
-                    } else {
-                        null
-                    },
+                    detail = "候选剧情",
+                    progress = 0f,
+                    unlocked = inventory.universalRareFragments >= 10,
                 )
             }
         }
@@ -1343,7 +1333,7 @@ private fun StudyGuideCard() {
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
                 "画卷碎片 85%，小剧场 12%，麦当劳碎片 3%。",
                 "每套画卷有 6 个部件，每个部件 4 个同名碎片。",
-                "每部小剧场需要 5 个同名碎片。",
+                "稀有碎片不区分剧情，10 个稀有碎片可在星愿馆兑换或续写 1 章小剧场。",
             ),
         )
         GuideBlock(
@@ -1376,7 +1366,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
                 "收藏已按 10 套画卷、每套 6 部件、每部件 4 碎片展示。",
-                "通用碎片可以自动补最佳目标，也可以在收藏里指定补某个部件或剧场。",
+                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；稀有碎片用于星愿馆章节兑换。",
                 "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
                 "更深的角色主动督学、画卷提示词自动带入、真实麦当劳点餐接口可以作为后续增强。",
@@ -1587,7 +1577,7 @@ private fun drawResultTitle(best: StudyRarity, count: Int): String {
 private fun drawResultSubtitle(best: StudyRarity): String {
     return when (best) {
         StudyRarity.Epic -> "麦当劳碎片到手，离兑换更近一步。"
-        StudyRarity.Rare -> "小剧场碎片亮起来了，剧情正在靠近。"
+        StudyRarity.Rare -> "稀有碎片到手，可以去星愿馆换小剧场章节。"
         StudyRarity.Normal -> "画卷碎片收进背包，离完整造型更近一点。"
     }
 }

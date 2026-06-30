@@ -35,7 +35,7 @@ class StudyStore(
             } ?: StudyState(today = LocalDate.now().toString())
         }
         .catch { emit(StudyState(today = LocalDate.now().toString())) }
-        .map { StudyRules.refreshShopIfNeeded(it.ensureToday(), LocalDate.now(), Random.Default) }
+        .map { StudyRules.grantInternalTestResources(StudyRules.refreshShopIfNeeded(it.ensureToday(), LocalDate.now(), Random.Default)) }
         .stateIn(scope, SharingStarted.Eagerly, StudyState(today = LocalDate.now().toString()))
 
     suspend fun update(transform: (StudyState) -> StudyState) {
@@ -43,7 +43,7 @@ class StudyStore(
             val current = prefs[stateKey]?.let { raw ->
                 runCatching { json.decodeFromString<StudyState>(raw) }.getOrNull()
             } ?: StudyState(today = LocalDate.now().toString())
-            prefs[stateKey] = json.encodeToString(transform(current.ensureToday()))
+            prefs[stateKey] = json.encodeToString(StudyRules.grantInternalTestResources(transform(current.ensureToday())))
         }
     }
 

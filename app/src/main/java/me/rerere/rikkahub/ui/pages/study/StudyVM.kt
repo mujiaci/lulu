@@ -102,12 +102,6 @@ class StudyVM(
         result.state
     }
 
-    fun applyUniversalRare(key: String) = reduce {
-        val result = StudyRules.useUniversalRareFragment(it, key)
-        emitReward(result.reward.title)
-        result.state
-    }
-
     fun applyUniversalEpic() = reduce {
         val result = StudyRules.useUniversalEpicFragment(it)
         emitReward(result.reward.title)
@@ -119,18 +113,6 @@ class StudyVM(
         val result = key?.let { target -> StudyRules.useUniversalNormalFragment(it, target) }
         if (result == null) {
             _effects.tryEmit(StudyEffect.Message("普通套装已经全部补满"))
-            it
-        } else {
-            emitReward(result.reward.title)
-            result.state
-        }
-    }
-
-    fun applyBestUniversalRare() = reduce {
-        val key = StudyRules.bestRareFragmentTarget(it)
-        val result = key?.let { target -> StudyRules.useUniversalRareFragment(it, target) }
-        if (result == null) {
-            _effects.tryEmit(StudyEffect.Message("小剧场已经全部补满"))
             it
         } else {
             emitReward(result.reward.title)
