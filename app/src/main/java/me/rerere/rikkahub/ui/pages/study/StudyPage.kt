@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,29 +13,37 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -47,20 +56,40 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
+import me.rerere.hugeicons.stroke.AiMagic
+import me.rerere.hugeicons.stroke.BookOpen02
+import me.rerere.hugeicons.stroke.Chart
+import me.rerere.hugeicons.stroke.Clapping01
 import me.rerere.hugeicons.stroke.Clock02
-import me.rerere.hugeicons.stroke.Image03
-import me.rerere.hugeicons.stroke.MoreVertical
+import me.rerere.hugeicons.stroke.Delete01
+import me.rerere.hugeicons.stroke.Favourite
+import me.rerere.hugeicons.stroke.InLove
+import me.rerere.hugeicons.stroke.Package
+import me.rerere.hugeicons.stroke.Play
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.study.StudyAchievement
+import me.rerere.rikkahub.data.study.StudyDrawResult
+import me.rerere.rikkahub.data.study.StudyEvent
+import me.rerere.rikkahub.data.study.StudyInventory
+import me.rerere.rikkahub.data.study.StudyRarity
+import me.rerere.rikkahub.data.study.StudyRules
+import me.rerere.rikkahub.data.study.StudyShopItem
+import me.rerere.rikkahub.data.study.StudyState
+import me.rerere.rikkahub.data.study.StudyTask
+import me.rerere.rikkahub.data.study.SuperMomentChoice
+import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalNavController
@@ -68,43 +97,45 @@ import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
-import me.rerere.rikkahub.service.ChatService
+import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlin.uuid.Uuid
 
-private data class StudyTask(
-    val id: Int,
-    val text: String,
-    val scope: StudyScope,
-    val done: Boolean = false,
-)
-
-private enum class StudyScope(val label: String) {
-    Today("今日计划"),
-    Week("本周计划"),
-    Month("本月计划"),
+private enum class StudySection(val label: String) {
+    Today("今日"),
+    Gacha("抽卡"),
+    Collection("收藏"),
+    Achievements("成就"),
+    Shop("商店"),
 }
 
 @Composable
-fun StudyPage() {
+fun StudyPage(vm: StudyVM = koinViewModel()) {
     val navController = LocalNavController.current
-    val tasks = remember {
-        mutableStateListOf(
-            StudyTask(1, "英语：背单词 30 分钟", StudyScope.Today),
-            StudyTask(2, "政治：完成一节强化课", StudyScope.Today),
-            StudyTask(3, "专业课：整理错题和框架", StudyScope.Week),
-            StudyTask(4, "数学/专业课：完成本月阶段复盘", StudyScope.Month),
-        )
-    }
+    val settings = LocalSettings.current
+    val assistant = settings.getCurrentAssistant()
+    val state by vm.state.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    var section by remember { mutableStateOf(StudySection.Today) }
     var newTask by remember { mutableStateOf("") }
-    var kudos by remember { mutableIntStateOf(0) }
-    var selectedScope by remember { mutableStateOf(StudyScope.Today) }
-    val daysLeft = remember {
-        ChronoUnit.DAYS.between(LocalDate.now(), nextPostgraduateExamDate()).coerceAtLeast(0)
-    }
+    var drawDialog by remember { mutableStateOf<List<StudyDrawResult>?>(null) }
+    var boxDialog by remember { mutableStateOf<Int?>(null) }
+    var showSuperDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+    LaunchedEffect(Unit) {
+        vm.effects.collect { effect ->
+            when (effect) {
+                is StudyEffect.Message -> snackbarHostState.showSnackbar(effect.text)
+                is StudyEffect.MysteryBox -> boxDialog = effect.kudos
+                is StudyEffect.DrawResults -> drawDialog = effect.results
+                StudyEffect.SuperMomentReady -> showSuperDialog = true
+            }
+        }
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -116,52 +147,131 @@ fun StudyPage() {
                 colors = CustomColors.topBarColors,
             )
         },
-        containerColor = CustomColors.topBarColors.containerColor,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        containerColor = StudyColors.page,
     ) { padding ->
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = padding + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .background(StudyColors.page),
+            contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
-                    StudyHeader(daysLeft = daysLeft, kudos = kudos, modifier = Modifier.weight(1.35f))
-                    PomodoroEntryCard(
-                        modifier = Modifier.weight(1f),
-                        onClick = { navController.navigate(Screen.StudyPomodoro) },
-                    )
-                }
-            }
-            item { LevelCard(kudos = kudos) }
-            item {
-                StudyPlanCard(
-                    tasks = tasks,
-                    selectedScope = selectedScope,
-                    onSelectedScopeChange = { selectedScope = it },
-                    newTask = newTask,
-                    onNewTaskChange = { newTask = it },
-                    onToggle = { task ->
-                        val index = tasks.indexOfFirst { it.id == task.id }
-                        if (index >= 0) {
-                            val nextDone = !tasks[index].done
-                            tasks[index] = tasks[index].copy(done = nextDone)
-                            kudos = (kudos + if (nextDone) 1 else -1).coerceAtLeast(0)
-                        }
-                    },
-                    onAddTask = {
-                        val text = newTask.trim()
-                        if (text.isNotBlank()) {
-                            tasks += StudyTask(
-                                id = (tasks.maxOfOrNull { it.id } ?: 0) + 1,
-                                text = text,
-                                scope = StudyScope.Today,
-                            )
-                            newTask = ""
-                        }
-                    },
+                StudyHero(
+                    state = state,
+                    assistant = assistant,
+                    onSignIn = vm::signIn,
+                    onPomodoro = { navController.navigate(Screen.StudyPomodoro) },
                 )
             }
+            item {
+                SectionChips(selected = section, onSelected = { section = it })
+            }
+            when (section) {
+                StudySection.Today -> {
+                    item {
+                        TodayProgressCard(
+                            state = state,
+                            onClaimNormal = { vm.claimSuperMoment(SuperMomentChoice.NormalFragments) },
+                            onClaimRare = { vm.claimSuperMoment(SuperMomentChoice.RareFragment) },
+                        )
+                    }
+                    item {
+                        TaskCard(
+                            tasks = state.tasks,
+                            newTask = newTask,
+                            onNewTask = { newTask = it },
+                            onAdd = {
+                                vm.addTask(newTask)
+                                newTask = ""
+                            },
+                            onToggle = vm::toggleTask,
+                            onDelete = vm::deleteTask,
+                        )
+                    }
+                    item { LevelCard(state = state, onClaimLevel = vm::claimLevel) }
+                    item { RecentEventsCard(events = state.recentEvents) }
+                }
+                StudySection.Gacha -> {
+                    item {
+                        GachaCard(
+                            state = state,
+                            onSingle = { vm.draw(1) },
+                            onTen = { vm.draw(10) },
+                        )
+                    }
+                }
+                StudySection.Collection -> {
+                    item { CollectionCard(state.inventory, onRedeemMcDonalds = vm::redeemMcDonalds) }
+                }
+                StudySection.Achievements -> {
+                    item {
+                        AchievementCard(
+                            state = state,
+                            onClaim = vm::claimAchievement,
+                        )
+                    }
+                }
+                StudySection.Shop -> {
+                    item {
+                        ShopCard(
+                            state = state,
+                            onRefresh = vm::refreshShop,
+                            onBuy = vm::buyShopItem,
+                        )
+                    }
+                }
+            }
         }
+    }
+
+    boxDialog?.let { kudos ->
+        AlertDialog(
+            onDismissRequest = { boxDialog = null },
+            confirmButton = { TextButton(onClick = { boxDialog = null }) { Text("收下") } },
+            title = { Text("盲盒打开啦") },
+            text = { Text(mysteryBoxText(kudos)) },
+        )
+    }
+
+    drawDialog?.let { results ->
+        AlertDialog(
+            onDismissRequest = { drawDialog = null },
+            confirmButton = { TextButton(onClick = { drawDialog = null }) { Text("放进背包") } },
+            title = { Text(if (results.size >= 10) "十连结果" else "抽卡结果") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    results.forEach { result ->
+                        Text("${result.rarity.label} · ${result.title}", color = rarityColor(result.rarity))
+                    }
+                }
+            },
+        )
+    }
+
+    if (showSuperDialog) {
+        AlertDialog(
+            onDismissRequest = { showSuperDialog = false },
+            title = { Text("超神时刻") },
+            text = { Text("${assistant.name}看见你今天全清了。选一个奖励，她会把十连券和 200 夸夸值一起递给你。") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showSuperDialog = false
+                        vm.claimSuperMoment(SuperMomentChoice.NormalFragments)
+                    }
+                ) { Text("普通碎片 x5") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showSuperDialog = false
+                        vm.claimSuperMoment(SuperMomentChoice.RareFragment)
+                    }
+                ) { Text("稀有碎片 x1") }
+            },
+        )
     }
 }
 
@@ -170,83 +280,68 @@ fun StudyPomodoroPage() {
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val assistant = settings.getCurrentAssistant()
-    var menuExpanded by remember { mutableStateOf(false) }
-    var imageEnabled by remember { mutableStateOf(true) }
-    var voiceEnabled by remember { mutableStateOf(true) }
-    var selectedMinutes by remember { mutableIntStateOf(25) }
+    var minutes by remember { mutableIntStateOf(25) }
     var customMinutes by remember { mutableStateOf("") }
     var taskText by remember { mutableStateOf("") }
+    var imageEnabled by remember { mutableStateOf(true) }
+    var voiceEnabled by remember { mutableStateOf(true) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
             LargeFlexibleTopAppBar(
-                title = { Text("番茄钟设置") },
+                title = { Text("番茄钟") },
                 navigationIcon = { BackButton() },
-                actions = {
-                    Box {
-                        IconButton(onClick = { menuExpanded = true }) {
-                            Icon(HugeIcons.MoreVertical, contentDescription = "开关")
-                        }
-                        DropdownMenu(
-                            expanded = menuExpanded,
-                            onDismissRequest = { menuExpanded = false },
-                        ) {
-                            DropdownMenuItem(
-                                text = { ToggleRow("AI 生图", imageEnabled) { imageEnabled = it } },
-                                onClick = { imageEnabled = !imageEnabled },
-                            )
-                            DropdownMenuItem(
-                                text = { ToggleRow("语音播报", voiceEnabled) { voiceEnabled = it } },
-                                onClick = { voiceEnabled = !voiceEnabled },
-                            )
-                        }
-                    }
-                },
                 scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
         },
-        containerColor = CustomColors.topBarColors.containerColor,
+        containerColor = StudyColors.page,
     ) { padding ->
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = padding + PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { CoachCard(assistant = assistant, imageEnabled = imageEnabled, kudos = 0) }
+            item {
+                CompanionPrepCard(
+                    assistant = assistant,
+                    imageEnabled = imageEnabled,
+                    voiceEnabled = voiceEnabled,
+                    onImageToggle = { imageEnabled = it },
+                    onVoiceToggle = { voiceEnabled = it },
+                )
+            }
             item {
                 OutlinedTextField(
                     value = taskText,
                     onValueChange = { taskText = it },
-                    label = { Text("这一轮要做什么") },
-                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("这一轮要完成什么") },
                     minLines = 2,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
             item {
-                DurationPicker(
-                    selectedMinutes = selectedMinutes,
+                DurationCard(
+                    selectedMinutes = minutes,
                     customMinutes = customMinutes,
-                    onSelected = {
-                        selectedMinutes = it
+                    onSelect = {
+                        minutes = it
                         customMinutes = ""
                     },
-                    onCustomChange = {
+                    onCustom = {
                         customMinutes = it.filter(Char::isDigit).take(3)
-                        customMinutes.toIntOrNull()?.takeIf { value -> value > 0 }?.let { value ->
-                            selectedMinutes = value
-                        }
+                        customMinutes.toIntOrNull()?.takeIf { value -> value > 0 }?.let { minutes = it }
                     },
                 )
             }
             item {
-                FilledTonalButton(
+                Button(
                     onClick = {
                         navController.navigate(
                             Screen.StudyPomodoroFocus(
-                                minutes = selectedMinutes.coerceAtLeast(1),
+                                minutes = minutes.coerceAtLeast(1),
                                 task = taskText.trim(),
                                 imageEnabled = imageEnabled,
                                 voiceEnabled = voiceEnabled,
@@ -255,8 +350,9 @@ fun StudyPomodoroPage() {
                     },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(HugeIcons.Clock02, contentDescription = null)
-                    Text("开始番茄钟")
+                    Icon(HugeIcons.Play, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("开始陪学")
                 }
             }
         }
@@ -269,21 +365,22 @@ fun StudyPomodoroFocusPage(
     task: String,
     imageEnabled: Boolean,
     voiceEnabled: Boolean,
+    vm: StudyVM = koinViewModel(),
 ) {
     val settings = LocalSettings.current
+    val assistant = settings.getCurrentAssistant()
     val chatService: ChatService = koinInject()
     val conversationRepository = koinInject<ConversationRepository>()
     val tts = LocalTTSState.current
-    val assistant = settings.getCurrentAssistant()
     val scope = rememberCoroutineScope()
-    var studyConversationId by remember { mutableStateOf<Uuid?>(null) }
     val safeMinutes = minutes.coerceAtLeast(1)
     var remainingSeconds by remember(safeMinutes) { mutableIntStateOf(safeMinutes * 60) }
+    var finished by remember { mutableStateOf(false) }
+    var studyConversationId by remember { mutableStateOf<Uuid?>(null) }
     var chatText by remember { mutableStateOf("") }
-    var coachReply by remember { mutableStateOf(buildEncourageLine(task, assistant)) }
     var userLine by remember { mutableStateOf("") }
+    var coachReply by remember { mutableStateOf(buildEncourageLine(task, assistant)) }
     var waitingReply by remember { mutableStateOf(false) }
-    var kudos by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(safeMinutes) {
         val target = conversationRepository.getRecentConversations(assistant.id, limit = 1)
@@ -299,46 +396,36 @@ fun StudyPomodoroFocusPage(
         while (remainingSeconds > 0) {
             delay(1_000)
             remainingSeconds -= 1
-            if (remainingSeconds > 0 && remainingSeconds % (5 * 60) == 0) {
-                val line = buildEncourageLine(task, assistant)
-                coachReply = line
-                if (voiceEnabled) tts.speak(line, flushCalled = true)
-            }
         }
-        kudos += 2
-        val line = "这一轮完成了，夸夸值 +2。你刚才真的有好好留下来。"
-        coachReply = line
-        if (voiceEnabled) tts.speak(line, flushCalled = true)
+        if (!finished) {
+            finished = true
+            vm.completePomodoro(safeMinutes)
+            val line = "这一轮完成了。你真的坐住了，奖励我已经替你收好啦。"
+            coachReply = line
+            if (voiceEnabled) tts.speak(line, flushCalled = true)
+        }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(focusBackgroundBrush(kudos)),
+            .background(focusBrush()),
     ) {
         if (imageEnabled) {
-            CompanionImageBackdrop(
-                modifier = Modifier.fillMaxSize(),
-                assistant = assistant,
-                kudos = kudos,
-            )
+            CompanionBackdrop(assistant = assistant)
         }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(
-                            Color.Black.copy(alpha = 0.18f),
-                            Color.Transparent,
-                            Color.Black.copy(alpha = 0.32f),
-                        )
+                        listOf(Color.Black.copy(alpha = 0.12f), Color.Transparent, Color.Black.copy(alpha = 0.28f))
                     )
                 )
                 .padding(horizontal = 18.dp, vertical = 28.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
+            Spacer(Modifier.height(42.dp))
             Text(
                 text = secondsText(remainingSeconds),
                 style = MaterialTheme.typography.displayLarge,
@@ -348,9 +435,11 @@ fun StudyPomodoroFocusPage(
             Text(
                 text = task.ifBlank { "专注这一轮" },
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.82f),
+                color = Color.White.copy(alpha = 0.86f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
             )
-            Spacer(modifier = Modifier.weight(0.72f))
+            Spacer(Modifier.weight(1f))
             FocusChatPanel(
                 assistant = assistant,
                 userLine = userLine,
@@ -366,14 +455,14 @@ fun StudyPomodoroFocusPage(
                         waitingReply = true
                         scope.launch {
                             val conversationId = studyConversationId
-                            if (conversationId == null) {
-                                waitingReply = false
-                                return@launch
+                            val line = if (conversationId == null) {
+                                buildEncourageLine(task, assistant)
+                            } else {
+                                chatService.sendVoiceCallTurn(
+                                    conversationId = conversationId,
+                                    text = buildStudyChatPrompt(text, task),
+                                ) ?: buildEncourageLine(task, assistant)
                             }
-                            val line = chatService.sendVoiceCallTurn(
-                                conversationId = conversationId,
-                                text = buildStudyChatPrompt(text, task),
-                            ) ?: buildEncourageLine(task, assistant)
                             coachReply = line
                             waitingReply = false
                             if (voiceEnabled) tts.speak(line, flushCalled = true)
@@ -381,234 +470,348 @@ fun StudyPomodoroFocusPage(
                     }
                 },
             )
-            Spacer(modifier = Modifier.height(36.dp))
+            Spacer(Modifier.height(28.dp))
         }
     }
 }
 
 @Composable
-private fun StudyHeader(daysLeft: Long, kudos: Int, modifier: Modifier = Modifier) {
-    Card(
-        modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
-    ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("考研倒计时", style = MaterialTheme.typography.labelLarge)
-            Text("${daysLeft} 天", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.SemiBold)
-            Text("夸夸值 $kudos", style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun PomodoroEntryCard(modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Card(
-        modifier = modifier,
-        onClick = onClick,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Icon(HugeIcons.Clock02, contentDescription = null, modifier = Modifier.size(28.dp))
-            Text("番茄钟", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Text("设置督学和时间", style = MaterialTheme.typography.bodySmall)
-        }
-    }
-}
-
-@Composable
-private fun LevelCard(kudos: Int) {
-    val reward = rewardFor(kudos)
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text("Lv.${reward.level} ${reward.title}", style = MaterialTheme.typography.titleMedium)
-            Text(reward.unlock, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-@Composable
-private fun StudyPlanCard(
-    tasks: List<StudyTask>,
-    selectedScope: StudyScope,
-    onSelectedScopeChange: (StudyScope) -> Unit,
-    newTask: String,
-    onNewTaskChange: (String) -> Unit,
-    onToggle: (StudyTask) -> Unit,
-    onAddTask: () -> Unit,
-) {
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("学习计划", style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                StudyScope.entries.forEach { scope ->
-                    FilterChip(
-                        selected = selectedScope == scope,
-                        onClick = { onSelectedScopeChange(scope) },
-                        label = { Text(scope.label) },
-                    )
-                }
-            }
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    tasks.filter { it.scope == selectedScope }.forEach { task ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Checkbox(checked = task.done, onCheckedChange = { onToggle(task) })
-                            Text(
-                                text = task.text,
-                                modifier = Modifier.weight(1f),
-                                textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                            )
-                        }
-                    }
-                    if (tasks.none { it.scope == selectedScope }) {
-                        Text("这里还没有计划。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            if (selectedScope == StudyScope.Today) {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = newTask,
-                        onValueChange = onNewTaskChange,
-                        modifier = Modifier.weight(1f),
-                        label = { Text("新增今日任务") },
-                        singleLine = true,
-                    )
-                    IconButton(onClick = onAddTask) {
-                        Icon(HugeIcons.Add01, contentDescription = "添加")
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun CoachCard(assistant: Assistant, imageEnabled: Boolean, kudos: Int) {
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                UIAvatar(name = assistant.name, value = assistant.avatar, modifier = Modifier.size(54.dp))
-                Column {
-                    Text("督学角色", style = MaterialTheme.typography.labelMedium)
-                    Text(assistant.name, style = MaterialTheme.typography.titleMedium)
-                }
-            }
-            if (imageEnabled) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.medium)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
-                        .padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(HugeIcons.Image03, contentDescription = null, modifier = Modifier.size(30.dp))
-                    Text(studyImagePromptHint(kudos), style = MaterialTheme.typography.bodyMedium)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun ToggleRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
-    Row(
+private fun StudyHero(state: StudyState, assistant: Assistant, onSignIn: () -> Unit, onPomodoro: () -> Unit) {
+    val daysLeft = remember { ChronoUnit.DAYS.between(LocalDate.now(), nextExamDate()).coerceAtLeast(0) }
+    ElevatedCard(
+        colors = CardDefaults.elevatedCardColors(containerColor = StudyColors.hero),
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(label)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(heroBrush())
+                .padding(18.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    UIAvatar(assistant.name, assistant.avatar, Modifier.size(58.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("${assistant.name}陪你备考", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Text("今天也不是一个人硬撑。把清单交给我，我们一点点赢。", style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    HeroMetric("倒计时", "${daysLeft}天", Modifier.weight(1f))
+                    HeroMetric("夸夸值", state.wallet.kudos.toString(), Modifier.weight(1f))
+                    HeroMetric("Lv", StudyRules.currentLevel(state).level.toString(), Modifier.weight(1f))
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    FilledTonalButton(onClick = onSignIn, modifier = Modifier.weight(1f)) {
+                        Icon(HugeIcons.Clapping01, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("签到")
+                    }
+                    Button(onClick = onPomodoro, modifier = Modifier.weight(1f)) {
+                        Icon(HugeIcons.Clock02, null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("番茄钟")
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
-private fun DurationPicker(
-    selectedMinutes: Int,
-    customMinutes: String,
-    onSelected: (Int) -> Unit,
-    onCustomChange: (String) -> Unit,
+private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(
+        modifier = modifier,
+        color = Color.White.copy(alpha = 0.42f),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun SectionChips(selected: StudySection, onSelected: (StudySection) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        StudySection.entries.forEach { section ->
+            FilterChip(selected = selected == section, onClick = { onSelected(section) }, label = { Text(section.label) })
+        }
+    }
+}
+
+@Composable
+private fun TodayProgressCard(
+    state: StudyState,
+    onClaimNormal: () -> Unit,
+    onClaimRare: () -> Unit,
 ) {
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("时间段", style = MaterialTheme.typography.titleMedium)
+    val total = state.tasks.size
+    val done = state.tasks.count { it.done }
+    val progress = if (total == 0) 0f else done.toFloat() / total
+    StudyCard {
+        Text("今日进度", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+        Text("$done / $total 个待办完成", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (state.superMomentAvailable) {
+            Text("超神时刻已点亮", style = MaterialTheme.typography.titleSmall, color = StudyColors.goldText)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(25, 40, 50, 90).forEach { minutes ->
-                    FilterChip(
-                        selected = selectedMinutes == minutes,
-                        onClick = { onSelected(minutes) },
-                        label = { Text("${minutes}分钟") },
-                    )
+                Button(onClick = onClaimNormal, modifier = Modifier.weight(1f)) { Text("普通 x5") }
+                OutlinedButton(onClick = onClaimRare, modifier = Modifier.weight(1f)) { Text("稀有 x1") }
+            }
+        } else {
+            Text("全清今日待办后，解锁十连券、200夸夸值和自选碎片。")
+        }
+    }
+}
+
+@Composable
+private fun TaskCard(
+    tasks: List<StudyTask>,
+    newTask: String,
+    onNewTask: (String) -> Unit,
+    onAdd: () -> Unit,
+    onToggle: (String, Boolean) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    StudyCard {
+        Text("今日待办", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newTask,
+                onValueChange = onNewTask,
+                label = { Text("新增学习任务") },
+                modifier = Modifier.weight(1f),
+                singleLine = true,
+            )
+            IconButton(onClick = onAdd) { Icon(HugeIcons.Add01, "添加") }
+        }
+        if (tasks.isEmpty()) {
+            Text("先写下今天最重要的 3-5 件事。露露会帮你守住节奏。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        tasks.forEach { task ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Checkbox(checked = task.done, onCheckedChange = { onToggle(task.id, it) })
+                Text(
+                    text = task.title,
+                    modifier = Modifier.weight(1f),
+                    textDecoration = if (task.done) TextDecoration.LineThrough else null,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                IconButton(onClick = { onDelete(task.id) }) {
+                    Icon(HugeIcons.Delete01, "删除")
                 }
             }
-            OutlinedTextField(
-                value = customMinutes,
-                onValueChange = onCustomChange,
-                label = { Text("自定义分钟") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+        }
+    }
+}
+
+@Composable
+private fun LevelCard(state: StudyState, onClaimLevel: (Int) -> Unit) {
+    val level = StudyRules.currentLevel(state)
+    val next = StudyRules.levels.firstOrNull { it.level == level.level + 1 }
+    val claimable = StudyRules.claimableLevels(state)
+    StudyCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(HugeIcons.Chart, null, tint = StudyColors.goldText)
+            Column(Modifier.weight(1f)) {
+                Text("Lv${level.level} ${level.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(next?.let { "距离 Lv${it.level} 还差 ${(it.threshold - state.wallet.totalKudosEarned).coerceAtLeast(0)} 累计夸夸值" } ?: "你已经抵达星穹彼岸")
+            }
+        }
+        claimable.take(3).forEach {
+            AssistChip(onClick = { onClaimLevel(it.level) }, label = { Text("领取 Lv${it.level}：${it.reward.title}") })
+        }
+    }
+}
+
+@Composable
+private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit) {
+    StudyCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(HugeIcons.AiMagic, null, tint = StudyColors.purple)
+            Column {
+                Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("普通套装 85% · 小剧场 12% · 麦当劳 3%")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(onClick = onSingle, modifier = Modifier.weight(1f)) {
+                Text("单抽 100 / 券${state.wallet.singleDrawTickets}")
+            }
+            Button(onClick = onTen, modifier = Modifier.weight(1f)) {
+                Text("十连 800 / 券${state.wallet.tenDrawTickets}")
+            }
+        }
+        Text("麦当劳碎片是角色奖励仪式：集齐后由角色帮你安排，最后仍由你确认和支付。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+@Composable
+private fun CollectionCard(inventory: StudyInventory, onRedeemMcDonalds: () -> Unit) {
+    StudyCard {
+        Text("收藏背包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+            InventoryMetric("普通碎片", inventory.normalFragments.values.sum().toString(), Modifier.weight(1f))
+            InventoryMetric("剧场碎片", inventory.rareFragments.values.sum().toString(), Modifier.weight(1f))
+            InventoryMetric("麦当劳", "${inventory.epicFragments}/2", Modifier.weight(1f))
+        }
+        Text("通用普通 ${inventory.universalNormalFragments} · 通用稀有 ${inventory.universalRareFragments} · 通用史诗 ${inventory.universalEpicFragments}")
+        Button(onClick = onRedeemMcDonalds, enabled = inventory.epicFragments >= 2, modifier = Modifier.fillMaxWidth()) {
+            Icon(HugeIcons.InLove, null)
+            Spacer(Modifier.width(8.dp))
+            Text("兑换一次麦当劳点餐仪式")
+        }
+        Text("已解锁套装 ${inventory.unlockedOutfits.size}/10 · 已解锁剧场 ${inventory.unlockedTheaters.size}/12")
+    }
+}
+
+@Composable
+private fun InventoryMetric(label: String, value: String, modifier: Modifier = Modifier) {
+    Surface(modifier = modifier, color = StudyColors.softBlue, shape = MaterialTheme.shapes.medium) {
+        Column(Modifier.padding(12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(label, style = MaterialTheme.typography.labelMedium)
+            Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
+private fun AchievementCard(state: StudyState, onClaim: (String) -> Unit) {
+    val claimable = StudyRules.claimableAchievements(state).map { it.id }.toSet()
+    StudyCard {
+        Text("成就墙", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        StudyRules.achievements.forEach { achievement ->
+            AchievementRow(
+                achievement = achievement,
+                claimed = achievement.id in state.claimedAchievementIds,
+                claimable = achievement.id in claimable,
+                onClaim = { onClaim(achievement.id) },
             )
         }
     }
 }
 
 @Composable
-private fun CompanionImageBackdrop(modifier: Modifier = Modifier, assistant: Assistant, kudos: Int) {
-    Box(
-        modifier = modifier
-            .background(focusBackgroundBrush(kudos))
-            .padding(24.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+private fun AchievementRow(achievement: StudyAchievement, claimed: Boolean, claimable: Boolean, onClaim: () -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+        Icon(HugeIcons.Favourite, null, tint = if (claimed || claimable) StudyColors.goldText else MaterialTheme.colorScheme.outline)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(achievement.title, fontWeight = FontWeight.SemiBold)
+            Text("${achievement.condition} · ${achievement.reward.title}", style = MaterialTheme.typography.bodySmall)
+        }
+        TextButton(onClick = onClaim, enabled = claimable && !claimed) {
+            Text(if (claimed) "已领" else "领取")
+        }
+    }
+}
+
+@Composable
+private fun ShopCard(state: StudyState, onRefresh: () -> Unit, onBuy: (StudyShopItem) -> Unit) {
+    StudyCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("神秘商店", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+            TextButton(onClick = onRefresh) { Text("刷新") }
+        }
+        state.shopItems.forEach { item ->
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Icon(HugeIcons.Package, null, tint = StudyColors.blue)
+                Spacer(Modifier.width(10.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(item.title, fontWeight = FontWeight.SemiBold)
+                    Text("${item.price} 夸夸值", style = MaterialTheme.typography.bodySmall)
+                }
+                Button(
+                    onClick = { onBuy(item) },
+                    enabled = item.id !in state.purchasedShopItemIds && state.wallet.kudos >= item.price,
+                ) { Text(if (item.id in state.purchasedShopItemIds) "已购" else "购买") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RecentEventsCard(events: List<StudyEvent>) {
+    StudyCard {
+        Text("奖励记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        if (events.isEmpty()) {
+            Text("完成一个待办或番茄钟后，这里会亮起来。")
+        }
+        events.take(6).forEach { event ->
+            Text("· ${event.title} ${event.detail}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+private fun CompanionPrepCard(
+    assistant: Assistant,
+    imageEnabled: Boolean,
+    voiceEnabled: Boolean,
+    onImageToggle: (Boolean) -> Unit,
+    onVoiceToggle: (Boolean) -> Unit,
+) {
+    StudyCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            UIAvatar(assistant.name, assistant.avatar, Modifier.size(54.dp))
+            Column(Modifier.weight(1f)) {
+                Text("${assistant.name}坐到你旁边了", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("学习时她会安静陪着，累了可以说一句。")
+            }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(selected = imageEnabled, onClick = { onImageToggle(!imageEnabled) }, label = { Text("陪伴画面") })
+            FilterChip(selected = voiceEnabled, onClick = { onVoiceToggle(!voiceEnabled) }, label = { Text("语音鼓励") })
+        }
+    }
+}
+
+@Composable
+private fun DurationCard(
+    selectedMinutes: Int,
+    customMinutes: String,
+    onSelect: (Int) -> Unit,
+    onCustom: (String) -> Unit,
+) {
+    StudyCard {
+        Text("选择时长", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf(25, 40, 50, 90).forEach { minutes ->
+                FilterChip(selected = selectedMinutes == minutes, onClick = { onSelect(minutes) }, label = { Text("${minutes}分钟") })
+            }
+        }
+        OutlinedTextField(
+            value = customMinutes,
+            onValueChange = onCustom,
+            label = { Text("自定义分钟") },
+            singleLine = true,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+}
+
+@Composable
+private fun CompanionBackdrop(assistant: Assistant) {
+    Box(modifier = Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
             Box(
                 modifier = Modifier
-                    .size(160.dp)
+                    .size(170.dp)
                     .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.26f)),
+                    .background(Color.White.copy(alpha = 0.30f)),
                 contentAlignment = Alignment.Center,
             ) {
-                UIAvatar(name = assistant.name, value = assistant.avatar, modifier = Modifier.size(128.dp))
+                UIAvatar(assistant.name, assistant.avatar, Modifier.size(132.dp))
             }
             Text(
-                text = studyImagePromptHint(kudos),
-                color = Color.White.copy(alpha = 0.82f),
-                style = MaterialTheme.typography.bodyMedium,
+                text = "她在桌边陪你把这一轮守完。",
+                color = Color.White.copy(alpha = 0.88f),
                 modifier = Modifier
                     .clip(MaterialTheme.shapes.medium)
-                    .background(Color.Black.copy(alpha = 0.16f))
+                    .background(Color.Black.copy(alpha = 0.18f))
                     .padding(12.dp),
             )
         }
@@ -626,84 +829,89 @@ private fun FocusChatPanel(
     onSend: () -> Unit,
 ) {
     Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(
-            modifier = Modifier.padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                UIAvatar(name = assistant.name, value = assistant.avatar, modifier = Modifier.size(32.dp))
+                UIAvatar(assistant.name, assistant.avatar, Modifier.size(32.dp))
                 Text(assistant.name, style = MaterialTheme.typography.titleSmall)
             }
-            if (userLine.isNotBlank()) {
-                Text("我：$userLine", style = MaterialTheme.typography.bodySmall)
-            }
-            Text(if (waitingReply) "正在回复..." else reply, style = MaterialTheme.typography.bodyMedium)
+            if (userLine.isNotBlank()) Text("我：$userLine", style = MaterialTheme.typography.bodySmall)
+            Text(if (waitingReply) "正在轻声回复..." else reply)
             OutlinedTextField(
                 value = chatText,
                 onValueChange = onChatChange,
-                label = { Text("学累了可以吐槽一句") },
-                modifier = Modifier.fillMaxWidth(),
+                label = { Text("学累了可以跟她说一句") },
                 minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
             )
             FilledTonalButton(onClick = onSend, modifier = Modifier.fillMaxWidth()) {
-                Icon(HugeIcons.VolumeHigh, contentDescription = null)
+                Icon(HugeIcons.VolumeHigh, null)
+                Spacer(Modifier.width(8.dp))
                 Text("发送并播报")
             }
         }
     }
 }
 
-private data class StudyReward(
-    val level: Int,
-    val title: String,
-    val unlock: String,
-)
-
-private fun rewardFor(kudos: Int): StudyReward = when {
-    kudos >= 12 -> StudyReward(4, "亲密", "解锁：靠在你肩上、10 条新语音")
-    kudos >= 7 -> StudyReward(3, "信赖", "解锁：趴桌牵你手、7 条新语音")
-    kudos >= 3 -> StudyReward(2, "熟悉", "解锁：托腮看你、5 条新语音")
-    else -> StudyReward(1, "初识", "解锁：基础陪伴姿势、3 条语音")
+@Composable
+private fun StudyCard(content: @Composable ColumnScope.() -> Unit) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.72f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content)
+    }
 }
 
-private fun nextPostgraduateExamDate(today: LocalDate = LocalDate.now()): LocalDate {
-    val currentYearExam = LocalDate.of(today.year, 12, 21)
-    return if (today <= currentYearExam) currentYearExam else LocalDate.of(today.year + 1, 12, 21)
+private object StudyColors {
+    val page = Color(0xFFF7F3EA)
+    val hero = Color(0xFFFFE6B8)
+    val softBlue = Color(0xFFDCECF4)
+    val blue = Color(0xFF3D7EA6)
+    val purple = Color(0xFF8067B7)
+    val goldText = Color(0xFF9B6B10)
+}
+
+private fun heroBrush(): Brush = Brush.linearGradient(
+    listOf(Color(0xFFFFE5AE), Color(0xFFE2F0F7), Color(0xFFFFF8D8))
+)
+
+private fun focusBrush(): Brush = Brush.verticalGradient(
+    listOf(Color(0xFF6F8FA6), Color(0xFFE1CDA6), Color(0xFFB88B8F))
+)
+
+private fun rarityColor(rarity: StudyRarity): Color = when (rarity) {
+    StudyRarity.Normal -> StudyColors.blue
+    StudyRarity.Rare -> StudyColors.purple
+    StudyRarity.Epic -> StudyColors.goldText
+}
+
+private fun mysteryBoxText(kudos: Int): String = when (kudos) {
+    15 -> "柔光蓝，星点飘浮。获得 15 夸夸值。"
+    25 -> "流光蓝，光带环绕。获得 25 夸夸值。"
+    50 -> "幽雅紫，花瓣光晕。获得 50 夸夸值。"
+    100 -> "暖金亮起来了。获得 100 夸夸值。"
+    else -> "璨金粒子炸开。获得 200 夸夸值。"
+}
+
+private fun nextExamDate(today: LocalDate = LocalDate.now()): LocalDate {
+    val current = LocalDate.of(today.year, 12, 21)
+    return if (today <= current) current else LocalDate.of(today.year + 1, 12, 21)
 }
 
 private fun secondsText(seconds: Int): String {
     val safe = seconds.coerceAtLeast(0)
-    val minutes = safe / 60
-    val rest = safe % 60
-    return "%02d:%02d".format(minutes, rest)
+    return "%02d:%02d".format(safe / 60, safe % 60)
 }
 
 private fun buildEncourageLine(taskText: String, assistant: Assistant): String {
     val target = taskText.ifBlank { "这一轮任务" }
-    return "${assistant.name}在看着你：先别急着跑，我们把“$target”再往前推一点点。"
-}
-
-private fun studyImagePromptHint(kudos: Int): String = when {
-    kudos >= 12 -> "角色靠在你肩上陪读，画面亲密、安心、有互动感。"
-    kudos >= 7 -> "角色趴在桌边牵住你的手，鼓励你继续学习。"
-    kudos >= 3 -> "角色托腮看着屏幕，离你更近，陪你复习。"
-    else -> "角色坐在你面前半身陪读，桌面干净，氛围温柔。"
+    return "${assistant.name}小声说：先不想那么远，我们只把“$target”往前推一点点。"
 }
 
 private fun buildStudyChatPrompt(userText: String, taskText: String): String {
     val target = taskText.ifBlank { "这一轮学习任务" }
-    return "我正在番茄钟学习，任务是“$target”。我想对你说：$userText\n请按你的角色人设自然回复，短一点，像真的在陪我学习。请只输出你要说出口的话。"
-}
-
-private fun focusBackgroundBrush(kudos: Int): Brush {
-    val colors = when {
-        kudos >= 12 -> listOf(Color(0xFF80546E), Color(0xFFB77B8F), Color(0xFFF1C7B9))
-        kudos >= 7 -> listOf(Color(0xFF4B6D73), Color(0xFF85A79B), Color(0xFFF1D9B5))
-        kudos >= 3 -> listOf(Color(0xFF545F88), Color(0xFF8E9CCB), Color(0xFFE7C6AA))
-        else -> listOf(Color(0xFF4D6573), Color(0xFF9AB1A9), Color(0xFFE8D7BC))
-    }
-    return Brush.verticalGradient(colors)
+    return "我正在番茄钟学习，任务是“$target”。我想对你说：$userText\n请按你的角色人设自然回复，短一点，像真的在旁边陪我学习。只输出你要说出口的话。"
 }

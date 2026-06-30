@@ -19,6 +19,7 @@ import me.rerere.rikkahub.ui.pages.extensions.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
 import me.rerere.rikkahub.ui.pages.setting.SettingVM
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerVM
+import me.rerere.rikkahub.ui.pages.study.StudyVM
 import me.rerere.rikkahub.ui.pages.translator.TranslatorVM
 import org.koin.core.module.dsl.viewModel
 import org.koin.core.module.dsl.viewModelOf
@@ -73,4 +74,5 @@ val viewModelModule = module {
     viewModelOf(::StatsVM)
     viewModelOf(::HealthVM)
     viewModelOf(::MemoryBankVM)
+    viewModelOf(::StudyVM)
 }
