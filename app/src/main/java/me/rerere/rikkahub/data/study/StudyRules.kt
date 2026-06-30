@@ -53,7 +53,7 @@ object StudyRules {
         StudyLevel(11, 22_000, "星桥", StudyReward(universalRareFragments = 3, title = "通用稀有碎片 x3")),
         StudyLevel(12, 32_000, "远航", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
         StudyLevel(13, 45_000, "回响", StudyReward(universalEpicFragments = 2, title = "通用史诗碎片 x2")),
-        StudyLevel(14, 60_000, "满愿", StudyReward(title = "任意完整套装一套")),
+        StudyLevel(14, 60_000, "满愿", StudyReward(title = "任意完整画卷一套")),
         StudyLevel(15, 80_000, "星穹彼岸", StudyReward(title = "称号「星穹彼岸」+ 永久单抽9折")),
     )
 
@@ -66,11 +66,11 @@ object StudyRules {
         StudyAchievement("perfect_7", "连续全清7天", "连续7天待办全清", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
         StudyAchievement("deep_work_10h", "坐稳书桌", "累计学习时长10小时", StudyReward(kudos = 180, title = "夸夸值 180")),
         StudyAchievement("time_traveler", "时光旅人", "累计学习时长50小时", StudyReward(kudos = 300, title = "夸夸值 300")),
-        StudyAchievement("first_outfit", "第一套装", "解锁第一套普通套装", StudyReward(universalRareFragments = 1, title = "通用稀有碎片 x1")),
-        StudyAchievement("outfit_collector", "套装收藏家", "解锁任意3套普通套装", StudyReward(universalRareFragments = 2, title = "稀有碎片 x2")),
+        StudyAchievement("first_outfit", "第一画卷", "解锁第一套普通画卷", StudyReward(universalRareFragments = 1, title = "通用稀有碎片 x1")),
+        StudyAchievement("outfit_collector", "画卷收藏家", "解锁任意3套普通画卷", StudyReward(universalRareFragments = 2, title = "通用稀有碎片 x2")),
         StudyAchievement("theater_open", "剧场开幕", "解锁第一部小剧场", StudyReward(singleDrawTickets = 3, title = "单抽券 x3")),
         StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 120, title = "夸夸值 120")),
-        StudyAchievement("epic_touch", "金光一闪", "获得第一枚麦当劳碎片", StudyReward(universalEpicFragments = 1, title = "通用史诗碎片 x1")),
+        StudyAchievement("epic_touch", "金光一闪", "获得第一枚麦当劳碎片", StudyReward(singleDrawTickets = 2, kudos = 120, title = "单抽券 x2 + 夸夸值 120")),
         StudyAchievement("mcdonalds_arrival", "麦门降临", "首次兑换麦当劳", StudyReward(kudos = 500, title = "夸夸值 500")),
     )
 

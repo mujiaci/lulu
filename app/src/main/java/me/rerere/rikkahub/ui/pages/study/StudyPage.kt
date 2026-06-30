@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -30,6 +31,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalButton
@@ -58,9 +60,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
@@ -71,6 +75,7 @@ import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.AiMagic
+import me.rerere.hugeicons.stroke.ArrowUp02
 import me.rerere.hugeicons.stroke.BookOpen02
 import me.rerere.hugeicons.stroke.Chart
 import me.rerere.hugeicons.stroke.Clapping01
@@ -80,7 +85,6 @@ import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.InLove
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Play
-import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
@@ -117,6 +121,11 @@ private enum class StudySection(val label: String) {
     Achievements("成就"),
     Shop("商店"),
     Guide("说明"),
+}
+
+private enum class CollectionSection(val label: String) {
+    Scrolls("已解锁画卷"),
+    Theaters("已解锁剧场"),
 }
 
 @Composable
@@ -202,8 +211,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             onClaimRare = { vm.claimSuperMoment(SuperMomentChoice.RareFragment) },
                         )
                     }
-                    item { InactivityStatusCard(state) }
-                    item { DailyIncomeCard() }
                     item { RecentEventsCard(events = state.recentEvents) }
                 }
                 StudySection.Gacha -> {
@@ -303,7 +310,6 @@ fun StudyPomodoroPage() {
     var minutes by remember { mutableIntStateOf(25) }
     var customMinutes by remember { mutableStateOf("") }
     var taskText by remember { mutableStateOf("") }
-    var imageEnabled by remember { mutableStateOf(true) }
     var voiceEnabled by remember { mutableStateOf(true) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -327,9 +333,7 @@ fun StudyPomodoroPage() {
             item {
                 CompanionPrepCard(
                     assistant = assistant,
-                    imageEnabled = imageEnabled,
                     voiceEnabled = voiceEnabled,
-                    onImageToggle = { imageEnabled = it },
                     onVoiceToggle = { voiceEnabled = it },
                 )
             }
@@ -363,7 +367,7 @@ fun StudyPomodoroPage() {
                             Screen.StudyPomodoroFocus(
                                 minutes = minutes.coerceAtLeast(1),
                                 task = taskText.trim(),
-                                imageEnabled = imageEnabled,
+                                imageEnabled = false,
                                 voiceEnabled = voiceEnabled,
                             )
                         )
@@ -431,40 +435,35 @@ fun StudyPomodoroFocusPage(
             .fillMaxSize()
             .background(focusBrush()),
     ) {
-        if (imageEnabled) {
-            CompanionBackdrop(assistant = assistant)
-        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.Black.copy(alpha = 0.12f), Color.Transparent, Color.Black.copy(alpha = 0.28f))
+                        listOf(Color.White.copy(alpha = 0.10f), Color.Transparent, Color.Black.copy(alpha = 0.16f))
                     )
                 )
-                .padding(horizontal = 18.dp, vertical = 28.dp),
+                .padding(horizontal = 22.dp, vertical = 24.dp)
+                .navigationBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(42.dp))
-            Text(
-                text = secondsText(remainingSeconds),
-                style = MaterialTheme.typography.displayLarge,
-                color = Color.White,
-                fontWeight = FontWeight.SemiBold,
+            Spacer(Modifier.weight(0.7f))
+            PomodoroTimerCircle(
+                timeText = secondsText(remainingSeconds),
+                task = task.ifBlank { "专注这一轮" },
+                progress = remainingSeconds.toFloat() / (safeMinutes * 60).coerceAtLeast(1),
             )
+            Spacer(Modifier.height(34.dp))
             Text(
-                text = task.ifBlank { "专注这一轮" },
-                style = MaterialTheme.typography.bodyMedium,
-                color = Color.White.copy(alpha = 0.86f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+                text = if (waitingReply) "正在回复..." else coachReply,
+                style = MaterialTheme.typography.titleMedium,
+                color = Color.White.copy(alpha = 0.92f),
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
             )
             Spacer(Modifier.weight(1f))
             FocusChatPanel(
-                assistant = assistant,
                 userLine = userLine,
-                reply = coachReply,
-                waitingReply = waitingReply,
                 chatText = chatText,
                 onChatChange = { chatText = it },
                 onSend = {
@@ -490,7 +489,6 @@ fun StudyPomodoroFocusPage(
                     }
                 },
             )
-            Spacer(Modifier.height(28.dp))
         }
     }
 }
@@ -578,53 +576,13 @@ private fun TodayProgressCard(
     val progress = if (total == 0) 0f else done.toFloat() / total
     StudyCard {
         Text("今日进度", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-        Text("$done / $total 个待办完成", color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (state.superMomentAvailable) {
-            Text("超神时刻已点亮", style = MaterialTheme.typography.titleSmall, color = StudyColors.goldText)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onClaimNormal, modifier = Modifier.weight(1f)) { Text("普通 x5") }
                 OutlinedButton(onClick = onClaimRare, modifier = Modifier.weight(1f)) { Text("稀有 x1") }
             }
-        } else {
-            Text("全清今日待办后，解锁十连券、200夸夸值和自选碎片。")
         }
-    }
-}
-
-@Composable
-private fun DailyIncomeCard() {
-    StudyCard {
-        Text("全清收益参考", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text("按 4 个待办 + 5 个番茄钟估算：", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        IncomeLine("待办", "4 x 100 = 400")
-        IncomeLine("番茄钟", "5 x 50 = 250")
-        IncomeLine("连续签到第 5 天起", "75")
-        IncomeLine("盲盒期望", "约 106")
-        IncomeLine("超神固定奖励", "200 + 十连券 x1")
-        Text("日合计约 1031 夸夸值，再加 1 张十连券。", fontWeight = FontWeight.SemiBold, color = StudyColors.goldText)
-    }
-}
-
-@Composable
-private fun InactivityStatusCard(state: StudyState) {
-    val text = when {
-        state.inactiveStudyDays <= 0 -> "今天节奏安全。完成任意待办或番茄钟都会继续保持。"
-        state.inactiveStudyDays == 1 -> "已经 1 天没有记录学习行为，明天再断就会开始扣夸夸值。"
-        state.inactiveStudyDays == 2 -> "连续 2 天未学习，今日已进入 -50 规则。完成学习后计数会清零。"
-        else -> "连续 ${state.inactiveStudyDays} 天未学习，当前处于每日 -100 规则。"
-    }
-    StudyCard {
-        Text("学习连续性", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        Text(text, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    }
-}
-
-@Composable
-private fun IncomeLine(label: String, value: String) {
-    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(label, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.SemiBold)
+        LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -932,11 +890,11 @@ private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit
                     Icon(HugeIcons.AiMagic, null, tint = Color.White)
                     Column {
                         Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("普通套装 85% · 小剧场 12% · 麦当劳 3%", color = Color.White.copy(alpha = 0.84f))
+                        Text("画卷碎片 85% · 小剧场 12% · 麦当劳 3%", color = Color.White.copy(alpha = 0.84f))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DrawPoolChip("套装", "85%", StudyColors.blue)
+                    DrawPoolChip("画卷", "85%", StudyColors.blue)
                     DrawPoolChip("剧场", "12%", StudyColors.purple)
                     DrawPoolChip("麦当劳", "3%", StudyColors.goldText)
                 }
@@ -950,7 +908,6 @@ private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit
                 Text("十连 800 / 券${state.wallet.tenDrawTickets}")
             }
         }
-        Text("麦当劳碎片是角色奖励仪式：集齐后由角色帮你安排，最后仍由你确认和支付。", color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -965,6 +922,8 @@ private fun CollectionCard(
     onRedeemMcDonalds: () -> Unit,
     onOpenImageGen: () -> Unit,
 ) {
+    var collectionSection by remember { mutableStateOf(CollectionSection.Scrolls) }
+    var selectedOutfit by remember { mutableStateOf<String?>(null) }
     StudyCard {
         Text("收藏背包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -978,7 +937,7 @@ private fun CollectionCard(
                 onClick = onUseUniversalNormal,
                 enabled = inventory.universalNormalFragments > 0,
                 modifier = Modifier.weight(1f),
-            ) { Text("补套装") }
+            ) { Text("补画卷") }
             OutlinedButton(
                 onClick = onUseUniversalRare,
                 enabled = inventory.universalRareFragments > 0,
@@ -995,9 +954,25 @@ private fun CollectionCard(
             Spacer(Modifier.width(8.dp))
             Text("兑换一次麦当劳点餐仪式")
         }
-        Text("已解锁套装 ${inventory.unlockedOutfits.size}/10 · 已解锁剧场 ${inventory.unlockedTheaters.size}/12")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            FilterChip(
+                selected = collectionSection == CollectionSection.Scrolls,
+                onClick = { collectionSection = CollectionSection.Scrolls },
+                label = { Text("已解锁画卷 ${inventory.unlockedOutfits.size}/10", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                modifier = Modifier.weight(1f),
+            )
+            FilterChip(
+                selected = collectionSection == CollectionSection.Theaters,
+                onClick = { collectionSection = CollectionSection.Theaters },
+                label = { Text("已解锁剧场 ${inventory.unlockedTheaters.size}/12", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                modifier = Modifier.weight(1f),
+            )
+        }
         CollectionProgressList(
             inventory = inventory,
+            section = collectionSection,
+            selectedOutfit = selectedOutfit,
+            onSelectOutfit = { selectedOutfit = if (selectedOutfit == it) null else it },
             onUseUniversalNormalTarget = onUseUniversalNormalTarget,
             onUseUniversalRareTarget = onUseUniversalRareTarget,
             onOpenImageGen = onOpenImageGen,
@@ -1021,44 +996,111 @@ private fun DrawPoolChip(label: String, value: String, color: Color) {
 @Composable
 private fun CollectionProgressList(
     inventory: StudyInventory,
+    section: CollectionSection,
+    selectedOutfit: String?,
+    onSelectOutfit: (String) -> Unit,
     onUseUniversalNormalTarget: (String) -> Unit,
     onUseUniversalRareTarget: (String) -> Unit,
     onOpenImageGen: () -> Unit,
 ) {
-    Text("套装进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-    StudyRules.outfitNames.forEach { outfit ->
-        val fragmentCount = StudyRules.outfitParts.sumOf { part ->
-            (inventory.normalFragments["normal:$outfit:$part"] ?: 0).coerceAtMost(4)
+    when (section) {
+        CollectionSection.Scrolls -> {
+            Text("画卷收集进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            StudyRules.outfitNames.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    row.forEach { outfit ->
+                        val fragmentCount = StudyRules.outfitParts.sumOf { part ->
+                            (inventory.normalFragments["normal:$outfit:$part"] ?: 0).coerceAtMost(4)
+                        }
+                        OutfitSummaryTile(
+                            outfit = outfit,
+                            fragmentCount = fragmentCount,
+                            unlocked = outfit in inventory.unlockedOutfits,
+                            selected = selectedOutfit == outfit,
+                            modifier = Modifier.weight(1f),
+                            onClick = { onSelectOutfit(outfit) },
+                        )
+                    }
+                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                }
+            }
+            selectedOutfit?.let { outfit ->
+                val fragmentCount = StudyRules.outfitParts.sumOf { part ->
+                    (inventory.normalFragments["normal:$outfit:$part"] ?: 0).coerceAtMost(4)
+                }
+                val completedParts = StudyRules.outfitParts.count { part ->
+                    (inventory.normalFragments["normal:$outfit:$part"] ?: 0) >= 4
+                }
+                OutfitProgressCard(
+                    outfit = outfit,
+                    fragmentCount = fragmentCount,
+                    completedParts = completedParts,
+                    inventory = inventory,
+                    onUseUniversalNormalTarget = onUseUniversalNormalTarget,
+                    onOpenImageGen = onOpenImageGen,
+                )
+            }
         }
-        val completedParts = StudyRules.outfitParts.count { part ->
-            (inventory.normalFragments["normal:$outfit:$part"] ?: 0) >= 4
+        CollectionSection.Theaters -> {
+            Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+            StudyRules.theaterNames.forEach { theater ->
+                val count = (inventory.rareFragments["rare:$theater"] ?: 0).coerceAtMost(5)
+                CollectionProgressRow(
+                    title = theater,
+                    detail = if (theater in inventory.unlockedTheaters) "已解锁" else "$count/5 碎片",
+                    progress = count / 5f,
+                    unlocked = theater in inventory.unlockedTheaters,
+                    action = if (count < 5 && inventory.universalRareFragments > 0) {
+                        { TextButton(onClick = { onUseUniversalRareTarget("rare:$theater") }) { Text("用通用") } }
+                    } else {
+                        null
+                    },
+                )
+            }
         }
-        OutfitProgressCard(
-            outfit = outfit,
-            fragmentCount = fragmentCount,
-            completedParts = completedParts,
-            inventory = inventory,
-            onUseUniversalNormalTarget = onUseUniversalNormalTarget,
-            onOpenImageGen = onOpenImageGen,
-        )
     }
+}
 
-    Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-    StudyRules.theaterNames.forEach { theater ->
-        val count = (inventory.rareFragments["rare:$theater"] ?: 0).coerceAtMost(5)
-        CollectionProgressRow(
-            title = theater,
-            detail = if (theater in inventory.unlockedTheaters) "已解锁" else "$count/5 碎片",
-            progress = count / 5f,
-            unlocked = theater in inventory.unlockedTheaters,
-            action = if (count < 5 && inventory.universalRareFragments > 0) {
-                { TextButton(onClick = { onUseUniversalRareTarget("rare:$theater") }) { Text("用通用") } }
-            } else {
-                null
-            },
-        )
+@Composable
+private fun OutfitSummaryTile(
+    outfit: String,
+    fragmentCount: Int,
+    unlocked: Boolean,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    val progress = (fragmentCount / 24f).coerceIn(0f, 1f)
+    Surface(
+        modifier = modifier.clickable(onClick = onClick),
+        color = when {
+            selected -> StudyColors.hero.copy(alpha = 0.88f)
+            unlocked -> StudyColors.softBlue.copy(alpha = 0.88f)
+            else -> Color.White.copy(alpha = 0.58f)
+        },
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.size(42.dp),
+                    strokeWidth = 4.dp,
+                    color = if (unlocked) StudyColors.goldText else StudyColors.blue,
+                    trackColor = Color.White.copy(alpha = 0.62f),
+                )
+                Text("${(progress * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.SemiBold)
+            }
+            Column(Modifier.weight(1f)) {
+                Text(outfit, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(if (unlocked) "已解锁" else "$fragmentCount/24", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
-
 }
 
 @Composable
@@ -1080,7 +1122,7 @@ private fun OutfitProgressCard(
                 Column(Modifier.weight(1f)) {
                     Text(outfit, fontWeight = FontWeight.SemiBold)
                     Text(
-                        if (unlocked) "完整套装已解锁" else "$completedParts/6 部件 · $fragmentCount/24 碎片",
+                        if (unlocked) "完整画卷已解锁" else "$completedParts/6 部件 · $fragmentCount/24 碎片",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1245,8 +1287,8 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值，Lv15 后单抽 ${StudyRules.DISCOUNT_SINGLE_DRAW_COST}。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "普通套装 85%，小剧场 12%，麦当劳碎片 3%。",
-                "每套普通套装有 6 个部件，每个部件 4 个同名碎片。",
+                "画卷碎片 85%，小剧场 12%，麦当劳碎片 3%。",
+                "每套画卷有 6 个部件，每个部件 4 个同名碎片。",
                 "每部小剧场需要 5 个同名碎片。",
             ),
         )
@@ -1270,21 +1312,20 @@ private fun StudyGuideCard() {
         GuideBlock(
             title = "陪伴机制",
             lines = listOf(
-                "学习前可选择陪伴画面和语音鼓励。",
+                "番茄钟开始前可选择语音鼓励。",
                 "番茄钟里可以和角色轻声聊天。",
                 "番茄钟完成后会自动发放夸夸值和盲盒奖励。",
-                "麦当劳兑换是角色奖励仪式：由角色帮你安排，最后仍由你确认和支付。",
             ),
         )
         GuideBlock(
             title = "当前已落地",
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
-                "收藏已按 10 套套装、每套 6 部件、每部件 4 碎片展示。",
+                "收藏已按 10 套画卷、每套 6 部件、每部件 4 碎片展示。",
                 "通用碎片可以自动补最佳目标，也可以在收藏里指定补某个部件或剧场。",
-                "Lv14 会自动补齐一套未完成套装；已解锁套装可以直接跳到生图页。",
+                "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
-                "更深的角色主动督学、套装提示词自动带入、真实麦当劳点餐接口可以作为后续增强。",
+                "更深的角色主动督学、画卷提示词自动带入、真实麦当劳点餐接口可以作为后续增强。",
             ),
         )
     }
@@ -1316,21 +1357,15 @@ private fun RecentEventsCard(events: List<StudyEvent>) {
 @Composable
 private fun CompanionPrepCard(
     assistant: Assistant,
-    imageEnabled: Boolean,
     voiceEnabled: Boolean,
-    onImageToggle: (Boolean) -> Unit,
     onVoiceToggle: (Boolean) -> Unit,
 ) {
     StudyCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            UIAvatar(assistant.name, assistant.avatar, Modifier.size(54.dp))
-            Column(Modifier.weight(1f)) {
-                Text("${assistant.name}坐到你旁边了", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("学习时她会安静陪着，累了可以说一句。")
-            }
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("开始一轮番茄钟", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("${assistant.name}会在倒计时里陪你轻声聊天。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = imageEnabled, onClick = { onImageToggle(!imageEnabled) }, label = { Text("陪伴画面") })
             FilterChip(selected = voiceEnabled, onClick = { onVoiceToggle(!voiceEnabled) }, label = { Text("语音鼓励") })
         }
     }
@@ -1361,25 +1396,41 @@ private fun DurationCard(
 }
 
 @Composable
-private fun CompanionBackdrop(assistant: Assistant) {
-    Box(modifier = Modifier.fillMaxSize().padding(28.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(18.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(170.dp)
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.30f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                UIAvatar(assistant.name, assistant.avatar, Modifier.size(132.dp))
-            }
+private fun PomodoroTimerCircle(
+    timeText: String,
+    task: String,
+    progress: Float,
+) {
+    Box(contentAlignment = Alignment.Center) {
+        Surface(
+            modifier = Modifier
+                .size(250.dp)
+                .shadow(24.dp, CircleShape),
+            shape = CircleShape,
+            color = Color.White.copy(alpha = 0.20f),
+        ) {}
+        CircularProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.size(230.dp),
+            strokeWidth = 9.dp,
+            color = Color.White.copy(alpha = 0.92f),
+            trackColor = Color.White.copy(alpha = 0.18f),
+        )
+        Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
-                text = "她在桌边陪你把这一轮守完。",
-                color = Color.White.copy(alpha = 0.88f),
-                modifier = Modifier
-                    .clip(MaterialTheme.shapes.medium)
-                    .background(Color.Black.copy(alpha = 0.18f))
-                    .padding(12.dp),
+                text = timeText,
+                style = MaterialTheme.typography.displayLarge,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+            )
+            Text(
+                text = task,
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.82f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.padding(horizontal = 36.dp),
             )
         }
     }
@@ -1387,36 +1438,45 @@ private fun CompanionBackdrop(assistant: Assistant) {
 
 @Composable
 private fun FocusChatPanel(
-    assistant: Assistant,
     userLine: String,
-    reply: String,
-    waitingReply: Boolean,
     chatText: String,
     onChatChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)),
+    Column(
         modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                UIAvatar(assistant.name, assistant.avatar, Modifier.size(32.dp))
-                Text(assistant.name, style = MaterialTheme.typography.titleSmall)
-            }
-            if (userLine.isNotBlank()) Text("我：$userLine", style = MaterialTheme.typography.bodySmall)
-            Text(if (waitingReply) "正在轻声回复..." else reply)
-            OutlinedTextField(
-                value = chatText,
-                onValueChange = onChatChange,
-                label = { Text("学累了可以跟她说一句") },
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth(),
+        if (userLine.isNotBlank()) {
+            Text(
+                "我：$userLine",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color.White.copy(alpha = 0.78f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
-            FilledTonalButton(onClick = onSend, modifier = Modifier.fillMaxWidth()) {
-                Icon(HugeIcons.VolumeHigh, null)
-                Spacer(Modifier.width(8.dp))
-                Text("发送并播报")
+        }
+        Surface(
+            color = Color.White.copy(alpha = 0.88f),
+            shape = RoundedCornerShape(24.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Row(
+                modifier = Modifier.padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = chatText,
+                    onValueChange = onChatChange,
+                    placeholder = { Text("跟露露说一句...") },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                    shape = RoundedCornerShape(18.dp),
+                )
+                IconButton(onClick = onSend, enabled = chatText.isNotBlank()) {
+                    Icon(HugeIcons.ArrowUp02, null, tint = StudyColors.blue)
+                }
             }
         }
     }
@@ -1472,9 +1532,9 @@ private fun drawResultTitle(best: StudyRarity, count: Int): String {
 
 private fun drawResultSubtitle(best: StudyRarity): String {
     return when (best) {
-        StudyRarity.Epic -> "麦当劳碎片到手，角色奖励仪式又近一步。"
+        StudyRarity.Epic -> "麦当劳碎片到手，离兑换更近一步。"
         StudyRarity.Rare -> "小剧场碎片亮起来了，剧情正在靠近。"
-        StudyRarity.Normal -> "套装碎片收进背包，离完整造型更近一点。"
+        StudyRarity.Normal -> "画卷碎片收进背包，离完整造型更近一点。"
     }
 }
 
