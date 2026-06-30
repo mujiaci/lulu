@@ -231,10 +231,18 @@ object StudyRules {
     fun claimLevelReward(state: StudyState, level: Int): StudyActionResult {
         val item = levels.firstOrNull { it.level == level } ?: return StudyActionResult(state)
         if (state.wallet.totalKudosEarned < item.threshold || level in state.claimedLevelRewards) return StudyActionResult(state)
+        val refreshed = when (level) {
+            14 -> state.inventory.unlockFirstIncompleteOutfit()
+            else -> state.inventory.addReward(item.reward)
+        }.refreshUnlockStats()
         return StudyActionResult(
             state = state.copy(
                 wallet = state.wallet.add(item.reward),
-                inventory = state.inventory.addReward(item.reward),
+                inventory = refreshed.first,
+                stats = state.stats.copy(
+                    unlockedOutfitSets = refreshed.second.first,
+                    unlockedTheaters = refreshed.second.second,
+                ),
                 claimedLevelRewards = state.claimedLevelRewards + level,
                 recentEvents = state.recentEvents.addEvent(StudyEventType.Level, "等级奖励", "Lv$level ${item.reward.title}"),
             ),
@@ -522,6 +530,17 @@ private fun StudyInventory.addReward(reward: StudyReward): StudyInventory {
         universalRareFragments = universalRareFragments + reward.universalRareFragments,
         universalEpicFragments = universalEpicFragments + reward.universalEpicFragments,
     )
+}
+
+private fun StudyInventory.unlockFirstIncompleteOutfit(): StudyInventory {
+    val target = StudyRules.outfitNames.firstOrNull { outfit ->
+        StudyRules.outfitParts.any { part -> (normalFragments["normal:$outfit:$part"] ?: 0) < 4 }
+    } ?: return this
+    val completedFragments = StudyRules.outfitParts.fold(normalFragments) { current, part ->
+        val key = "normal:$target:$part"
+        if ((current[key] ?: 0) >= 4) current else current + (key to 4)
+    }
+    return copy(normalFragments = completedFragments)
 }
 
 private fun StudyInventory.addDrawResult(result: StudyDrawResult): StudyInventory {

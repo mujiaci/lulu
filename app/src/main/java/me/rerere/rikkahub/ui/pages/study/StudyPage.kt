@@ -130,6 +130,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     var newTask by remember { mutableStateOf("") }
     var drawDialog by remember { mutableStateOf<List<StudyDrawResult>?>(null) }
     var boxDialog by remember { mutableStateOf<Int?>(null) }
+    var showMcDonaldsDialog by remember { mutableStateOf(false) }
     var showSuperDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -141,6 +142,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                 is StudyEffect.Message -> snackbarHostState.showSnackbar(effect.text)
                 is StudyEffect.MysteryBox -> boxDialog = effect.kudos
                 is StudyEffect.DrawResults -> drawDialog = effect.results
+                StudyEffect.McDonaldsRedeemed -> showMcDonaldsDialog = true
                 StudyEffect.SuperMomentReady -> showSuperDialog = true
             }
         }
@@ -218,9 +220,12 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                         CollectionCard(
                             inventory = state.inventory,
                             onUseUniversalNormal = vm::applyBestUniversalNormal,
+                            onUseUniversalNormalTarget = vm::applyUniversalNormal,
                             onUseUniversalRare = vm::applyBestUniversalRare,
+                            onUseUniversalRareTarget = vm::applyUniversalRare,
                             onUseUniversalEpic = vm::applyUniversalEpic,
                             onRedeemMcDonalds = vm::redeemMcDonalds,
+                            onOpenImageGen = { navController.navigate(Screen.ImageGen) },
                         )
                     }
                 }
@@ -249,11 +254,9 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     }
 
     boxDialog?.let { kudos ->
-        AlertDialog(
+        MysteryBoxCelebration(
+            kudos = kudos,
             onDismissRequest = { boxDialog = null },
-            confirmButton = { TextButton(onClick = { boxDialog = null }) { Text("收下") } },
-            title = { Text("盲盒打开啦") },
-            text = { Text(mysteryBoxText(kudos)) },
         )
     }
 
@@ -277,6 +280,10 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                 vm.claimSuperMoment(SuperMomentChoice.RareFragment)
             },
         )
+    }
+
+    if (showMcDonaldsDialog) {
+        McDonaldsCelebration(onDismissRequest = { showMcDonaldsDialog = false })
     }
 
     if (showLevelDialog) {
@@ -825,6 +832,92 @@ private fun DrawResultCelebration(
 }
 
 @Composable
+private fun MysteryBoxCelebration(kudos: Int, onDismissRequest: () -> Unit) {
+    val rarity = when {
+        kudos >= 100 -> StudyRarity.Epic
+        kudos >= 50 -> StudyRarity.Rare
+        else -> StudyRarity.Normal
+    }
+    val transition = rememberInfiniteTransition(label = "mystery-box")
+    val pulse by transition.animateFloat(
+        initialValue = 0.92f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "pulse",
+    )
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = { TextButton(onClick = onDismissRequest) { Text("收下") } },
+        title = { Text("盲盒打开啦") },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(drawBrush(rarity), RoundedCornerShape(18.dp))
+                    .padding(18.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.78f), modifier = Modifier.size((78 * pulse).dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("+$kudos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = rarityColor(rarity))
+                        }
+                    }
+                    Text(mysteryBoxText(kudos), color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        repeat(7) {
+                            Surface(
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.55f),
+                                modifier = Modifier.size(((7 + it % 3 * 4) * pulse).dp),
+                            ) {}
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun McDonaldsCelebration(onDismissRequest: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "mcdonalds")
+    val pulse by transition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(tween(760), RepeatMode.Reverse),
+        label = "pulse",
+    )
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = { Button(onClick = onDismissRequest) { Text("好耶，去确认") } },
+        title = { Text("麦门奖励仪式启动") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(drawBrush(StudyRarity.Epic), RoundedCornerShape(18.dp))
+                    .padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.size((92 * pulse).dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("M", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = StudyColors.goldText)
+                    }
+                }
+                Text("角色帮你安排一顿小奖励啦。", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text(
+                    "这里先扣除 2 个麦当劳碎片；真实点餐仍需要你自己确认、自己支付。",
+                    color = Color.White.copy(alpha = 0.9f),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+        },
+    )
+}
+
+@Composable
 private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit) {
     val singleCost = if (StudyRules.hasSingleDrawDiscount(state)) StudyRules.DISCOUNT_SINGLE_DRAW_COST else StudyRules.SINGLE_DRAW_COST
     StudyCard {
@@ -865,9 +958,12 @@ private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit
 private fun CollectionCard(
     inventory: StudyInventory,
     onUseUniversalNormal: () -> Unit,
+    onUseUniversalNormalTarget: (String) -> Unit,
     onUseUniversalRare: () -> Unit,
+    onUseUniversalRareTarget: (String) -> Unit,
     onUseUniversalEpic: () -> Unit,
     onRedeemMcDonalds: () -> Unit,
+    onOpenImageGen: () -> Unit,
 ) {
     StudyCard {
         Text("收藏背包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
@@ -900,7 +996,12 @@ private fun CollectionCard(
             Text("兑换一次麦当劳点餐仪式")
         }
         Text("已解锁套装 ${inventory.unlockedOutfits.size}/10 · 已解锁剧场 ${inventory.unlockedTheaters.size}/12")
-        CollectionProgressList(inventory)
+        CollectionProgressList(
+            inventory = inventory,
+            onUseUniversalNormalTarget = onUseUniversalNormalTarget,
+            onUseUniversalRareTarget = onUseUniversalRareTarget,
+            onOpenImageGen = onOpenImageGen,
+        )
     }
 }
 
@@ -918,7 +1019,12 @@ private fun DrawPoolChip(label: String, value: String, color: Color) {
 }
 
 @Composable
-private fun CollectionProgressList(inventory: StudyInventory) {
+private fun CollectionProgressList(
+    inventory: StudyInventory,
+    onUseUniversalNormalTarget: (String) -> Unit,
+    onUseUniversalRareTarget: (String) -> Unit,
+    onOpenImageGen: () -> Unit,
+) {
     Text("套装进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     StudyRules.outfitNames.forEach { outfit ->
         val fragmentCount = StudyRules.outfitParts.sumOf { part ->
@@ -932,6 +1038,8 @@ private fun CollectionProgressList(inventory: StudyInventory) {
             fragmentCount = fragmentCount,
             completedParts = completedParts,
             inventory = inventory,
+            onUseUniversalNormalTarget = onUseUniversalNormalTarget,
+            onOpenImageGen = onOpenImageGen,
         )
     }
 
@@ -943,6 +1051,11 @@ private fun CollectionProgressList(inventory: StudyInventory) {
             detail = if (theater in inventory.unlockedTheaters) "已解锁" else "$count/5 碎片",
             progress = count / 5f,
             unlocked = theater in inventory.unlockedTheaters,
+            action = if (count < 5 && inventory.universalRareFragments > 0) {
+                { TextButton(onClick = { onUseUniversalRareTarget("rare:$theater") }) { Text("用通用") } }
+            } else {
+                null
+            },
         )
     }
 
@@ -954,6 +1067,8 @@ private fun OutfitProgressCard(
     fragmentCount: Int,
     completedParts: Int,
     inventory: StudyInventory,
+    onUseUniversalNormalTarget: (String) -> Unit,
+    onOpenImageGen: () -> Unit,
 ) {
     val unlocked = outfit in inventory.unlockedOutfits
     Surface(
@@ -973,13 +1088,26 @@ private fun OutfitProgressCard(
                 Text(if (unlocked) "已解锁" else "${(fragmentCount * 100 / 24).coerceIn(0, 100)}%", color = StudyColors.goldText)
             }
             LinearProgressIndicator(progress = { fragmentCount / 24f }, modifier = Modifier.fillMaxWidth())
+            if (unlocked) {
+                FilledTonalButton(onClick = onOpenImageGen, modifier = Modifier.fillMaxWidth()) {
+                    Icon(HugeIcons.AiMagic, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("用这套造型去生图")
+                }
+            }
             StudyRules.outfitParts.forEach { part ->
-                val count = (inventory.normalFragments["normal:$outfit:$part"] ?: 0).coerceAtMost(4)
+                val key = "normal:$outfit:$part"
+                val count = (inventory.normalFragments[key] ?: 0).coerceAtMost(4)
                 CollectionProgressRow(
                     title = part,
                     detail = "$count/4",
                     progress = count / 4f,
                     unlocked = count >= 4,
+                    action = if (count < 4 && inventory.universalNormalFragments > 0) {
+                        { TextButton(onClick = { onUseUniversalNormalTarget(key) }) { Text("用通用") } }
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -992,6 +1120,7 @@ private fun CollectionProgressRow(
     detail: String,
     progress: Float,
     unlocked: Boolean,
+    action: (@Composable () -> Unit)? = null,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -1007,6 +1136,10 @@ private fun CollectionProgressRow(
                 style = MaterialTheme.typography.bodySmall,
                 color = if (unlocked) StudyColors.goldText else MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            if (action != null) {
+                Spacer(Modifier.width(6.dp))
+                action()
+            }
         }
         LinearProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
@@ -1148,8 +1281,10 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
                 "收藏已按 10 套套装、每套 6 部件、每部件 4 碎片展示。",
+                "通用碎片可以自动补最佳目标，也可以在收藏里指定补某个部件或剧场。",
+                "Lv14 会自动补齐一套未完成套装；已解锁套装可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
-                "更深的角色主动督学、AI 生图套装生成、真实麦当劳点餐接口可以作为后续增强。",
+                "更深的角色主动督学、套装提示词自动带入、真实麦当劳点餐接口可以作为后续增强。",
             ),
         )
     }

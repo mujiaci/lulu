@@ -86,7 +86,11 @@ class StudyVM(
 
     fun redeemMcDonalds() = reduce {
         val result = StudyRules.redeemMcDonalds(it)
-        emitReward(result.reward.title.ifBlank { "还需要 2 个麦当劳碎片" })
+        if (result.reward.title.isBlank()) {
+            _effects.tryEmit(StudyEffect.Message("还需要 2 个麦当劳碎片"))
+        } else {
+            _effects.tryEmit(StudyEffect.McDonaldsRedeemed)
+        }
         result.state
     }
 
@@ -155,5 +159,6 @@ sealed interface StudyEffect {
     data class Message(val text: String) : StudyEffect
     data class MysteryBox(val kudos: Int) : StudyEffect
     data class DrawResults(val results: List<StudyDrawResult>) : StudyEffect
+    data object McDonaldsRedeemed : StudyEffect
     data object SuperMomentReady : StudyEffect
 }
