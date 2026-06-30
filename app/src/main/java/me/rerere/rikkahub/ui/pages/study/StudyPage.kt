@@ -70,6 +70,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -896,68 +898,180 @@ private fun DrawResultCelebration(
     onDismissRequest: () -> Unit,
 ) {
     val best = results.maxByOrNull { it.rarity.weight }?.rarity ?: StudyRarity.Normal
+    var currentIndex by remember(results) { mutableIntStateOf(-1) }
     val transition = rememberInfiniteTransition(label = "draw-result")
     val pulse by transition.animateFloat(
         initialValue = 0.96f,
         targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(tween(780), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(if (best == StudyRarity.Epic) 520 else 780), RepeatMode.Reverse),
         label = "draw-pulse",
     )
-    AlertDialog(
+    val glow by transition.animateFloat(
+        initialValue = 0.18f,
+        targetValue = if (best == StudyRarity.Epic) 0.72f else 0.38f,
+        animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
+        label = "draw-glow",
+    )
+    LaunchedEffect(results) {
+        currentIndex = -1
+        delay(520)
+        results.forEachIndexed { index, _ ->
+            currentIndex = index
+            delay(if (results[index].rarity == StudyRarity.Epic) 1180 else 720)
+        }
+    }
+    Dialog(
         onDismissRequest = onDismissRequest,
-        confirmButton = { TextButton(onClick = onDismissRequest) { Text("放进背包") } },
-        title = { Text(drawResultTitle(best, results.size)) },
-        text = {
-            Column(
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(drawFullscreenBrush(best))
+                .padding(horizontal = 18.dp, vertical = 28.dp),
+        ) {
+            Box(
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .background(drawBrush(best), RoundedCornerShape(18.dp))
-                    .padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .align(Alignment.Center)
+                    .size((260 * pulse).dp)
+                    .background(Color.White.copy(alpha = glow), CircleShape),
+            )
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(18.dp),
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Spacer(Modifier.height(18.dp))
+                Text(
+                    drawResultTitle(best, results.size),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                    color = Color.White,
+                )
+                Text(
+                    drawResultSubtitle(best),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.82f),
+                    textAlign = TextAlign.Center,
+                )
+                Spacer(Modifier.weight(0.4f))
+                val current = results.getOrNull(currentIndex)
+                if (current == null) {
                     Surface(
-                        shape = CircleShape,
-                        color = Color.White.copy(alpha = 0.82f),
-                        modifier = Modifier.size((58 * pulse).dp),
+                        color = Color.White.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(28.dp),
+                        modifier = Modifier.size(width = 248.dp, height = 330.dp),
                     ) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(
-                                text = if (best == StudyRarity.Epic) "SSR" else best.label,
-                                color = rarityColor(best),
+                                "愿光正在汇聚",
+                                color = Color.White.copy(alpha = 0.86f),
                                 fontWeight = FontWeight.Black,
-                                style = MaterialTheme.typography.titleMedium,
                             )
                         }
                     }
-                    Column(Modifier.weight(1f)) {
-                        Text(drawResultSubtitle(best), color = Color.White.copy(alpha = 0.94f), fontWeight = FontWeight.SemiBold)
-                        Text("共 ${results.size} 抽，下面可以完整滚动查看。", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.bodySmall)
-                    }
+                } else {
+                    DrawRevealCard(result = current, pulse = pulse)
                 }
+                Spacer(Modifier.weight(0.25f))
                 LazyColumn(
-                    modifier = Modifier.height(320.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(156.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(results) { result ->
-                        Surface(
-                            color = Color.White.copy(alpha = if (result.rarity == best) 0.9f else 0.68f),
-                            shape = MaterialTheme.shapes.medium,
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Surface(shape = CircleShape, color = rarityColor(result.rarity), modifier = Modifier.size(12.dp)) {}
-                                Text("${result.rarity.label} · ${result.title}", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
+                    items(results.take((currentIndex + 1).coerceAtLeast(0))) { result ->
+                        DrawRevealedRow(result = result)
                     }
                 }
+                Button(
+                    onClick = onDismissRequest,
+                    enabled = currentIndex >= results.lastIndex,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text(if (currentIndex >= results.lastIndex) "放进背包" else "揭示中...")
+                }
             }
-        },
-    )
+        }
+    }
+}
+
+@Composable
+private fun DrawRevealCard(result: StudyDrawResult, pulse: Float) {
+    Surface(
+        color = Color.White.copy(alpha = 0.9f),
+        shape = RoundedCornerShape(30.dp),
+        tonalElevation = 8.dp,
+        modifier = Modifier.size(width = 248.dp, height = 330.dp),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(drawBrush(result.rarity))
+                .padding(18.dp),
+        ) {
+            Surface(
+                shape = CircleShape,
+                color = Color.White.copy(alpha = 0.82f),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size((62 * pulse).dp),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        if (result.rarity == StudyRarity.Epic) "金" else result.rarity.label.take(1),
+                        color = rarityColor(result.rarity),
+                        fontWeight = FontWeight.Black,
+                    )
+                }
+            }
+            Column(
+                modifier = Modifier.align(Alignment.BottomStart),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    result.rarity.label,
+                    color = Color.White.copy(alpha = 0.8f),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    result.title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Black,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DrawRevealedRow(result: StudyDrawResult) {
+    Surface(
+        color = Color.White.copy(alpha = 0.76f),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Surface(shape = CircleShape, color = rarityColor(result.rarity), modifier = Modifier.size(12.dp)) {}
+            Text(
+                "${result.rarity.label} · ${result.title}",
+                modifier = Modifier.weight(1f),
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+private fun drawFullscreenBrush(rarity: StudyRarity): Brush = when (rarity) {
+    StudyRarity.Normal -> Brush.verticalGradient(listOf(Color(0xFF1F3D54), Color(0xFF5A8296), Color(0xFF0F1B2B)))
+    StudyRarity.Rare -> Brush.verticalGradient(listOf(Color(0xFF251D52), Color(0xFF8067B7), Color(0xFF120D2C)))
+    StudyRarity.Epic -> Brush.verticalGradient(listOf(Color(0xFF3A2400), Color(0xFFFFB938), Color(0xFF6F2E00)))
 }
 
 @Composable

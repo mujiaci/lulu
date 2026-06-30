@@ -751,6 +751,8 @@
   <string name="setting_model_page_memory_extraction_model_desc">用于后台整理聊天并生成结构化记忆；可选便宜快速的模型，留空则使用当前聊天模型</string>
   <string name="setting_model_page_lulu_intent_model">副 API / 活人感规划模型</string>
   <string name="setting_model_page_lulu_intent_model_desc">用于后台判断露露想做什么、要不要主动发消息、优先调用哪些工具；留空则使用本地规则兜底</string>
+  <string name="setting_model_page_theater_model">小剧场模型</string>
+  <string name="setting_model_page_theater_model_desc">用于星愿馆生成小剧场正文；建议选稳定、上下文较长的聊天模型</string>
   <string name="setting_model_page_memory_rerank_model">记忆重排序模型</string>
   <string name="setting_model_page_memory_rerank_model_desc">用于对候选记忆精排，推荐填写 Qwen/Qwen3-Reranker-8B 或兼容 /rerank 的模型</string>
   <string name="setting_model_page_memory_rerank_candidates">重排序候选数量</string>

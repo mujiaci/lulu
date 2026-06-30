@@ -93,6 +93,7 @@ class SettingsStore(
         val TRANSLATE_MODEL = stringPreferencesKey("translate_model")
         val SUGGESTION_MODEL = stringPreferencesKey("suggestion_model")
         val LULU_INTENT_MODEL = stringPreferencesKey("lulu_intent_model")
+        val THEATER_MODEL = stringPreferencesKey("theater_model")
         val IMAGE_GENERATION_MODEL = stringPreferencesKey("image_generation_model")
         val VIDEO_GENERATION_MODEL = stringPreferencesKey("video_generation_model")
         val TITLE_PROMPT = stringPreferencesKey("title_prompt")
@@ -192,6 +193,7 @@ class SettingsStore(
                 suggestionModelId = preferences[SUGGESTION_MODEL]?.let { Uuid.parse(it) }
                     ?: DEFAULT_AUTO_MODEL_ID,
                 luluIntentModelId = preferences[LULU_INTENT_MODEL]?.let { Uuid.parse(it) },
+                theaterModelId = preferences[THEATER_MODEL]?.let { Uuid.parse(it) },
                 imageGenerationModelId = preferences[IMAGE_GENERATION_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 videoGenerationModelId = preferences[VIDEO_GENERATION_MODEL]?.let { Uuid.parse(it) } ?: Uuid.random(),
                 titlePrompt = preferences[TITLE_PROMPT] ?: DEFAULT_TITLE_PROMPT,
@@ -395,6 +397,9 @@ class SettingsStore(
             settings.luluIntentModelId?.let {
                 preferences[LULU_INTENT_MODEL] = it.toString()
             } ?: preferences.remove(LULU_INTENT_MODEL)
+            settings.theaterModelId?.let {
+                preferences[THEATER_MODEL] = it.toString()
+            } ?: preferences.remove(THEATER_MODEL)
             preferences[IMAGE_GENERATION_MODEL] = settings.imageGenerationModelId.toString()
             preferences[VIDEO_GENERATION_MODEL] = settings.videoGenerationModelId.toString()
             preferences[TITLE_PROMPT] = settings.titlePrompt
@@ -543,6 +548,7 @@ data class Settings(
     val suggestionModelId: Uuid = Uuid.random(),
     val suggestionPrompt: String = DEFAULT_SUGGESTION_PROMPT,
     val luluIntentModelId: Uuid? = null,
+    val theaterModelId: Uuid? = null,
     val ocrModelId: Uuid = Uuid.random(),
     val ocrPrompt: String = DEFAULT_OCR_PROMPT,
     val compressModelId: Uuid = Uuid.random(),

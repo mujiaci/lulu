@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.AILogging
+import me.rerere.rikkahub.data.ai.AILoggingManager
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
@@ -24,9 +26,11 @@ import kotlin.uuid.Uuid
 class DebugVM(
     private val settingsStore: SettingsStore,
     private val conversationRepository: ConversationRepository,
+    aiLoggingManager: AILoggingManager,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
+    val aiLogs: StateFlow<List<AILogging>> = aiLoggingManager.getLogs()
 
     fun updateSettings(settings: Settings) {
         viewModelScope.launch {

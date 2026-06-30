@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.setting
 import androidx.compose.foundation.text.KeyboardOptions
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.hugeicons.HugeIcons
+import me.rerere.hugeicons.stroke.BookOpen02
 import me.rerere.hugeicons.stroke.Database02
 import me.rerere.hugeicons.stroke.Earth
 import me.rerere.hugeicons.stroke.View
@@ -109,6 +110,7 @@ fun SettingModelPage(vm: SettingVM = koinViewModel()) {
                         ModelSettingSection.MEMORY_RERANK -> DefaultMemoryRerankModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.MEMORY_EXTRACTION -> DefaultMemoryExtractionModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.LULU_INTENT -> DefaultLuluIntentModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.THEATER -> DefaultTheaterModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.IMAGE_GENERATION -> DefaultImageGenerationModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.VIDEO_GENERATION -> DefaultVideoGenerationModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.SUGGESTION -> DefaultSuggestionModelSetting(settings = settings, vm = vm)
@@ -129,6 +131,7 @@ internal enum class ModelSettingSection {
     MEMORY_RERANK,
     MEMORY_EXTRACTION,
     LULU_INTENT,
+    THEATER,
     IMAGE_GENERATION,
     VIDEO_GENERATION,
     SUGGESTION,
@@ -144,6 +147,7 @@ internal fun defaultModelSettingSections(): List<ModelSettingSection> = listOf(
     ModelSettingSection.MEMORY_RERANK,
     ModelSettingSection.MEMORY_EXTRACTION,
     ModelSettingSection.LULU_INTENT,
+    ModelSettingSection.THEATER,
     ModelSettingSection.IMAGE_GENERATION,
     ModelSettingSection.VIDEO_GENERATION,
     ModelSettingSection.SUGGESTION,
@@ -442,6 +446,41 @@ private fun DefaultLuluIntentModelSetting(
                     },
                     providers = settings.providers,
                     allowClear = true,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun DefaultTheaterModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    ModelFeatureCard(
+        title = {
+            Text(stringResource(R.string.setting_model_page_theater_model), maxLines = 1)
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_theater_model_desc))
+        },
+        icon = {
+            Icon(HugeIcons.BookOpen02, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = settings.theaterModelId,
+                    type = ModelType.CHAT,
+                    onSelect = { model ->
+                        vm.updateSettings(
+                            settings.copy(
+                                theaterModelId = model.id.takeUnless { model.modelId.isBlank() }
+                            )
+                        )
+                    },
+                    providers = settings.providers,
                     modifier = Modifier.wrapContentWidth()
                 )
             }

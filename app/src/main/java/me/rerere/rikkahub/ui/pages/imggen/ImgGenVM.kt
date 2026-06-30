@@ -67,7 +67,7 @@ class ImgGenVM(
     private val _numberOfImages = MutableStateFlow(1)
     val numberOfImages: StateFlow<Int> = _numberOfImages
 
-    private val _aspectRatio = MutableStateFlow(ImageAspectRatio.SQUARE)
+    private val _aspectRatio = MutableStateFlow(ImageAspectRatio.PORTRAIT)
     val aspectRatio: StateFlow<ImageAspectRatio> = _aspectRatio
 
     private val _isGenerating = MutableStateFlow(false)

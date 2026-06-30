@@ -68,6 +68,7 @@ import me.rerere.hugeicons.stroke.AiImage
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.BookOpen02
 import me.rerere.hugeicons.stroke.CircleLock01
+import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Image03
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.PencilEdit01
@@ -104,6 +105,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val generatedImages by vm.generatedImages.collectAsStateWithLifecycle()
     val studyState by vm.studyState.collectAsStateWithLifecycle()
+    val mcpDiagnostic by vm.mcpDiagnostic.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -210,7 +212,9 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                     }
                     items(StarWishRules.allTheaters(state.customTheaters)) { theater ->
                         val credits = StarWishRules.chapterCredits(studyState)
-                        val chapters = state.theaterChapters[theater.title].orEmpty().size
+                        val chapters = state.theaterChapters[theater.title].orEmpty()
+                            .filterNot { it.isPromptPlaceholder(theater) }
+                            .size
                         val canCreate = studyState.inventory.universalRareFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER
                         val hasChapter = chapters > 0
                         StarWishListRow(
@@ -229,6 +233,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             epicFragments = studyState.inventory.epicFragments,
                             redeemed = studyState.stats.mcdonaldsRedeemed,
                             mcpCode = state.mcdonaldsMcpCode,
+                            mcpDiagnostic = mcpDiagnostic,
                             onSave = vm::saveMcdonaldsMcpCode,
                             onRedeem = vm::redeemMcDonalds,
                         )
@@ -310,6 +315,7 @@ fun StarWishTheaterPage(
                 error = chapterError,
                 modifier = Modifier.padding(padding).padding(horizontal = 16.dp, vertical = 14.dp),
                 onCreateChapter = { influence -> vm.createNextChapter(theater.title, influence) },
+                onDeleteChapter = { chapterId -> vm.deleteChapter(theater.title, chapterId) },
             )
         }
     }
@@ -599,6 +605,7 @@ private fun McDonaldsMcpCard(
     epicFragments: Int,
     redeemed: Int,
     mcpCode: String,
+    mcpDiagnostic: String,
     onSave: (String) -> Unit,
     onRedeem: () -> Unit,
 ) {
@@ -647,7 +654,7 @@ private fun McDonaldsMcpCard(
             }
             Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                 Text(
-                    "这里先保存 MCP 码并兑换点单机会。真实下单还需要配置麦当劳 MCP 服务和点单工具；下单前必须由你确认并自行支付。",
+                    "这里先保存 MCP 码并兑换点单机会。$mcpDiagnostic",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWishColors.inkBlue,
@@ -667,8 +674,10 @@ private fun TheaterDetailContent(
     error: String?,
     modifier: Modifier = Modifier,
     onCreateChapter: (String) -> Unit,
+    onDeleteChapter: (String) -> Unit,
 ) {
-    var influence by remember(theater.title, chapters.size) { mutableStateOf("") }
+    val visibleChapters = remember(theater, chapters) { chapters.filterNot { it.isPromptPlaceholder(theater) } }
+    var influence by remember(theater.title, visibleChapters.size) { mutableStateOf("") }
     var showGuide by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -683,7 +692,7 @@ private fun TheaterDetailContent(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "稀有碎片 $rareFragments · 可兑换 $credits 章 · 已生成 ${chapters.size} 章",
+                        "稀有碎片 $rareFragments · 可兑换 $credits 章 · 已生成 ${visibleChapters.size} 章",
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -705,7 +714,7 @@ private fun TheaterDetailContent(
                     }
                 }
             }
-            if (chapters.isEmpty()) {
+            if (visibleChapters.isEmpty()) {
                 item {
                     Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.78f))) {
                         Text(
@@ -716,10 +725,15 @@ private fun TheaterDetailContent(
                     }
                 }
             }
-            items(chapters) {
+            items(visibleChapters) {
                 Surface(color = Color.White.copy(alpha = 0.86f), shape = RoundedCornerShape(16.dp)) {
                     Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text(it.title, fontWeight = FontWeight.SemiBold)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(it.title, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                            IconButton(onClick = { onDeleteChapter(it.id) }) {
+                                Icon(HugeIcons.Delete01, contentDescription = "删除章节")
+                            }
+                        }
                         if (it.userInfluence.isNotBlank()) {
                             Text("你的影响：${it.userInfluence}", style = MaterialTheme.typography.bodySmall, color = StarWishColors.inkBlue)
                         }
@@ -741,10 +755,10 @@ private fun TheaterDetailContent(
                 }
             }
             DropdownMenu(expanded = showCatalog, onDismissRequest = { showCatalog = false }) {
-                if (chapters.isEmpty()) {
+                if (visibleChapters.isEmpty()) {
                     DropdownMenuItem(text = { Text("暂无章节") }, onClick = { showCatalog = false })
                 } else {
-                    chapters.forEachIndexed { index, chapter ->
+                    visibleChapters.forEachIndexed { index, chapter ->
                         DropdownMenuItem(
                             text = { Text(chapter.title) },
                             onClick = {
@@ -768,7 +782,7 @@ private fun TheaterDetailContent(
                 OutlinedTextField(
                     value = influence,
                     onValueChange = { influence = it },
-                    label = { Text(if (chapters.isEmpty()) "给第一章一点方向（可选）" else "我想影响下一章（可选）") },
+                    label = { Text(if (visibleChapters.isEmpty()) "给第一章一点方向（可选）" else "我想影响下一章（可选）") },
                     placeholder = { Text("例如：让露臣这章彻底低头，顺便狠狠打脸恶人") },
                     minLines = 2,
                     maxLines = 4,
@@ -787,7 +801,7 @@ private fun TheaterDetailContent(
                     Text(
                         when {
                             isGenerating -> "生成中..."
-                            chapters.isEmpty() -> "生成第一章"
+                            visibleChapters.isEmpty() -> "生成第一章"
                             else -> "续写下一章"
                         }
                     )
@@ -795,6 +809,17 @@ private fun TheaterDetailContent(
             }
         }
     }
+}
+
+private fun me.rerere.rikkahub.data.starwish.StarWishTheaterChapter.isPromptPlaceholder(
+    seed: StarWishTheaterSeed,
+): Boolean {
+    val clean = content.trim()
+    return clean == seed.prompt.trim() ||
+        clean.startsWith("总设定：") ||
+        clean.startsWith("你是一个擅长") ||
+        clean.contains("硬性要求：") ||
+        clean.contains("请根据下面设定生成")
 }
 
 @Composable

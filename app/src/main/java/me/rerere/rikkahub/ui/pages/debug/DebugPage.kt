@@ -46,6 +46,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dokar.sonner.ToastType
 import kotlinx.coroutines.launch
 import me.rerere.common.android.Logging
+import me.rerere.ai.core.MessageRole
+import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.ai.AILogging
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.nav.BackButton
@@ -128,12 +131,96 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
                 when (page) {
                     0 -> MainPage(vm)
                     1 -> ColorsPage()
-                    2 -> Box {}
+                    2 -> TokenLoggingPage(vm)
                 }
             }
         }
     }
 }
+
+@Composable
+private fun TokenLoggingPage(vm: DebugVM) {
+    val logs by vm.aiLogs.collectAsStateWithLifecycle()
+    val generations = logs.filterIsInstance<AILogging.Generation>().asReversed()
+    LazyColumn(
+        contentPadding = PaddingValues(10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        if (generations.isEmpty()) {
+            item {
+                Text("还没有 AI 调用日志。发送一次消息后这里会显示 token 来源估算。")
+            }
+        }
+        items(generations) { log ->
+            val breakdown = remember(log) { buildTokenBreakdown(log.messages) }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    "${log.params.model.displayName.ifBlank { log.params.model.modelId }} · ${if (log.stream) "stream" else "normal"}",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Text(
+                    "估算输入 ${breakdown.sumOf { it.estimatedTokens }} tokens · ${breakdown.sumOf { it.chars }} chars",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                breakdown.forEach { item ->
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(item.label, modifier = Modifier.weight(1f))
+                        Text("${item.estimatedTokens} tok / ${item.chars} 字符", fontFamily = JetbrainsMono)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class TokenBreakdownItem(
+    val label: String,
+    val chars: Int,
+    val estimatedTokens: Int,
+)
+
+private fun buildTokenBreakdown(messages: List<UIMessage>): List<TokenBreakdownItem> {
+    val buckets = linkedMapOf(
+        "系统/角色人设" to 0,
+        "记忆/状态/感知" to 0,
+        "工具/MCP说明" to 0,
+        "用户上下文" to 0,
+        "助手上下文" to 0,
+        "其他" to 0,
+    )
+    messages.forEach { message ->
+        val text = message.toText()
+        val key = when {
+            message.role == MessageRole.SYSTEM && (
+                text.contains("<lulu_presence>") ||
+                    text.contains("memory", ignoreCase = true) ||
+                    text.contains("记忆") ||
+                    text.contains("感知")
+                ) -> "记忆/状态/感知"
+            message.role == MessageRole.SYSTEM && (
+                text.contains("tool", ignoreCase = true) ||
+                    text.contains("mcp", ignoreCase = true) ||
+                    text.contains("工具")
+                ) -> "工具/MCP说明"
+            message.role == MessageRole.SYSTEM -> "系统/角色人设"
+            message.role == MessageRole.USER -> "用户上下文"
+            message.role == MessageRole.ASSISTANT -> "助手上下文"
+            else -> "其他"
+        }
+        buckets[key] = buckets.getValue(key) + text.length
+    }
+    return buckets.map { (label, chars) ->
+        TokenBreakdownItem(label = label, chars = chars, estimatedTokens = estimateTokens(chars))
+    }
+}
+
+private fun estimateTokens(chars: Int): Int = ((chars / 1.8f) + 0.5f).toInt()
 
 @Composable
 private fun MainPage(vm: DebugVM) {
