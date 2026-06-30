@@ -504,7 +504,11 @@ class ChatService(
             val settings = runBlocking { settingsStore.settingsFlow.first() }
             val proactiveSetting = settings.proactiveMessageSetting
             if (proactiveSetting.enabled) {
-                me.rerere.rikkahub.data.service.ProactiveMessageService.resetTimer(context, proactiveSetting)
+                me.rerere.rikkahub.data.service.ProactiveMessageService.scheduleNext(
+                    context = context,
+                    settings = settings,
+                    minutesSinceLastChat = 0L,
+                )
             }
         } catch (e: Exception) {
             android.util.Log.w("ChatService", "Failed to reset proactive timer", e)

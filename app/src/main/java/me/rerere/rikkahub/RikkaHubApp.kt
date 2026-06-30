@@ -155,7 +155,7 @@ class RikkaHubApp : Application() {
             runCatching {
                 val settings = get<SettingsStore>().settingsFlowRaw.first()
                 if (settings.proactiveMessageSetting.enabled) {
-                    ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings.proactiveMessageSetting)
+                    ProactiveMessageService.scheduleNext(this@RikkaHubApp, settings)
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
             }.onFailure {

@@ -38,9 +38,22 @@ class ProactiveMessageWorker(
             val minMinutes = setting.minIntervalMinutes.coerceAtLeast(1)
             val maxMinutes = setting.maxIntervalMinutes.coerceAtLeast(minMinutes)
             val delayMinutes = Random.nextInt(minMinutes, maxMinutes + 1)
+            scheduleNext(context, setting, delayMinutes)
+        }
+
+        fun scheduleNext(
+            context: Context,
+            setting: me.rerere.rikkahub.data.datastore.ProactiveMessageSetting,
+            delayMinutes: Int,
+        ) {
+            if (!setting.enabled) {
+                cancel(context)
+                return
+            }
+            val safeDelayMinutes = delayMinutes.coerceAtLeast(1)
 
             val workRequest = OneTimeWorkRequestBuilder<ProactiveMessageWorker>()
-                .setInitialDelay(delayMinutes.toLong(), TimeUnit.MINUTES)
+                .setInitialDelay(safeDelayMinutes.toLong(), TimeUnit.MINUTES)
                 .build()
 
             WorkManager.getInstance(context)
@@ -51,13 +64,13 @@ class ProactiveMessageWorker(
                 )
 
             // Also save trigger time to SharedPreferences for UI display
-            val triggerTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(delayMinutes.toLong())
+            val triggerTime = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(safeDelayMinutes.toLong())
             context.getSharedPreferences("proactive_message_prefs", Context.MODE_PRIVATE)
                 .edit()
                 .putLong("next_trigger_time", triggerTime)
                 .apply()
 
-            Log.d(TAG, "Scheduled WorkManager proactive message in $delayMinutes minutes")
+            Log.d(TAG, "Scheduled WorkManager proactive message in $safeDelayMinutes minutes")
         }
 
         fun cancel(context: Context) {

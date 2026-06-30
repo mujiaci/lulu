@@ -174,6 +174,80 @@ class ProactiveMessageService : KoinComponent {
             ProactiveMessageWorker.scheduleNext(context, setting)
         }
 
+        fun scheduleNext(
+            context: Context,
+            settings: Settings,
+            minutesSinceLastChat: Long? = null,
+        ) {
+            val setting = settings.proactiveMessageSetting
+            if (!setting.enabled) {
+                cancel(context)
+                return
+            }
+            val assistant = settings.assistants.find { it.id.toString() == setting.assistantId }
+                ?: settings.getCurrentAssistant()
+            val nowMillis = java.lang.System.currentTimeMillis()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val lastTriggeredTime = prefs.getLong("last_triggered_time", 0L)
+            val activeTargetedTrigger = prefs.getLong(KEY_TARGETED_TRIGGER_TIME, 0L)
+            val pulseInput = LuluAutonomousPulseInput(
+                setting = setting,
+                state = settings.luluStates.currentProjectedLuluState(assistant.id, nowMillis),
+                minutesSinceLastChat = minutesSinceLastChat
+                    ?: lastTriggeredTime
+                        .takeIf { it > 0L }
+                        ?.let { ((nowMillis - it) / 60_000L).coerceAtLeast(0L) }
+                    ?: Long.MAX_VALUE,
+                pendingThoughtCount = settings.luluThoughts
+                    .thoughtHistory(assistant.id, nowMillis)
+                    .count { !it.expressed },
+                activeTargetedTriggerMillis = activeTargetedTrigger,
+                nowMillis = nowMillis,
+            )
+            val pulsePlan = LuluAutonomousPulsePlanner.planNext(pulseInput)
+            val triggerTime = LuluAutonomousPulsePlanner.triggerTimeMillis(pulseInput, pulsePlan)
+            scheduleAt(context, setting, triggerTime, pulsePlan.reason)
+            ProactiveMessageWorker.scheduleNext(context, setting, pulsePlan.delayMinutes)
+        }
+
+        private fun scheduleAt(
+            context: Context,
+            setting: ProactiveMessageSetting,
+            triggerAtMillis: Long,
+            logReason: String,
+        ) {
+            if (!setting.enabled || triggerAtMillis <= java.lang.System.currentTimeMillis()) return
+
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putLong(KEY_NEXT_TRIGGER_TIME, triggerAtMillis)
+                .putString("next_trigger_reason", logReason)
+                .apply()
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
+                action = ACTION_PROACTIVE_MESSAGE
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                }
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            }
+
+            Log.d(TAG, "Scheduled autonomous proactive pulse reason=$logReason at ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(triggerAtMillis))}")
+        }
+
         fun scheduleTargeted(
             context: Context,
             setting: ProactiveMessageSetting,
@@ -473,7 +547,7 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
                         val settings = settingsStore.settingsFlow.first()
                         val proactiveSetting = settings.proactiveMessageSetting
                         if (proactiveSetting.enabled) {
-                            ProactiveMessageService.scheduleNext(context, proactiveSetting)
+                            ProactiveMessageService.scheduleNext(context, settings)
                         }
                     } catch (e: Exception) {
                         Log.e(ProactiveMessageService.TAG, "Failed to reschedule after boot", e)
@@ -572,7 +646,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val minIntervalMs = proactiveSetting.minIntervalMinutes.coerceAtLeast(1) * 60 * 1000L
                 if (!isTargetedTrigger && System.currentTimeMillis() - lastTriggeredTime < minIntervalMs) {
                     Log.d(TAG, "Duplicate trigger within min interval, skipping")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, settings)
                     stopSelf()
                     return@launch
                 }
@@ -587,7 +661,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 if (model == null) {
                     Log.e(ProactiveMessageService.TAG, "No model found for proactive message")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, settings)
                     stopSelf()
                     return@launch
                 }
@@ -607,6 +681,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         it.takeLast(assistant.contextMessageSize)
                     } else it
                 } ?: emptyList()
+                val minutesSinceLastChat = historyMessages.lastOrNull()
+                    ?.createdAt
+                    ?.toInstant(TimeZone.currentSystemDefault())
+                    ?.toEpochMilliseconds()
+                    ?.let { ((System.currentTimeMillis() - it) / 60_000L).coerceAtLeast(0L) }
 
                 // 构建工具列表（与 ChatService 保持一致）
                 val tools = buildTools(settings, assistant, model)
@@ -623,7 +702,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
                 if (!isTargetedTrigger && autonomousPlan?.intent == LuluIntent.DO_NOT_DISTURB) {
                     Log.d(TAG, "Lulu intent planner chose not to disturb")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        minutesSinceLastChat = minutesSinceLastChat,
+                    )
                     stopSelf()
                     return@launch
                 }
@@ -705,7 +788,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val providerSetting = model.findProvider(settings.providers)
                 if (providerSetting == null) {
                     Log.e(ProactiveMessageService.TAG, "No provider found for proactive message")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        minutesSinceLastChat = minutesSinceLastChat,
+                    )
                     stopSelf()
                     return@launch
                 }
@@ -797,7 +884,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         .remove(ProactiveMessageService.KEY_TARGETED_KIND)
                         .apply()
                 }
-                ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                ProactiveMessageService.scheduleNext(
+                    context = this@ProactiveMessageTriggerService,
+                    settings = settings,
+                    minutesSinceLastChat = 0L,
+                )
             } catch (e: Exception) {
                 Log.e(ProactiveMessageService.TAG, "Failed to trigger proactive message", e)
             } finally {
