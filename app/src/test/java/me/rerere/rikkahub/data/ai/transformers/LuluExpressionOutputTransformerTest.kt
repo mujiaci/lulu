@@ -80,8 +80,8 @@ class LuluExpressionOutputTransformerTest {
         val assistant = assistantMessage(
             """
             <lulu_presence>
-            表情建议：✨
-            贴纸/动作建议：开心贴近
+            动作描写建议：请合成一句自然动作描写
+            可参考素材：表情=✨；动作=开心贴近；姿势=靠近
             </lulu_presence>
             我来啦。
             """.trimIndent()

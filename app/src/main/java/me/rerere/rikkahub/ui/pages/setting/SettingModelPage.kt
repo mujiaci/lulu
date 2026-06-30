@@ -13,6 +13,7 @@ import me.rerere.hugeicons.stroke.Message01
 import me.rerere.hugeicons.stroke.MessageMultiple01
 import me.rerere.hugeicons.stroke.Notebook01
 import me.rerere.hugeicons.stroke.Tools
+import me.rerere.hugeicons.stroke.Video01
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -109,6 +110,7 @@ fun SettingModelPage(vm: SettingVM = koinViewModel()) {
                         ModelSettingSection.MEMORY_EXTRACTION -> DefaultMemoryExtractionModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.LULU_INTENT -> DefaultLuluIntentModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.IMAGE_GENERATION -> DefaultImageGenerationModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.VIDEO_GENERATION -> DefaultVideoGenerationModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.SUGGESTION -> DefaultSuggestionModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.TRANSLATION -> DefaultTranslationModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.OCR -> DefaultOcrModelSetting(settings = settings, vm = vm)
@@ -128,6 +130,7 @@ internal enum class ModelSettingSection {
     MEMORY_EXTRACTION,
     LULU_INTENT,
     IMAGE_GENERATION,
+    VIDEO_GENERATION,
     SUGGESTION,
     TRANSLATION,
     OCR,
@@ -142,6 +145,7 @@ internal fun defaultModelSettingSections(): List<ModelSettingSection> = listOf(
     ModelSettingSection.MEMORY_EXTRACTION,
     ModelSettingSection.LULU_INTENT,
     ModelSettingSection.IMAGE_GENERATION,
+    ModelSettingSection.VIDEO_GENERATION,
     ModelSettingSection.SUGGESTION,
     ModelSettingSection.TRANSLATION,
     ModelSettingSection.OCR,
@@ -469,6 +473,41 @@ private fun DefaultImageGenerationModelSetting(
                         vm.updateSettings(
                             settings.copy(
                                 imageGenerationModelId = model.id
+                            )
+                        )
+                    },
+                    providers = settings.providers,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun DefaultVideoGenerationModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    ModelFeatureCard(
+        title = {
+            Text(stringResource(R.string.setting_model_page_video_generation_model), maxLines = 1)
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_video_generation_model_desc))
+        },
+        icon = {
+            Icon(HugeIcons.Video01, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = settings.videoGenerationModelId,
+                    type = ModelType.VIDEO,
+                    onSelect = { model ->
+                        vm.updateSettings(
+                            settings.copy(
+                                videoGenerationModelId = model.id
                             )
                         )
                     },

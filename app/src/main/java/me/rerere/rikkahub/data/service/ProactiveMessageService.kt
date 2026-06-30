@@ -649,7 +649,7 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 表达要有身体感：可以自然带 0-1 个简短表情、一个轻动作或贴近感，例如轻轻敲门、探头、靠近、压低声音，但不要写成舞台剧。")
         sb.appendLine("- 开心且精力高时可以更亮一点；担心、夜晚、学习、休息场景要低打扰，不要突然热闹。")
         sb.appendLine("- 如果你想换头像/表情状态，只能用自然语气暗示氛围，除非系统提供明确工具，否则不要声称已经实际换了头像。")
-        sb.appendLine("- 如果 set_lulu_expression_state 可用，可以先记录本轮表情、动作或头像氛围，再发自然消息；不要把工具名说给用户。")
+        sb.appendLine("- 如果 set_lulu_expression_state 可用，可以先记录一句完整动作描写，把表情、动作和姿势合在一起；不要把工具名说给用户。")
         return sb.toString()
     }
 

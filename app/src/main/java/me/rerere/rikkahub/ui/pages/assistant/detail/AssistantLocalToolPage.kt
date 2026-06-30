@@ -195,7 +195,7 @@ private fun AssistantLocalToolContent(
             )
             item(
                 headlineContent = { Text("露露表达状态") },
-                supportingContent = { Text("允许AI记录本轮的表情、贴纸动作和临时头像氛围，用于更有活人感的表现") },
+                supportingContent = { Text("允许AI记录本轮完整动作描写，用一句话合并表情、动作和姿势") },
                 trailingContent = {
                     Switch(
                         checked = assistant.localTools.contains(LocalToolOption.LuluExpression),

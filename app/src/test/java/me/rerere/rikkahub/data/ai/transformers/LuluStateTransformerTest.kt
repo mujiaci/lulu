@@ -72,9 +72,8 @@ class LuluStateTransformerTest {
         assertTrue(injected.contains("当前感知：深夜 / 休息中 / 用户信号：睡眠偏少、电量低"))
         assertTrue(injected.contains("[未完成动作] 我想等他先说完"))
         assertTrue(injected.contains("表达建议"))
-        assertTrue(injected.contains("表情建议"))
-        assertTrue(injected.contains("贴纸/动作建议"))
-        assertTrue(injected.contains("头像氛围"))
+        assertTrue(injected.contains("动作描写建议"))
+        assertTrue(injected.contains("可参考素材"))
         assertTrue(injected.contains("set_lulu_expression_state"))
     }
 

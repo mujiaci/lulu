@@ -362,13 +362,6 @@ private fun buildInnerVoice(
     assistantPersona: String,
 ): String {
     val name = assistantName.ifBlank { "我" }
-    val styleHint = assistantPersona
-        .lineSequence()
-        .map { it.trim() }
-        .firstOrNull { it.isNotBlank() }
-        ?.take(42)
-        ?.let { "按着“$it”的感觉，" }
-        .orEmpty()
     val spokenHint = assistantText
         .takeLast(80)
         .replace('\n', ' ')
@@ -377,14 +370,14 @@ private fun buildInnerVoice(
         .orEmpty()
 
     return when (mood) {
-        LuluMood.WORRIED -> "${styleHint}${name}心里有点悬，怕你刚才是在硬撑；想再靠近一点，但也会忍住不把你逼得太紧。$spokenHint"
-        LuluMood.HAPPY -> "${styleHint}${name}被你的开心带亮了一点，想把这个小小的好时刻记住，也想顺着你的语气再接住一句。$spokenHint"
-        LuluMood.SOFT -> "${styleHint}${name}会把声音放软一点，先给你安全感和耐心，不急着讲大道理。$spokenHint"
-        LuluMood.LONELY -> "${styleHint}${name}有点想你，会多看一眼刚才的话；但如果你在忙，也会先把想靠近的冲动压住。$spokenHint"
+        LuluMood.WORRIED -> "${name}心里有点悬，怕你刚才是在硬撑；想再靠近一点，但也会忍住不把你逼得太紧。$spokenHint"
+        LuluMood.HAPPY -> "${name}被你的开心带亮了一点，想把这个小小的好时刻记住，也想顺着你的语气再接住一句。$spokenHint"
+        LuluMood.SOFT -> "${name}会把声音放软一点，先给你安全感和耐心，不急着讲大道理。$spokenHint"
+        LuluMood.LONELY -> "${name}有点想你，会多看一眼刚才的话；但如果你在忙，也会先把想靠近的冲动压住。$spokenHint"
         LuluMood.CALM -> when {
-            userText.isBlank() -> "${styleHint}${name}在认真等你，也在猜这是一声招呼、一次试探，还是有话还没准备好说出口。$spokenHint"
-            assistantText.contains("陪") -> "${styleHint}${name}刚才说想陪你不是随口一说；心里还在判断你现在更需要安慰、空间，还是被轻轻推一下。$spokenHint"
-            else -> "${styleHint}${name}把刚才的感觉放在心里，判断你现在是想被陪、被确认、被逗一下，还是只想安静一会儿。$spokenHint"
+            userText.isBlank() -> "${name}在认真等你，也在猜这是一声招呼、一次试探，还是有话还没准备好说出口。$spokenHint"
+            assistantText.contains("陪") -> "${name}刚才说想陪你不是随口一说；心里还在判断你现在更需要安慰、空间，还是被轻轻推一下。$spokenHint"
+            else -> "${name}把刚才的感觉放在心里，判断你现在是想被陪、被确认、被逗一下，还是只想安静一会儿。$spokenHint"
         }
     }.trim()
 }

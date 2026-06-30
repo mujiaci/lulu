@@ -438,6 +438,25 @@ fun StudyPomodoroFocusPage(
         )
         studyConversationId = target.id
         chatService.initializeConversation(target.id)
+        waitingReply = true
+        scope.launch {
+            val line = runCatching {
+                chatService.sendVoiceCallTurn(
+                    conversationId = target.id,
+                    text = buildPomodoroOpeningPrompt(task),
+                    visibleUserText = "开始番茄钟：${task.ifBlank { "这一轮学习" }}",
+                )
+            }.getOrNull() ?: buildEncourageLine(task, assistant)
+            coachReply = line
+            waitingReply = false
+            if (voiceEnabled) {
+                tts.speak(
+                    text = line,
+                    flushCalled = true,
+                    providerOverride = settings.getAssistantTTSProvider(assistant.id),
+                )
+            }
+        }
         while (remainingSeconds > 0) {
             delay(1_000)
             remainingSeconds -= 1
@@ -1132,7 +1151,7 @@ private fun CollectionCard(
             text = {
                 Text(
                     if ((inventory.normalFragments[key] ?: 0) >= 4) {
-                        "$label 已经满 4 片，继续使用会转换成单抽券 x1。"
+                        "$label 已经满 4 片，继续使用会转换成100夸夸值。"
                     } else {
                         "要给 $label 增加 1 个碎片吗？"
                     }
@@ -1462,7 +1481,7 @@ private fun StudyGuideCard() {
         GuideBlock(
             title = "抽卡与收藏",
             lines = listOf(
-                "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值，Lv15 后单抽 ${StudyRules.DISCOUNT_SINGLE_DRAW_COST}。",
+                "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
                 "画卷碎片 85%，小剧场 12%，麦当劳碎片 3%。",
                 "每套画卷有 6 个部件，每个部件 4 个同名碎片。",
@@ -1755,4 +1774,9 @@ private fun buildEncourageLine(taskText: String, assistant: Assistant): String {
 private fun buildStudyChatPrompt(userText: String, taskText: String): String {
     val target = taskText.ifBlank { "这一轮学习任务" }
     return "我正在番茄钟学习，任务是“$target”。我想对你说：$userText\n请按你的角色人设自然回复，短一点，像真的在旁边陪我学习。只输出你要说出口的话。"
+}
+
+private fun buildPomodoroOpeningPrompt(taskText: String): String {
+    val target = taskText.ifBlank { "这一轮学习任务" }
+    return "用户刚打开番茄钟专注页，准备开始“$target”。请按你的角色人设给一句非常短的鼓励，像坐在旁边陪她开始学习。不要解释任务，不要输出提示词。"
 }

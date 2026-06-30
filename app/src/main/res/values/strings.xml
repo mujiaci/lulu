@@ -758,6 +758,8 @@
   <string name="setting_model_page_memory_engine_diagnostics">记忆引擎诊断</string>
   <string name="setting_model_page_image_generation_model">生图模型</string>
   <string name="setting_model_page_image_generation_model_desc">用于图片生成页面和支持生图能力的模型调用</string>
+  <string name="setting_model_page_video_generation_model">视频生成模型</string>
+  <string name="setting_model_page_video_generation_model_desc">用于后续视频生成入口的默认模型</string>
   <string name="setting_model_page_ocr_model">OCR 模型</string>
   <string name="setting_model_page_ocr_model_desc">用于图片文字识别的模型</string>
   <string name="setting_model_page_ocr_prompt_vars">变量：图片数据：{images}</string>
@@ -894,6 +896,7 @@
   <string name="setting_provider_page_filter_placeholder">Enter model name to filter</string>
   <string name="setting_provider_page_image">Image</string>
   <string name="setting_provider_page_image_model">图片</string>
+  <string name="setting_provider_page_video_model">视频</string>
   <string name="setting_provider_page_rerank_model">重排序</string>
   <string name="setting_provider_page_image_qr_decode_failed">Failed to parse QR code from image: %s</string>
   <string name="setting_provider_page_import_dialog_message">Please select import method:</string>

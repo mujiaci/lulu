@@ -24,7 +24,7 @@ internal fun humanLikeToolGuidance(toolName: String): String {
     val name = toolName.removePrefix("mcp__").lowercase()
     return when {
         name == "set_lulu_expression_state" ->
-            "需要让本轮回复更有表情、贴纸动作或临时头像氛围时可以自然记录表达状态；不要告诉用户工具名，也不要声称永久改了头像。"
+            "需要让本轮回复更有身体感时，可以记录一句完整自然的动作描写，把表情、动作和姿势合在一起；不要告诉用户工具名，也不要声称永久改了头像。"
 
         name in setOf("get_location", "explore_nearby") || name.contains("location") || name.contains("nearby") ->
             "位置/周边会影响关心方式时可自然使用；把结果当感知，不要说调用工具。"

@@ -45,6 +45,8 @@ internal fun sanitizeLuluVisibleExpression(text: String): String {
         .trim()
     val internalPrefixes = listOf(
         "表达建议：",
+        "动作描写建议：",
+        "可参考素材：",
         "表情建议：",
         "贴纸/动作建议：",
         "身体表现：",

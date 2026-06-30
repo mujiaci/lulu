@@ -6,8 +6,9 @@ import kotlin.random.Random
 
 object StudyRules {
     const val SINGLE_DRAW_COST = 100
-    const val DISCOUNT_SINGLE_DRAW_COST = 90
+    const val DISCOUNT_SINGLE_DRAW_COST = 100
     const val TEN_DRAW_COST = 800
+    private const val OVERFLOW_NORMAL_FRAGMENT_KUDOS = 100
     private const val INTERNAL_TEST_GRANT_VERSION = 1
 
     val outfitNames = listOf(
@@ -59,7 +60,7 @@ object StudyRules {
         StudyLevel(12, 32_000, "远航", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
         StudyLevel(13, 45_000, "回响", StudyReward(universalEpicFragments = 2, title = "通用史诗碎片 x2")),
         StudyLevel(14, 60_000, "满愿", StudyReward(title = "任意完整画卷一套")),
-        StudyLevel(15, 80_000, "星穹彼岸", StudyReward(title = "称号「星穹彼岸」+ 永久单抽9折")),
+        StudyLevel(15, 80_000, "星穹彼岸", StudyReward(title = "称号「星穹彼岸」")),
     )
 
     val achievements = listOf(
@@ -247,12 +248,12 @@ object StudyRules {
             else -> return StudyDrawActionResult(state, emptyList())
         }
         var inventory = state.inventory
-        var overflowSingleTickets = 0
+        var overflowKudos = 0
         val results = buildList {
             repeat(drawCount) {
                 val result = drawOne(random)
                 if (result.rarity == StudyRarity.Normal && (inventory.normalFragments[result.fragmentKey] ?: 0) >= 4) {
-                    overflowSingleTickets += 1
+                    overflowKudos += OVERFLOW_NORMAL_FRAGMENT_KUDOS
                 } else {
                     inventory = inventory.addDrawResult(result)
                 }
@@ -262,7 +263,7 @@ object StudyRules {
         val refreshed = inventory.refreshUnlockStats()
         return StudyDrawActionResult(
             state = state.copy(
-                wallet = nextWallet.copy(singleDrawTickets = nextWallet.singleDrawTickets + overflowSingleTickets),
+                wallet = nextWallet.copy(kudos = nextWallet.kudos + overflowKudos),
                 inventory = refreshed.first,
                 stats = state.stats.copy(
                     unlockedOutfitSets = refreshed.second.first,
@@ -272,7 +273,7 @@ object StudyRules {
                     StudyEventType.Draw,
                     if (drawCount == 10) "十连抽" else "单抽",
                     "获得 ${results.size} 个碎片" +
-                        if (overflowSingleTickets > 0) "，溢出转换单抽券 x$overflowSingleTickets" else "",
+                        if (overflowKudos > 0) "，溢出转换夸夸值 $overflowKudos" else "",
                 ),
             ),
             results = results,
@@ -453,17 +454,17 @@ object StudyRules {
         if (currentCount >= 4) {
             return StudyActionResult(
                 state = state.copy(
-                    wallet = state.wallet.copy(singleDrawTickets = state.wallet.singleDrawTickets + 1),
+                    wallet = state.wallet.copy(kudos = state.wallet.kudos + OVERFLOW_NORMAL_FRAGMENT_KUDOS),
                     inventory = state.inventory.copy(
                         universalNormalFragments = state.inventory.universalNormalFragments - 1,
                     ),
                     recentEvents = state.recentEvents.addEvent(
                         StudyEventType.Fragment,
                         "碎片溢出转换",
-                        "${normalTitle(key)} 已满，转换为单抽券 x1",
+                        "${normalTitle(key)} 已满，转换为夸夸值 $OVERFLOW_NORMAL_FRAGMENT_KUDOS",
                     ),
                 ),
-                reward = StudyReward(singleDrawTickets = 1, title = "碎片已满，转换为单抽券 x1"),
+                reward = StudyReward(kudos = OVERFLOW_NORMAL_FRAGMENT_KUDOS, title = "碎片已满，转换为夸夸值 $OVERFLOW_NORMAL_FRAGMENT_KUDOS"),
             )
         }
         val inventory = state.inventory.copy(

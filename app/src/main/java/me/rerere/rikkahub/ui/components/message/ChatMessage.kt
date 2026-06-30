@@ -338,15 +338,16 @@ private fun LuluExpressionInlineState(
 }
 
 private data class LuluExpressionSnapshot(
+    val description: String,
     val emoji: String,
     val sticker: String,
     val gesture: String,
 ) {
-    fun toDisplayText(): String = listOfNotNull(
-        emoji.takeIf { it.isNotBlank() }?.let { "表情：$it" },
-        sticker.takeIf { it.isNotBlank() }?.let { "动作：$it" },
-        gesture.takeIf { it.isNotBlank() }?.let { "姿势：$it" },
-    ).joinToString(" · ")
+    fun toDisplayText(): String {
+        description.trim().takeIf { it.isNotBlank() }?.let { return it }
+        val parts = listOf(emoji, sticker, gesture).map { it.trim() }.filter { it.isNotBlank() }
+        return parts.takeIf { it.isNotEmpty() }?.joinToString("，", prefix = "（", postfix = "）").orEmpty()
+    }
 }
 
 private fun readLatestLuluExpressionSnapshot(file: File): LuluExpressionSnapshot? {
@@ -355,6 +356,7 @@ private fun readLatestLuluExpressionSnapshot(file: File): LuluExpressionSnapshot
     return runCatching {
         val obj = JsonInstant.parseToJsonElement(line).jsonObject
         LuluExpressionSnapshot(
+            description = obj["description"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             emoji = obj["emoji"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             sticker = obj["sticker"]?.jsonPrimitive?.contentOrNull.orEmpty(),
             gesture = obj["gesture"]?.jsonPrimitive?.contentOrNull.orEmpty(),

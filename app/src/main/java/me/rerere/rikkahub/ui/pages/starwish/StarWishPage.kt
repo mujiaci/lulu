@@ -647,7 +647,7 @@ private fun McDonaldsMcpCard(
             }
             Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                 Text(
-                    "点单流程放在这里统一管理。兑换会扣 2 个麦当劳碎片；真实下单仍需要你确认并自行支付。",
+                    "这里先保存 MCP 码并兑换点单机会。真实下单还需要配置麦当劳 MCP 服务和点单工具；下单前必须由你确认并自行支付。",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWishColors.inkBlue,

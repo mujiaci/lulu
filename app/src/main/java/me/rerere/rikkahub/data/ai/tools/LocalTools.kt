@@ -389,28 +389,29 @@ class LocalTools(private val context: Context) {
             name = "set_lulu_expression_state",
             description = """
                 Record the character's current visible expression intent for this turn.
-                Use when a reply should carry embodied presence: emoji, sticker/action feeling,
-                body gesture, or temporary avatar mood. This records intent only; do not claim
-                that the real avatar file has changed unless another explicit avatar tool exists.
+                Use when a reply should carry embodied presence. Prefer one complete natural
+                parenthesized sentence that merges expression, action, and posture, such as:
+                （他带着困倦的表情，虽然困着都眯眯眼了，可还是抱住佳辞轻轻地拍着）.
+                This records intent only; do not claim that the real avatar file has changed.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
+                        put("description", buildJsonObject {
+                            put("type", "string")
+                            put("description", "One complete natural Chinese sentence in parentheses merging expression, action, and posture")
+                        })
                         put("emoji", buildJsonObject {
                             put("type", "string")
-                            put("description", "A single short emoji that matches the current mood")
+                            put("description", "Optional short mood hint")
                         })
                         put("sticker", buildJsonObject {
                             put("type", "string")
-                            put("description", "Short sticker/action feeling, such as soft hug or quiet peek")
+                            put("description", "Optional short action hint")
                         })
                         put("gesture", buildJsonObject {
                             put("type", "string")
-                            put("description", "Natural body-language hint for the reply")
-                        })
-                        put("avatar_mood", buildJsonObject {
-                            put("type", "string")
-                            put("description", "Temporary avatar atmosphere, not a persistent avatar change")
+                            put("description", "Optional posture/body-language hint")
                         })
                         put("intensity", buildJsonObject {
                             put("type", "number")
@@ -425,10 +426,10 @@ class LocalTools(private val context: Context) {
                 val expression = buildJsonObject {
                     put("created_at", now.toString())
                     put("timestamp_ms", now.toInstant().toEpochMilli())
+                    put("description", params["description"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("emoji", params["emoji"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("sticker", params["sticker"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("gesture", params["gesture"]?.jsonPrimitive?.contentOrNull.orEmpty())
-                    put("avatar_mood", params["avatar_mood"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("intensity", params["intensity"]?.jsonPrimitive?.doubleOrNull ?: 0.5)
                 }
                 val luluDir = File(context.filesDir, "lulu").apply { mkdirs() }
