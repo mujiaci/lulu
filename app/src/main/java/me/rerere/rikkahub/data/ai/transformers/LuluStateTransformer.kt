@@ -60,6 +60,7 @@ internal fun buildLuluPresenceContext(
     appendLine("心声用于影响语气和选择：可以体现露露的猜测、顾虑、想靠近但没说出口的话、想做但暂时压住的动作。最终回复仍只输出自然说出口的话。")
     appendLine("当前状态：${state.statusText}")
     appendLine("心声：${state.innerVoice}")
+    appendLine("露露自己的场景：${state.selfScene}")
     appendLine("心情：${state.mood.label}（强度 ${state.moodIntensity.formatPresenceIntensity()}）")
     appendLine("精力：${state.energy.label}（强度 ${state.energyIntensity.formatPresenceIntensity()}）")
     appendLine("亲密感：${state.relationship.label}（强度 ${state.relationshipIntensity.formatPresenceIntensity()}）")

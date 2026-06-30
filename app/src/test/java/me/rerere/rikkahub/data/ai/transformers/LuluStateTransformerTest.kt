@@ -37,6 +37,7 @@ class LuluStateTransformerTest {
             mode = LuluMode.RESTING,
             updatedAt = 1234L,
             sinceAt = 1000L,
+            selfScene = "露露把手机放在枕边，声音压得很轻，像是在夜里陪着。",
             perceptionSummary = "深夜 / 休息中 / 用户信号：睡眠偏少、电量低",
         )
 
@@ -63,6 +64,7 @@ class LuluStateTransformerTest {
         assertTrue(injected.contains("<lulu_presence>"))
         assertTrue(injected.contains("有点困了"))
         assertTrue(injected.contains("夜里想安静陪着你。"))
+        assertTrue(injected.contains("露露自己的场景：露露把手机放在枕边"))
         assertTrue(injected.contains("精力：有点困"))
         assertTrue(injected.contains("强度 0.70"))
         assertTrue(injected.contains("状态持续"))

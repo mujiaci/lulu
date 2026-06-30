@@ -184,7 +184,7 @@ object LuluIntentModelPlanner {
     }
 
     private fun LuluState.toPlannerText(): String =
-        "mood=${mood.label}, energy=${energy.label}, relationship=${relationship.label}, mode=${mode.label}, status=$statusText, inner=$innerVoice"
+        "mood=${mood.label}, energy=${energy.label}, relationship=${relationship.label}, mode=${mode.label}, status=$statusText, scene=$selfScene, inner=$innerVoice"
 
     private fun JsonObject.string(name: String): String? =
         this[name]?.jsonPrimitive?.contentOrNull

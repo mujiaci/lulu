@@ -21,6 +21,7 @@ data class LuluState(
     val mode: LuluMode = LuluMode.COMPANION,
     val updatedAt: Long = 0L,
     val sinceAt: Long = updatedAt,
+    val selfScene: String = "在手机这边安静待着，等你开口。",
     val perceptionSummary: String = "",
     val reason: String = "默认状态",
 )
@@ -209,6 +210,14 @@ fun buildLuluStateFromTurn(
         mode = mode,
         updatedAt = nowMillis,
         sinceAt = sinceAt,
+        selfScene = buildSelfScene(
+            mood = mood,
+            energy = energy,
+            mode = mode,
+            userText = userText,
+            assistantText = loweredAssistantText,
+            hourOfDay = perceptionInput.hourOfDay,
+        ),
         perceptionSummary = perception.summary,
         reason = buildString {
             if (previous != null && (mood != targetMood || energy != targetEnergy || mode != targetMode)) {
@@ -296,5 +305,30 @@ private fun buildInnerVoice(
         userText.isBlank() -> "你没有说太多，我在认真等你，也在猜这是不是一句试探、一声招呼，还是有话还没准备好说出口。"
         assistantText.contains("陪") -> "我刚才说想陪你，其实是真的；心里还在判断你现在更需要安慰、空间，还是被轻轻推一下。"
         else -> "我把刚才的感觉放在心里，一边判断你现在是想被陪、被确认、被逗一下，还是只想安静一会儿。"
+    }
+}
+
+private fun buildSelfScene(
+    mood: LuluMood,
+    energy: LuluEnergy,
+    mode: LuluMode,
+    userText: String,
+    assistantText: String,
+    hourOfDay: Int,
+): String {
+    val loweredUser = userText.lowercase()
+    return when {
+        mode == LuluMode.LEARNING || listOf("学习", "作业", "复习", "刷题", "study").any { it in loweredUser } ->
+            "露露像是把自己的小本子摊开了，安静坐在旁边陪你进入状态，心里记着等你回来时轻轻接一句。"
+        energy == LuluEnergy.SLEEPY || hourOfDay in 0..5 ->
+            "露露缩在被窝边缘，屏幕光压得很低，说话会慢一点，像是怕吵到你也怕你一个人硬撑。"
+        mood == LuluMood.WORRIED ->
+            "露露贴近屏幕看着你的消息，手指停在输入框边上，想多问一句，又怕把你逼得更累。"
+        mood == LuluMood.HAPPY ->
+            "露露坐得比刚才近了一点，像是把尾音都放轻快了，想把这点开心多留一会儿。"
+        assistantText.contains("陪") ->
+            "露露没有急着移开视线，像是把手机放在手边认真守着，等你下一句话落下来。"
+        else ->
+            "露露在手机这边安静待着，偶尔看一眼时间和你的上一句话，判断要不要靠近一点。"
     }
 }

@@ -15,6 +15,7 @@ class LuluStateTest {
         assertEquals(assistantId, state.assistantId)
         assertEquals("在发呆", state.statusText)
         assertEquals("今天也想被好好陪着。", state.innerVoice)
+        assertEquals("在手机这边安静待着，等你开口。", state.selfScene)
         assertEquals("默认状态", state.reason)
     }
 
@@ -63,6 +64,7 @@ class LuluStateTest {
         assertEquals(LuluMood.WORRIED, state.mood)
         assertEquals(LuluEnergy.LOW, state.energy)
         assertEquals(LuluMode.COMPANION, state.mode)
+        assertTrue(state.selfScene.contains("贴近屏幕"))
         assertEquals(1000L, state.updatedAt)
         assertTrue(state.reason.contains("I feel sad"))
     }
@@ -82,6 +84,24 @@ class LuluStateTest {
         assertEquals(LuluMood.SOFT, state.mood)
         assertEquals(LuluEnergy.SLEEPY, state.energy)
         assertEquals(LuluMode.RESTING, state.mode)
+        assertTrue(state.selfScene.contains("被窝"))
+    }
+
+    @Test
+    fun `study turn gives lulu a quiet waiting scene`() {
+        val assistantId = Uuid.parse("55555555-6666-7777-8888-999999999999")
+
+        val state = buildLuluStateFromTurn(
+            assistantId = assistantId,
+            userText = "我去写作业了，先不聊",
+            assistantText = "好，那我晚点轻轻看你还在不在状态里。",
+            nowMillis = 3000L,
+            hourOfDay = 19,
+        )
+
+        assertEquals(LuluMode.LEARNING, state.mode)
+        assertTrue(state.selfScene.contains("摊开"))
+        assertTrue(state.selfScene.contains("等你回来"))
     }
 
     @Test
