@@ -203,7 +203,15 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                     }
                 }
                 StudySection.Collection -> {
-                    item { CollectionCard(state.inventory, onRedeemMcDonalds = vm::redeemMcDonalds) }
+                    item {
+                        CollectionCard(
+                            inventory = state.inventory,
+                            onUseUniversalNormal = vm::applyBestUniversalNormal,
+                            onUseUniversalRare = vm::applyBestUniversalRare,
+                            onUseUniversalEpic = vm::applyUniversalEpic,
+                            onRedeemMcDonalds = vm::redeemMcDonalds,
+                        )
+                    }
                 }
                 StudySection.Achievements -> {
                     item {
@@ -650,7 +658,13 @@ private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit
 }
 
 @Composable
-private fun CollectionCard(inventory: StudyInventory, onRedeemMcDonalds: () -> Unit) {
+private fun CollectionCard(
+    inventory: StudyInventory,
+    onUseUniversalNormal: () -> Unit,
+    onUseUniversalRare: () -> Unit,
+    onUseUniversalEpic: () -> Unit,
+    onRedeemMcDonalds: () -> Unit,
+) {
     StudyCard {
         Text("收藏背包", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -659,12 +673,89 @@ private fun CollectionCard(inventory: StudyInventory, onRedeemMcDonalds: () -> U
             InventoryMetric("麦当劳", "${inventory.epicFragments}/2", Modifier.weight(1f))
         }
         Text("通用普通 ${inventory.universalNormalFragments} · 通用稀有 ${inventory.universalRareFragments} · 通用史诗 ${inventory.universalEpicFragments}")
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            OutlinedButton(
+                onClick = onUseUniversalNormal,
+                enabled = inventory.universalNormalFragments > 0,
+                modifier = Modifier.weight(1f),
+            ) { Text("补套装") }
+            OutlinedButton(
+                onClick = onUseUniversalRare,
+                enabled = inventory.universalRareFragments > 0,
+                modifier = Modifier.weight(1f),
+            ) { Text("补剧场") }
+            OutlinedButton(
+                onClick = onUseUniversalEpic,
+                enabled = inventory.universalEpicFragments > 0,
+                modifier = Modifier.weight(1f),
+            ) { Text("补麦当劳") }
+        }
         Button(onClick = onRedeemMcDonalds, enabled = inventory.epicFragments >= 2, modifier = Modifier.fillMaxWidth()) {
             Icon(HugeIcons.InLove, null)
             Spacer(Modifier.width(8.dp))
             Text("兑换一次麦当劳点餐仪式")
         }
         Text("已解锁套装 ${inventory.unlockedOutfits.size}/10 · 已解锁剧场 ${inventory.unlockedTheaters.size}/12")
+        CollectionProgressList(inventory)
+    }
+}
+
+@Composable
+private fun CollectionProgressList(inventory: StudyInventory) {
+    Text("套装进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    StudyRules.outfitNames.forEach { outfit ->
+        val fragmentCount = StudyRules.outfitParts.sumOf { part ->
+            (inventory.normalFragments["normal:$outfit:$part"] ?: 0).coerceAtMost(4)
+        }
+        val completedParts = StudyRules.outfitParts.count { part ->
+            (inventory.normalFragments["normal:$outfit:$part"] ?: 0) >= 4
+        }
+        CollectionProgressRow(
+            title = outfit,
+            detail = if (outfit in inventory.unlockedOutfits) "已解锁" else "$completedParts/6 部件 · $fragmentCount/24 碎片",
+            progress = fragmentCount / 24f,
+            unlocked = outfit in inventory.unlockedOutfits,
+        )
+    }
+
+    Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    StudyRules.theaterNames.forEach { theater ->
+        val count = (inventory.rareFragments["rare:$theater"] ?: 0).coerceAtMost(5)
+        CollectionProgressRow(
+            title = theater,
+            detail = if (theater in inventory.unlockedTheaters) "已解锁" else "$count/5 碎片",
+            progress = count / 5f,
+            unlocked = theater in inventory.unlockedTheaters,
+        )
+    }
+}
+
+@Composable
+private fun CollectionProgressRow(
+    title: String,
+    detail: String,
+    progress: Float,
+    unlocked: Boolean,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                fontWeight = if (unlocked) FontWeight.SemiBold else FontWeight.Normal,
+            )
+            Text(
+                text = detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (unlocked) StudyColors.goldText else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        LinearProgressIndicator(
+            progress = { progress.coerceIn(0f, 1f) },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
 
