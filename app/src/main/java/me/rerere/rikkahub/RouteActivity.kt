@@ -122,6 +122,7 @@ import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
 import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
+import me.rerere.rikkahub.ui.pages.starwish.StarWishPage
 import me.rerere.rikkahub.ui.pages.study.StudyPomodoroFocusPage
 import me.rerere.rikkahub.ui.pages.study.StudyPage
 import me.rerere.rikkahub.ui.pages.study.StudyPomodoroPage
@@ -346,6 +347,10 @@ class RouteActivity : ComponentActivity() {
                                 StudyPage()
                             }
 
+                            entry<Screen.StarWish> {
+                                StarWishPage()
+                            }
+
                             entry<Screen.StudyPomodoro> {
                                 StudyPomodoroPage()
                             }
@@ -454,8 +459,12 @@ class RouteActivity : ComponentActivity() {
                                 BackupPage()
                             }
 
-                            entry<Screen.ImageGen> {
-                                ImageGenPage()
+                            entry<Screen.ImageGen> { key ->
+                                ImageGenPage(
+                                    initialPrompt = key.initialPrompt,
+                                    initialCount = key.count,
+                                    autoGenerate = key.autoGenerate,
+                                )
                             }
 
                             entry<Screen.WebView> { key ->
@@ -674,6 +683,9 @@ sealed interface Screen : NavKey {
     data object Study : Screen
 
     @Serializable
+    data object StarWish : Screen
+
+    @Serializable
     data object StudyPomodoro : Screen
 
     @Serializable
@@ -758,7 +770,11 @@ sealed interface Screen : NavKey {
     data object Backup : Screen
 
     @Serializable
-    data object ImageGen : Screen
+    data class ImageGen(
+        val initialPrompt: String = "",
+        val count: Int = 1,
+        val autoGenerate: Boolean = false,
+    ) : Screen
 
     @Serializable
     data class WebView(val url: String = "", val content: String = "") : Screen

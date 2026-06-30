@@ -115,10 +115,17 @@ import kotlin.uuid.Uuid
 @Composable
 fun ImageGenPage(
     modifier: Modifier = Modifier,
-    vm: ImgGenVM = koinViewModel()
+    vm: ImgGenVM = koinViewModel(),
+    initialPrompt: String = "",
+    initialCount: Int = 1,
+    autoGenerate: Boolean = false,
 ) {
     val pagerState = rememberPagerState { 2 }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(initialPrompt, initialCount, autoGenerate) {
+        vm.applyInitialRequest(initialPrompt, initialCount, autoGenerate)
+    }
 
     val isGenerating by vm.isGenerating.collectAsStateWithLifecycle()
     var showCancelDialog by remember { mutableStateOf(false) }

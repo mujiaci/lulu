@@ -225,7 +225,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             onUseUniversalRareTarget = vm::applyUniversalRare,
                             onUseUniversalEpic = vm::applyUniversalEpic,
                             onRedeemMcDonalds = vm::redeemMcDonalds,
-                            onOpenImageGen = { navController.navigate(Screen.ImageGen) },
+                            onOpenImageGen = { navController.navigate(Screen.ImageGen()) },
                         )
                     }
                 }

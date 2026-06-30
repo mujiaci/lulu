@@ -81,6 +81,7 @@ class ImgGenVM(
 
     private val _referenceImages = MutableStateFlow<List<String>>(emptyList())
     val referenceImages: StateFlow<List<String>> = _referenceImages
+    private var appliedInitialRequestKey: String? = null
 
     val pager = Pager(
         config = PagingConfig(pageSize = 20, enablePlaceholders = false),
@@ -102,6 +103,18 @@ class ImgGenVM(
 
     fun updateAspectRatio(aspectRatio: ImageAspectRatio) {
         _aspectRatio.value = aspectRatio
+    }
+
+    fun applyInitialRequest(prompt: String, count: Int, autoGenerate: Boolean) {
+        if (prompt.isBlank()) return
+        val key = "$prompt|$count|$autoGenerate"
+        if (appliedInitialRequestKey == key) return
+        appliedInitialRequestKey = key
+        _prompt.value = prompt
+        _numberOfImages.value = count.coerceIn(1, 4)
+        if (autoGenerate) {
+            generateImage()
+        }
     }
 
     fun addReferenceImages(paths: List<String>) {

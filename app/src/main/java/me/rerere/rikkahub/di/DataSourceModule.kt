@@ -39,6 +39,7 @@ import me.rerere.rikkahub.data.db.migrations.Migration_24_25
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.sync.webdav.WebDavSync
 import me.rerere.rikkahub.data.study.StudyStore
+import me.rerere.rikkahub.data.starwish.StarWishStore
 import me.rerere.search.SearchService
 import me.rerere.rikkahub.data.sync.S3Sync
 import okhttp3.MediaType.Companion.toMediaType
@@ -57,6 +58,10 @@ val dataSourceModule = module {
 
     single {
         StudyStore(context = get(), scope = get(), json = get())
+    }
+
+    single {
+        StarWishStore(context = get(), scope = get(), json = get())
     }
 
     single {
