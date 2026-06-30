@@ -76,7 +76,7 @@ class StudyVM(
         result.state
     }
 
-    fun refreshShop() = reduce { StudyRules.refreshShopIfNeeded(it.copy(shopDate = null), LocalDate.now(), Random.Default) }
+    fun refreshShop() = reduce { StudyRules.manualRefreshShop(it, LocalDate.now(), Random.Default) }
 
     fun buyShopItem(item: StudyShopItem) = reduce {
         val result = StudyRules.buyShopItem(it, item.id)

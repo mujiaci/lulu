@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.study
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,6 +18,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -123,6 +130,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     var drawDialog by remember { mutableStateOf<List<StudyDrawResult>?>(null) }
     var boxDialog by remember { mutableStateOf<Int?>(null) }
     var showSuperDialog by remember { mutableStateOf(false) }
+    var showLevelDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -158,23 +166,17 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             item {
-                StudyHero(
-                    state = state,
-                    assistant = assistant,
-                    onSignIn = vm::signIn,
-                    onPomodoro = { navController.navigate(Screen.StudyPomodoro) },
-                )
-            }
-            item {
                 SectionChips(selected = section, onSelected = { section = it })
             }
             when (section) {
                 StudySection.Today -> {
                     item {
-                        TodayProgressCard(
+                        StudyHero(
                             state = state,
-                            onClaimNormal = { vm.claimSuperMoment(SuperMomentChoice.NormalFragments) },
-                            onClaimRare = { vm.claimSuperMoment(SuperMomentChoice.RareFragment) },
+                            assistant = assistant,
+                            onSignIn = vm::signIn,
+                            onPomodoro = { navController.navigate(Screen.StudyPomodoro) },
+                            onOpenLevel = { showLevelDialog = true },
                         )
                     }
                     item {
@@ -190,7 +192,13 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             onDelete = vm::deleteTask,
                         )
                     }
-                    item { LevelCard(state = state, onClaimLevel = vm::claimLevel) }
+                    item {
+                        TodayProgressCard(
+                            state = state,
+                            onClaimNormal = { vm.claimSuperMoment(SuperMomentChoice.NormalFragments) },
+                            onClaimRare = { vm.claimSuperMoment(SuperMomentChoice.RareFragment) },
+                        )
+                    }
                     item { RecentEventsCard(events = state.recentEvents) }
                 }
                 StudySection.Gacha -> {
@@ -244,41 +252,32 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     }
 
     drawDialog?.let { results ->
-        AlertDialog(
+        DrawResultCelebration(
+            results = results,
             onDismissRequest = { drawDialog = null },
-            confirmButton = { TextButton(onClick = { drawDialog = null }) { Text("放进背包") } },
-            title = { Text(if (results.size >= 10) "十连结果" else "抽卡结果") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    results.forEach { result ->
-                        Text("${result.rarity.label} · ${result.title}", color = rarityColor(result.rarity))
-                    }
-                }
-            },
         )
     }
 
     if (showSuperDialog) {
-        AlertDialog(
+        SuperMomentCelebration(
+            assistant = assistant,
             onDismissRequest = { showSuperDialog = false },
-            title = { Text("超神时刻") },
-            text = { Text("${assistant.name}看见你今天全清了。选一个奖励，她会把十连券和 200 夸夸值一起递给你。") },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showSuperDialog = false
-                        vm.claimSuperMoment(SuperMomentChoice.NormalFragments)
-                    }
-                ) { Text("普通碎片 x5") }
+            onClaimNormal = {
+                showSuperDialog = false
+                vm.claimSuperMoment(SuperMomentChoice.NormalFragments)
             },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        showSuperDialog = false
-                        vm.claimSuperMoment(SuperMomentChoice.RareFragment)
-                    }
-                ) { Text("稀有碎片 x1") }
+            onClaimRare = {
+                showSuperDialog = false
+                vm.claimSuperMoment(SuperMomentChoice.RareFragment)
             },
+        )
+    }
+
+    if (showLevelDialog) {
+        LevelDialog(
+            state = state,
+            onClaimLevel = vm::claimLevel,
+            onDismissRequest = { showLevelDialog = false },
         )
     }
 }
@@ -484,7 +483,13 @@ fun StudyPomodoroFocusPage(
 }
 
 @Composable
-private fun StudyHero(state: StudyState, assistant: Assistant, onSignIn: () -> Unit, onPomodoro: () -> Unit) {
+private fun StudyHero(
+    state: StudyState,
+    assistant: Assistant,
+    onSignIn: () -> Unit,
+    onPomodoro: () -> Unit,
+    onOpenLevel: () -> Unit,
+) {
     val daysLeft = remember { ChronoUnit.DAYS.between(LocalDate.now(), nextExamDate()).coerceAtLeast(0) }
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = StudyColors.hero),
@@ -507,7 +512,7 @@ private fun StudyHero(state: StudyState, assistant: Assistant, onSignIn: () -> U
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     HeroMetric("倒计时", "${daysLeft}天", Modifier.weight(1f))
                     HeroMetric("夸夸值", state.wallet.kudos.toString(), Modifier.weight(1f))
-                    HeroMetric("Lv", StudyRules.currentLevel(state).level.toString(), Modifier.weight(1f))
+                    HeroMetric("Lv", StudyRules.currentLevel(state).level.toString(), Modifier.weight(1f), onOpenLevel)
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     FilledTonalButton(onClick = onSignIn, modifier = Modifier.weight(1f)) {
@@ -527,9 +532,9 @@ private fun StudyHero(state: StudyState, assistant: Assistant, onSignIn: () -> U
 }
 
 @Composable
-private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifier) {
+private fun HeroMetric(label: String, value: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
     Surface(
-        modifier = modifier,
+        modifier = modifier.then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         color = Color.White.copy(alpha = 0.42f),
         shape = MaterialTheme.shapes.medium,
     ) {
@@ -617,32 +622,188 @@ private fun TaskCard(
 }
 
 @Composable
-private fun LevelCard(state: StudyState, onClaimLevel: (Int) -> Unit) {
+private fun LevelDialog(
+    state: StudyState,
+    onClaimLevel: (Int) -> Unit,
+    onDismissRequest: () -> Unit,
+) {
     val level = StudyRules.currentLevel(state)
     val next = StudyRules.levels.firstOrNull { it.level == level.level + 1 }
     val claimable = StudyRules.claimableLevels(state)
-    StudyCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(HugeIcons.Chart, null, tint = StudyColors.goldText)
-            Column(Modifier.weight(1f)) {
-                Text("Lv${level.level} ${level.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(next?.let { "距离 Lv${it.level} 还差 ${(it.threshold - state.wallet.totalKudosEarned).coerceAtLeast(0)} 累计夸夸值" } ?: "你已经抵达星穹彼岸")
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = { TextButton(onClick = onDismissRequest) { Text("收起") } },
+        title = { Text("等级进度") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(HugeIcons.Chart, null, tint = StudyColors.goldText)
+                    Column(Modifier.weight(1f)) {
+                        Text("Lv${level.level} ${level.title}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                        Text("累计夸夸值 ${state.wallet.totalKudosEarned}")
+                    }
+                }
+                next?.let {
+                    val span = (it.threshold - level.threshold).coerceAtLeast(1)
+                    val current = (state.wallet.totalKudosEarned - level.threshold).coerceIn(0, span)
+                    LinearProgressIndicator(progress = { current.toFloat() / span }, modifier = Modifier.fillMaxWidth())
+                    Text("距离 Lv${it.level} 还差 ${(it.threshold - state.wallet.totalKudosEarned).coerceAtLeast(0)} 累计夸夸值")
+                } ?: Text("你已经抵达星穹彼岸")
+
+                Text("可领取奖励", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                if (claimable.isEmpty()) {
+                    Text("暂时没有新的等级奖励。继续完成待办和番茄钟吧。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                claimable.take(5).forEach {
+                    AssistChip(onClick = { onClaimLevel(it.level) }, label = { Text("领取 Lv${it.level}：${it.reward.title}") })
+                }
+
+                Text("等级奖励表", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                StudyRules.levels.forEach {
+                    Text("Lv${it.level} ${it.title} · ${it.threshold} · ${it.reward.title}", style = MaterialTheme.typography.bodySmall)
+                }
             }
-        }
-        claimable.take(3).forEach {
-            AssistChip(onClick = { onClaimLevel(it.level) }, label = { Text("领取 Lv${it.level}：${it.reward.title}") })
+        },
+    )
+}
+
+@Composable
+private fun SuperMomentCelebration(
+    assistant: Assistant,
+    onDismissRequest: () -> Unit,
+    onClaimNormal: () -> Unit,
+    onClaimRare: () -> Unit,
+) {
+    val pulse by rememberInfiniteTransition(label = "super-moment").animateFloat(
+        initialValue = 0.88f,
+        targetValue = 1.18f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 900),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "super-moment-pulse",
+    )
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(superMomentBrush())
+            .padding(22.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Column(
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.SpaceBetween,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 36.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                repeat(7) {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.30f + it * 0.06f),
+                        modifier = Modifier.size(((12 + it * 3) * pulse).dp),
+                    ) {}
+                }
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Text("超神时刻", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("今日全清", style = MaterialTheme.typography.headlineMedium, color = Color.White.copy(alpha = 0.92f))
+                Text(
+                    "${assistant.name}看见你把今天全部拿下了。十连券、200 夸夸值，还有自选碎片都亮起来了。",
+                    color = Color.White.copy(alpha = 0.92f),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    repeat(12) {
+                        Surface(
+                            shape = CircleShape,
+                            color = listOf(Color.White, StudyColors.goldText, StudyColors.purple)[it % 3].copy(alpha = 0.78f),
+                            modifier = Modifier.size(((10 + it % 4 * 5) * pulse).dp),
+                        ) {}
+                    }
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = onClaimNormal, modifier = Modifier.fillMaxWidth()) {
+                    Text("选择普通碎片 x5")
+                }
+                OutlinedButton(onClick = onClaimRare, modifier = Modifier.fillMaxWidth()) {
+                    Text("选择稀有碎片 x1")
+                }
+                TextButton(onClick = onDismissRequest, modifier = Modifier.fillMaxWidth()) {
+                    Text("先等等", color = Color.White)
+                }
+            }
         }
     }
 }
 
 @Composable
+private fun DrawResultCelebration(
+    results: List<StudyDrawResult>,
+    onDismissRequest: () -> Unit,
+) {
+    val best = results.maxByOrNull { it.rarity.weight }?.rarity ?: StudyRarity.Normal
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = { TextButton(onClick = onDismissRequest) { Text("放进背包") } },
+        title = { Text(drawResultTitle(best, results.size)) },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(drawBrush(best), RoundedCornerShape(18.dp))
+                    .padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(drawResultSubtitle(best), color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.SemiBold)
+                results.forEach { result ->
+                    Surface(
+                        color = Color.White.copy(alpha = if (result.rarity == best) 0.88f else 0.66f),
+                        shape = MaterialTheme.shapes.medium,
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Surface(shape = CircleShape, color = rarityColor(result.rarity), modifier = Modifier.size(12.dp)) {}
+                            Text("${result.rarity.label} · ${result.title}", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        },
+    )
+}
+
+@Composable
 private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit) {
     StudyCard {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            Icon(HugeIcons.AiMagic, null, tint = StudyColors.purple)
-            Column {
-                Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("普通套装 85% · 小剧场 12% · 麦当劳 3%")
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gachaBrush(), RoundedCornerShape(18.dp))
+                .padding(16.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Icon(HugeIcons.AiMagic, null, tint = Color.White)
+                    Column {
+                        Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
+                        Text("普通套装 85% · 小剧场 12% · 麦当劳 3%", color = Color.White.copy(alpha = 0.84f))
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DrawPoolChip("套装", "85%", StudyColors.blue)
+                    DrawPoolChip("剧场", "12%", StudyColors.purple)
+                    DrawPoolChip("麦当劳", "3%", StudyColors.goldText)
+                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
@@ -701,6 +862,19 @@ private fun CollectionCard(
 }
 
 @Composable
+private fun DrawPoolChip(label: String, value: String, color: Color) {
+    Surface(color = Color.White.copy(alpha = 0.78f), shape = CircleShape) {
+        Text(
+            text = "$label $value",
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            color = color,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+@Composable
 private fun CollectionProgressList(inventory: StudyInventory) {
     Text("套装进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     StudyRules.outfitNames.forEach { outfit ->
@@ -710,11 +884,11 @@ private fun CollectionProgressList(inventory: StudyInventory) {
         val completedParts = StudyRules.outfitParts.count { part ->
             (inventory.normalFragments["normal:$outfit:$part"] ?: 0) >= 4
         }
-        CollectionProgressRow(
-            title = outfit,
-            detail = if (outfit in inventory.unlockedOutfits) "已解锁" else "$completedParts/6 部件 · $fragmentCount/24 碎片",
-            progress = fragmentCount / 24f,
-            unlocked = outfit in inventory.unlockedOutfits,
+        OutfitProgressCard(
+            outfit = outfit,
+            fragmentCount = fragmentCount,
+            completedParts = completedParts,
+            inventory = inventory,
         )
     }
 
@@ -727,6 +901,45 @@ private fun CollectionProgressList(inventory: StudyInventory) {
             progress = count / 5f,
             unlocked = theater in inventory.unlockedTheaters,
         )
+    }
+
+}
+
+@Composable
+private fun OutfitProgressCard(
+    outfit: String,
+    fragmentCount: Int,
+    completedParts: Int,
+    inventory: StudyInventory,
+) {
+    val unlocked = outfit in inventory.unlockedOutfits
+    Surface(
+        color = if (unlocked) StudyColors.hero.copy(alpha = 0.72f) else StudyColors.softBlue.copy(alpha = 0.72f),
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text(outfit, fontWeight = FontWeight.SemiBold)
+                    Text(
+                        if (unlocked) "完整套装已解锁" else "$completedParts/6 部件 · $fragmentCount/24 碎片",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(if (unlocked) "已解锁" else "${(fragmentCount * 100 / 24).coerceIn(0, 100)}%", color = StudyColors.goldText)
+            }
+            LinearProgressIndicator(progress = { fragmentCount / 24f }, modifier = Modifier.fillMaxWidth())
+            StudyRules.outfitParts.forEach { part ->
+                val count = (inventory.normalFragments["normal:$outfit:$part"] ?: 0).coerceAtMost(4)
+                CollectionProgressRow(
+                    title = part,
+                    detail = "$count/4",
+                    progress = count / 4f,
+                    unlocked = count >= 4,
+                )
+            }
+        }
     }
 }
 
@@ -802,11 +1015,15 @@ private fun AchievementRow(achievement: StudyAchievement, claimed: Boolean, clai
 
 @Composable
 private fun ShopCard(state: StudyState, onRefresh: () -> Unit, onBuy: (StudyShopItem) -> Unit) {
+    val canRefresh = state.manualShopRefreshDate != state.today
     StudyCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("神秘商店", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
-            TextButton(onClick = onRefresh) { Text("刷新") }
+            TextButton(onClick = onRefresh, enabled = canRefresh) {
+                Text(if (canRefresh) "刷新一次" else "今日已刷新")
+            }
         }
+        Text("每天自动刷新 3 件商品；手动刷新每天最多一次。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         state.shopItems.forEach { item ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Icon(HugeIcons.Package, null, tint = StudyColors.blue)
@@ -977,6 +1194,43 @@ private fun rarityColor(rarity: StudyRarity): Color = when (rarity) {
     StudyRarity.Normal -> StudyColors.blue
     StudyRarity.Rare -> StudyColors.purple
     StudyRarity.Epic -> StudyColors.goldText
+}
+
+private val StudyRarity.weight: Int
+    get() = when (this) {
+        StudyRarity.Normal -> 1
+        StudyRarity.Rare -> 2
+        StudyRarity.Epic -> 3
+    }
+
+private fun drawResultTitle(best: StudyRarity, count: Int): String {
+    return when (best) {
+        StudyRarity.Epic -> "金光炸开了"
+        StudyRarity.Rare -> if (count >= 10) "十连有好东西" else "稀有碎片出现"
+        StudyRarity.Normal -> if (count >= 10) "十连结果" else "抽卡结果"
+    }
+}
+
+private fun drawResultSubtitle(best: StudyRarity): String {
+    return when (best) {
+        StudyRarity.Epic -> "麦当劳碎片到手，角色奖励仪式又近一步。"
+        StudyRarity.Rare -> "小剧场碎片亮起来了，剧情正在靠近。"
+        StudyRarity.Normal -> "套装碎片收进背包，离完整造型更近一点。"
+    }
+}
+
+private fun superMomentBrush(): Brush = Brush.linearGradient(
+    listOf(Color(0xFFFFC857), Color(0xFFFF7AA2), Color(0xFF7C6BFF))
+)
+
+private fun gachaBrush(): Brush = Brush.linearGradient(
+    listOf(Color(0xFF6F8FA6), Color(0xFF8067B7), Color(0xFFE0A72E))
+)
+
+private fun drawBrush(rarity: StudyRarity): Brush = when (rarity) {
+    StudyRarity.Normal -> Brush.linearGradient(listOf(Color(0xFF8CC7D8), Color(0xFF6F8FA6)))
+    StudyRarity.Rare -> Brush.linearGradient(listOf(Color(0xFF8067B7), Color(0xFFB88BCE)))
+    StudyRarity.Epic -> Brush.linearGradient(listOf(Color(0xFFFFC857), Color(0xFFFF8F5A), Color(0xFFFFF2B3)))
 }
 
 private fun mysteryBoxText(kudos: Int): String = when (kudos) {

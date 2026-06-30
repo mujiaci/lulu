@@ -23,6 +23,7 @@ data class StudyState(
     val shopDate: String? = null,
     val shopItems: List<StudyShopItem> = emptyList(),
     val purchasedShopItemIds: Set<String> = emptySet(),
+    val manualShopRefreshDate: String? = null,
     val recentEvents: List<StudyEvent> = emptyList(),
 )
 

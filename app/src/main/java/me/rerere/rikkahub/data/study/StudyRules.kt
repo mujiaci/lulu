@@ -58,11 +58,18 @@ object StudyRules {
 
     val achievements = listOf(
         StudyAchievement("first_companion", "初识陪伴", "累计完成10个番茄钟", StudyReward(singleDrawTickets = 1, title = "单抽券 x1")),
+        StudyAchievement("warm_start", "热身完成", "累计完成3个番茄钟", StudyReward(kudos = 80, title = "夸夸值 80")),
         StudyAchievement("todo_slayer", "清单杀手", "累计完成30项待办", StudyReward(kudos = 150, title = "夸夸值 150")),
+        StudyAchievement("task_spark", "清单起势", "累计完成10项待办", StudyReward(singleDrawTickets = 1, title = "单抽券 x1")),
+        StudyAchievement("perfect_3", "连续全清3天", "连续3天待办全清", StudyReward(universalNormalFragments = 2, title = "通用普通碎片 x2")),
         StudyAchievement("perfect_7", "连续全清7天", "连续7天待办全清", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyAchievement("deep_work_10h", "坐稳书桌", "累计学习时长10小时", StudyReward(kudos = 180, title = "夸夸值 180")),
         StudyAchievement("time_traveler", "时光旅人", "累计学习时长50小时", StudyReward(kudos = 300, title = "夸夸值 300")),
+        StudyAchievement("first_outfit", "第一套装", "解锁第一套普通套装", StudyReward(universalRareFragments = 1, title = "通用稀有碎片 x1")),
         StudyAchievement("outfit_collector", "套装收藏家", "解锁任意3套普通套装", StudyReward(universalRareFragments = 2, title = "稀有碎片 x2")),
         StudyAchievement("theater_open", "剧场开幕", "解锁第一部小剧场", StudyReward(singleDrawTickets = 3, title = "单抽券 x3")),
+        StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 120, title = "夸夸值 120")),
+        StudyAchievement("epic_touch", "金光一闪", "获得第一枚麦当劳碎片", StudyReward(universalEpicFragments = 1, title = "通用史诗碎片 x1")),
         StudyAchievement("mcdonalds_arrival", "麦门降临", "首次兑换麦当劳", StudyReward(kudos = 500, title = "夸夸值 500")),
     )
 
@@ -78,6 +85,7 @@ object StudyRules {
             inactiveStudyDays = nextInactive,
             superMomentAvailable = false,
             purchasedShopItemIds = emptySet(),
+            manualShopRefreshDate = null,
         )
         return applyInactivityPenalty(rolled).state
     }
@@ -252,11 +260,19 @@ object StudyRules {
         return achievements.filter { achievement ->
             achievement.id !in state.claimedAchievementIds && when (achievement.id) {
                 "first_companion" -> state.stats.totalPomodoros >= 10
+                "warm_start" -> state.stats.totalPomodoros >= 3
                 "todo_slayer" -> state.stats.totalTasksCompleted >= 30
+                "task_spark" -> state.stats.totalTasksCompleted >= 10
+                "perfect_3" -> state.longestPerfectStreak >= 3
                 "perfect_7" -> state.longestPerfectStreak >= 7
+                "deep_work_10h" -> state.stats.totalStudyMinutes >= 600
                 "time_traveler" -> state.stats.totalStudyMinutes >= 3_000
+                "first_outfit" -> state.stats.unlockedOutfitSets >= 1
                 "outfit_collector" -> state.stats.unlockedOutfitSets >= 3
                 "theater_open" -> state.stats.unlockedTheaters >= 1
+                "lucky_drawer" -> state.inventory.normalFragments.values.sum() +
+                    state.inventory.rareFragments.values.sum() + state.inventory.epicFragments >= 20
+                "epic_touch" -> state.inventory.epicFragments >= 1
                 "mcdonalds_arrival" -> state.stats.mcdonaldsRedeemed >= 1
                 else -> false
             }
@@ -294,6 +310,16 @@ object StudyRules {
             type.toShopItem("$dateText-$slot-$type")
         }
         return state.copy(shopDate = dateText, shopItems = items, purchasedShopItemIds = emptySet())
+    }
+
+    fun manualRefreshShop(state: StudyState, date: LocalDate = LocalDate.now(), random: Random = Random.Default): StudyState {
+        val dateText = date.toString()
+        if (state.manualShopRefreshDate == dateText) return state
+        return refreshShopIfNeeded(
+            state = state.copy(shopDate = null, manualShopRefreshDate = dateText),
+            date = date,
+            random = random,
+        )
     }
 
     fun buyShopItem(state: StudyState, itemId: String): StudyActionResult {
