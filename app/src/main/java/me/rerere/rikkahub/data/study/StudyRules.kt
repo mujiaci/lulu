@@ -196,11 +196,25 @@ object StudyRules {
         random: Random = Random.Default,
     ): StudyActionResult {
         val box = mysteryBox(random)
-        val reward = StudyReward(kudos = 50, mysteryBoxKudos = box, title = "番茄钟 +50，盲盒 +$box")
-        val totalReward = StudyReward(kudos = reward.kudos + reward.mysteryBoxKudos)
+        val titleParts = buildList {
+            add("番茄钟 +50")
+            add("盲盒 +${box.kudos}")
+            if (box.universalNormalFragments > 0) add("通用普通碎片 x${box.universalNormalFragments}")
+        }
+        val reward = StudyReward(
+            kudos = 50,
+            mysteryBoxKudos = box.kudos,
+            universalNormalFragments = box.universalNormalFragments,
+            title = titleParts.joinToString("，"),
+        )
+        val totalReward = StudyReward(
+            kudos = reward.kudos + reward.mysteryBoxKudos,
+            universalNormalFragments = reward.universalNormalFragments,
+        )
         return StudyActionResult(
             state = state.copy(
                 wallet = state.wallet.add(totalReward),
+                inventory = state.inventory.addReward(totalReward),
                 inactiveStudyDays = 0,
                 lastStudyDate = state.today,
                 stats = state.stats.copy(
@@ -209,7 +223,12 @@ object StudyRules {
                 ),
                 recentEvents = state.recentEvents
                     .addEvent(StudyEventType.Pomodoro, "番茄钟完成", "获得 50 夸夸值")
-                    .addEvent(StudyEventType.MysteryBox, "盲盒开启", "获得 $box 夸夸值"),
+                    .addEvent(
+                        StudyEventType.MysteryBox,
+                        "盲盒开启",
+                        "获得 ${box.kudos} 夸夸值" +
+                            if (box.universalNormalFragments > 0) "，通用普通碎片 x${box.universalNormalFragments}" else "",
+                    ),
             ),
             reward = reward,
         )
@@ -506,8 +525,10 @@ object StudyRules {
         return key.removePrefix("rare:")
     }
 
-    private fun mysteryBox(random: Random): Int {
-        return weighted(listOf(15 to 40, 25 to 30, 50 to 15, 100 to 4, 200 to 1), random)
+    private fun mysteryBox(random: Random): StudyMysteryBoxReward {
+        val kudos = weighted(listOf(15 to 40, 25 to 30, 50 to 15, 100 to 4, 200 to 1), random)
+        val normalFragments = weighted(listOf(0 to 50, 1 to 38, 2 to 12), random)
+        return StudyMysteryBoxReward(kudos = kudos, universalNormalFragments = normalFragments)
     }
 
     private fun drawOne(random: Random): StudyDrawResult {

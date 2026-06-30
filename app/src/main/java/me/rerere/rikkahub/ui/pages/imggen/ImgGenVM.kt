@@ -19,6 +19,7 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import me.rerere.ai.provider.ImageEditParams
 import me.rerere.ai.provider.ImageGenerationParams
+import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.ui.ImageAspectRatio
 import me.rerere.ai.ui.ImageGenerationItem
@@ -155,7 +156,10 @@ class ImgGenVM(
 
                 val settings = settingsStore.settingsFlow.first()
                 val model = settings.findModelById(settings.imageGenerationModelId)
-                    ?: throw IllegalStateException("No model selected")
+                    ?: throw IllegalStateException(IMAGE_MODEL_NOT_SELECTED)
+                if (model.type != ModelType.IMAGE) {
+                    throw IllegalStateException(IMAGE_MODEL_NOT_SELECTED)
+                }
 
                 val provider = model.findProvider(settings.providers)
                     ?: throw IllegalStateException("Provider not found")
@@ -198,7 +202,7 @@ class ImgGenVM(
             } catch (e: Exception) {
                 if(e is CancellationException) return@launch
                 Log.e(TAG, "Failed to generate image", e)
-                _error.value = e.message ?: "Unknown error occurred"
+                _error.value = e.toFriendlyImageError()
             } finally {
                 _isGenerating.value = false
             }
@@ -216,7 +220,10 @@ class ImgGenVM(
 
                 val settings = settingsStore.settingsFlow.first()
                 val model = settings.findModelById(settings.imageGenerationModelId)
-                    ?: throw IllegalStateException("No model selected")
+                    ?: throw IllegalStateException(IMAGE_MODEL_NOT_SELECTED)
+                if (model.type != ModelType.IMAGE) {
+                    throw IllegalStateException(IMAGE_MODEL_NOT_SELECTED)
+                }
 
                 val provider = model.findProvider(settings.providers)
                     ?: throw IllegalStateException("Provider not found")
@@ -262,7 +269,7 @@ class ImgGenVM(
             } catch (e: Exception) {
                 if (e is CancellationException) return@launch
                 Log.e(TAG, "Failed to edit image", e)
-                _error.value = e.message ?: "Unknown error occurred"
+                _error.value = e.toFriendlyImageError()
             } finally {
                 _isGenerating.value = false
             }
@@ -336,5 +343,19 @@ class ImgGenVM(
     companion object {
         private const val TAG = "ImgGenVM"
         private const val MAX_REFERENCE_IMAGES = 16
+        private const val IMAGE_MODEL_NOT_SELECTED = "当前默认图像模型不是图片生成模型。请点输入框旁边的模型按钮，选择类型为 IMAGE 的生图模型后再生成。"
+    }
+}
+
+private fun Throwable.toFriendlyImageError(): String {
+    val raw = message.orEmpty()
+    return when {
+        raw.contains("not supported model for image generation", ignoreCase = true) ||
+            raw.contains("only imagen models are supported", ignoreCase = true) ||
+            raw.contains("bad_response_status_code", ignoreCase = true) ||
+            raw.contains("404", ignoreCase = true) ->
+            "生图模型不匹配或接口不支持当前模型。请在生图页选择 IMAGE 类型模型，比如 Imagen / gpt-image 系列，再重新生成。原始错误：$raw"
+        raw.isBlank() -> "生图失败，但没有返回具体错误。请先确认默认图像模型和 API Key。"
+        else -> raw
     }
 }

@@ -96,6 +96,7 @@ import me.rerere.rikkahub.data.study.StudyDrawResult
 import me.rerere.rikkahub.data.study.ExamStudyPlan
 import me.rerere.rikkahub.data.study.StudyEvent
 import me.rerere.rikkahub.data.study.StudyInventory
+import me.rerere.rikkahub.data.study.StudyMysteryBoxReward
 import me.rerere.rikkahub.data.study.StudyRarity
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyShopItem
@@ -103,6 +104,7 @@ import me.rerere.rikkahub.data.study.StudyState
 import me.rerere.rikkahub.data.study.StudyTask
 import me.rerere.rikkahub.data.study.StudyTaskSource
 import me.rerere.rikkahub.data.study.SuperMomentChoice
+import me.rerere.rikkahub.data.starwish.StarWishRules
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -146,7 +148,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     var section by remember { mutableStateOf(StudySection.Today) }
     var newTask by remember { mutableStateOf("") }
     var drawDialog by remember { mutableStateOf<List<StudyDrawResult>?>(null) }
-    var boxDialog by remember { mutableStateOf<Int?>(null) }
+    var boxDialog by remember { mutableStateOf<StudyMysteryBoxReward?>(null) }
     var showMcDonaldsDialog by remember { mutableStateOf(false) }
     var showSuperDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
@@ -157,7 +159,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
         vm.effects.collect { effect ->
             when (effect) {
                 is StudyEffect.Message -> snackbarHostState.showSnackbar(effect.text)
-                is StudyEffect.MysteryBox -> boxDialog = effect.kudos
+                is StudyEffect.MysteryBox -> boxDialog = effect.reward
                 is StudyEffect.DrawResults -> drawDialog = effect.results
                 StudyEffect.McDonaldsRedeemed -> showMcDonaldsDialog = true
                 StudyEffect.SuperMomentReady -> showSuperDialog = true
@@ -228,6 +230,8 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             state = state,
                             onSingle = { vm.draw(1) },
                             onTen = { vm.draw(10) },
+                            onRedeemMcDonalds = vm::redeemMcDonalds,
+                            onOpenStarWish = { navController.navigate(Screen.StarWish) },
                         )
                     }
                 }
@@ -236,7 +240,16 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                         CollectionCard(
                             inventory = state.inventory,
                             onUseUniversalNormalTarget = vm::applyUniversalNormal,
-                            onOpenImageGen = { navController.navigate(Screen.ImageGen()) },
+                            onOpenImageGen = { outfit ->
+                                val scroll = StarWishRules.scrollForOutfit(outfit)
+                                navController.navigate(
+                                    Screen.ImageGen(
+                                        initialPrompt = scroll.soloPrompt,
+                                        count = 1,
+                                        autoGenerate = false,
+                                    ),
+                                )
+                            },
                         )
                     }
                 }
@@ -271,9 +284,9 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
         }
     }
 
-    boxDialog?.let { kudos ->
+    boxDialog?.let { reward ->
         MysteryBoxCelebration(
-            kudos = kudos,
+            reward = reward,
             onDismissRequest = { boxDialog = null },
         )
     }
@@ -866,6 +879,13 @@ private fun DrawResultCelebration(
     onDismissRequest: () -> Unit,
 ) {
     val best = results.maxByOrNull { it.rarity.weight }?.rarity ?: StudyRarity.Normal
+    val transition = rememberInfiniteTransition(label = "draw-result")
+    val pulse by transition.animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(780), RepeatMode.Reverse),
+        label = "draw-pulse",
+    )
     AlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = { TextButton(onClick = onDismissRequest) { Text("放进背包") } },
@@ -878,19 +898,43 @@ private fun DrawResultCelebration(
                     .padding(14.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
-                Text(drawResultSubtitle(best), color = Color.White.copy(alpha = 0.92f), fontWeight = FontWeight.SemiBold)
-                results.forEach { result ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(
-                        color = Color.White.copy(alpha = if (result.rarity == best) 0.88f else 0.66f),
-                        shape = MaterialTheme.shapes.medium,
+                        shape = CircleShape,
+                        color = Color.White.copy(alpha = 0.82f),
+                        modifier = Modifier.size((58 * pulse).dp),
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = if (best == StudyRarity.Epic) "SSR" else best.label,
+                                color = rarityColor(best),
+                                fontWeight = FontWeight.Black,
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(drawResultSubtitle(best), color = Color.White.copy(alpha = 0.94f), fontWeight = FontWeight.SemiBold)
+                        Text("共 ${results.size} 抽，下面可以完整滚动查看。", color = Color.White.copy(alpha = 0.78f), style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier.height(320.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(results) { result ->
+                        Surface(
+                            color = Color.White.copy(alpha = if (result.rarity == best) 0.9f else 0.68f),
+                            shape = MaterialTheme.shapes.medium,
                         ) {
-                            Surface(shape = CircleShape, color = rarityColor(result.rarity), modifier = Modifier.size(12.dp)) {}
-                            Text("${result.rarity.label} · ${result.title}", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                Surface(shape = CircleShape, color = rarityColor(result.rarity), modifier = Modifier.size(12.dp)) {}
+                                Text("${result.rarity.label} · ${result.title}", modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                            }
                         }
                     }
                 }
@@ -900,10 +944,10 @@ private fun DrawResultCelebration(
 }
 
 @Composable
-private fun MysteryBoxCelebration(kudos: Int, onDismissRequest: () -> Unit) {
+private fun MysteryBoxCelebration(reward: StudyMysteryBoxReward, onDismissRequest: () -> Unit) {
     val rarity = when {
-        kudos >= 100 -> StudyRarity.Epic
-        kudos >= 50 -> StudyRarity.Rare
+        reward.kudos >= 100 || reward.universalNormalFragments >= 2 -> StudyRarity.Epic
+        reward.kudos >= 50 || reward.universalNormalFragments >= 1 -> StudyRarity.Rare
         else -> StudyRarity.Normal
     }
     val transition = rememberInfiniteTransition(label = "mystery-box")
@@ -928,10 +972,20 @@ private fun MysteryBoxCelebration(kudos: Int, onDismissRequest: () -> Unit) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.78f), modifier = Modifier.size((78 * pulse).dp)) {
                         Box(contentAlignment = Alignment.Center) {
-                            Text("+$kudos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = rarityColor(rarity))
+                            Text("+${reward.kudos}", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = rarityColor(rarity))
                         }
                     }
-                    Text(mysteryBoxText(kudos), color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Text(mysteryBoxText(reward.kudos), color = Color.White, fontWeight = FontWeight.SemiBold)
+                    if (reward.universalNormalFragments > 0) {
+                        Surface(color = Color.White.copy(alpha = 0.78f), shape = CircleShape) {
+                            Text(
+                                "通用普通碎片 x${reward.universalNormalFragments}",
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = StudyColors.blue,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         repeat(7) {
                             Surface(
@@ -986,7 +1040,13 @@ private fun McDonaldsCelebration(onDismissRequest: () -> Unit) {
 }
 
 @Composable
-private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit) {
+private fun GachaCard(
+    state: StudyState,
+    onSingle: () -> Unit,
+    onTen: () -> Unit,
+    onRedeemMcDonalds: () -> Unit,
+    onOpenStarWish: () -> Unit,
+) {
     val singleCost = if (StudyRules.hasSingleDrawDiscount(state)) StudyRules.DISCOUNT_SINGLE_DRAW_COST else StudyRules.SINGLE_DRAW_COST
     StudyCard {
         Box(
@@ -1018,6 +1078,31 @@ private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit
                 Text("十连 800 / 券${state.wallet.tenDrawTickets}")
             }
         }
+        Surface(color = Color.White.copy(alpha = 0.78f), shape = RoundedCornerShape(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Surface(shape = CircleShape, color = StudyColors.goldText.copy(alpha = 0.18f), modifier = Modifier.size(42.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("M", color = StudyColors.goldText, fontWeight = FontWeight.Black)
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("麦当劳奖励入口", fontWeight = FontWeight.SemiBold)
+                    Text(
+                        "麦当劳碎片 ${state.inventory.epicFragments}/2 · MCP 码在星愿馆填写",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = onOpenStarWish) { Text("配置") }
+                Button(onClick = onRedeemMcDonalds, enabled = state.inventory.epicFragments >= 2) {
+                    Text("兑换")
+                }
+            }
+        }
     }
 }
 
@@ -1025,7 +1110,7 @@ private fun GachaCard(state: StudyState, onSingle: () -> Unit, onTen: () -> Unit
 private fun CollectionCard(
     inventory: StudyInventory,
     onUseUniversalNormalTarget: (String) -> Unit,
-    onOpenImageGen: () -> Unit,
+    onOpenImageGen: (String) -> Unit,
 ) {
     var collectionSection by remember { mutableStateOf(CollectionSection.Scrolls) }
     var selectedOutfit by remember { mutableStateOf<String?>(null) }
@@ -1115,7 +1200,7 @@ private fun CollectionProgressList(
     selectedOutfit: String?,
     onSelectOutfit: (String) -> Unit,
     onUseUniversalNormalTarget: (String, String) -> Unit,
-    onOpenImageGen: () -> Unit,
+    onOpenImageGen: (String) -> Unit,
 ) {
     when (section) {
         CollectionSection.Scrolls -> {
@@ -1225,7 +1310,7 @@ private fun OutfitProgressCard(
     completedParts: Int,
     inventory: StudyInventory,
     onUseUniversalNormalTarget: (String, String) -> Unit,
-    onOpenImageGen: () -> Unit,
+    onOpenImageGen: (String) -> Unit,
 ) {
     val unlocked = outfit in inventory.unlockedOutfits
     Surface(
@@ -1246,7 +1331,7 @@ private fun OutfitProgressCard(
             }
             LinearProgressIndicator(progress = { fragmentCount / 24f }, modifier = Modifier.fillMaxWidth())
             if (unlocked) {
-                FilledTonalButton(onClick = onOpenImageGen, modifier = Modifier.fillMaxWidth()) {
+                FilledTonalButton(onClick = { onOpenImageGen(outfit) }, modifier = Modifier.fillMaxWidth()) {
                     Icon(HugeIcons.AiMagic, null)
                     Spacer(Modifier.width(8.dp))
                     Text("用这套造型去生图")

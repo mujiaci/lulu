@@ -98,6 +98,7 @@ import me.rerere.hugeicons.stroke.Image03
 import me.rerere.hugeicons.stroke.Tools
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.files.FileUtils
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -255,6 +256,8 @@ private fun ImageGenScreen(
     val toaster = LocalToaster.current
     var showSettingsSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
+    val selectedImageModel = settings.findModelById(settings.imageGenerationModelId)
+    val imageModelReady = selectedImageModel?.type == ModelType.IMAGE
 
     LaunchedEffect(error) {
         error?.let { errorMessage ->
@@ -270,6 +273,20 @@ private fun ImageGenScreen(
             .padding(16.dp)
             .imePadding()
     ) {
+        if (!imageModelReady) {
+            Surface(
+                color = MaterialTheme.colorScheme.errorContainer,
+                shape = MaterialTheme.shapes.large,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = "当前没有选中可用的图像生成模型。请点下方模型按钮，选择 IMAGE 类型模型后再生成。",
+                    modifier = Modifier.padding(12.dp),
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
         Box(
             modifier = Modifier
                 .fillMaxWidth()

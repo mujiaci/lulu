@@ -123,6 +123,7 @@ import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
 import me.rerere.rikkahub.ui.pages.share.handler.ShareHandlerPage
 import me.rerere.rikkahub.ui.pages.starwish.StarWishPage
+import me.rerere.rikkahub.ui.pages.starwish.StarWishTheaterPage
 import me.rerere.rikkahub.ui.pages.study.StudyPomodoroFocusPage
 import me.rerere.rikkahub.ui.pages.study.StudyPage
 import me.rerere.rikkahub.ui.pages.study.StudyPomodoroPage
@@ -349,6 +350,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.StarWish> {
                                 StarWishPage()
+                            }
+
+                            entry<Screen.StarWishTheater> { key ->
+                                StarWishTheaterPage(theaterTitle = key.title)
                             }
 
                             entry<Screen.StudyPomodoro> {
@@ -684,6 +689,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object StarWish : Screen
+
+    @Serializable
+    data class StarWishTheater(val title: String) : Screen
 
     @Serializable
     data object StudyPomodoro : Screen

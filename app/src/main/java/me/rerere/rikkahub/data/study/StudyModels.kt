@@ -112,6 +112,12 @@ data class StudyReward(
     val title: String = "",
 )
 
+@Serializable
+data class StudyMysteryBoxReward(
+    val kudos: Int,
+    val universalNormalFragments: Int = 0,
+)
+
 data class StudyActionResult(
     val state: StudyState,
     val reward: StudyReward = StudyReward(),

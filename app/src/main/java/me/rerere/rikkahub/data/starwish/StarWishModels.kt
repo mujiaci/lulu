@@ -8,6 +8,7 @@ data class StarWishState(
     val imageLaunches: List<StarWishImageLaunch> = emptyList(),
     val theaterChapters: Map<String, List<StarWishTheaterChapter>> = emptyMap(),
     val customTheaters: List<StarWishTheaterSeed> = emptyList(),
+    val mcdonaldsMcpCode: String = "",
 )
 
 @Serializable
@@ -31,6 +32,7 @@ data class StarWishTheaterChapter(
     val chapter: Int,
     val title: String,
     val content: String,
+    val userInfluence: String = "",
     val createdAt: Long,
 )
 

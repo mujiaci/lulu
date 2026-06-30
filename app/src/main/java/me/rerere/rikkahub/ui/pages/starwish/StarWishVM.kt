@@ -79,7 +79,13 @@ class StarWishVM(
         }
     }
 
-    fun createNextChapter(theater: String) {
+    fun saveMcdonaldsMcpCode(code: String) {
+        viewModelScope.launch {
+            store.update { it.copy(mcdonaldsMcpCode = code) }
+        }
+    }
+
+    fun createNextChapter(theater: String, influence: String = "") {
         viewModelScope.launch {
             val seed = StarWishRules.allTheaters(state.value.customTheaters).firstOrNull { it.title == theater } ?: return@launch
             val study = studyState.value
@@ -99,7 +105,8 @@ class StarWishVM(
                     theater = theater,
                     chapter = nextChapter,
                     title = "第 $nextChapter 章",
-                    content = StarWishRules.defaultTheaterChapter(seed, nextChapter),
+                    content = StarWishRules.defaultTheaterChapter(seed, nextChapter, influence.trim()),
+                    userInfluence = influence.trim(),
                     createdAt = System.currentTimeMillis(),
                 )
                 current.copy(theaterChapters = current.theaterChapters + (theater to (chapters + chapter)))

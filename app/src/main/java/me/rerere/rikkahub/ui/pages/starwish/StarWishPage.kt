@@ -25,7 +25,10 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -65,6 +68,7 @@ import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.BookOpen02
 import me.rerere.hugeicons.stroke.CircleLock01
 import me.rerere.hugeicons.stroke.Image03
+import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.PencilEdit01
 import me.rerere.hugeicons.stroke.Play
 import me.rerere.rikkahub.Screen
@@ -104,7 +108,6 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     var section by remember { mutableStateOf(StarWishSection.Scrolls) }
     var scrollSubsection by remember { mutableStateOf(ScrollSubsection.Prompts) }
     var selectedScroll by remember { mutableStateOf<StarWishScroll?>(null) }
-    var selectedTheater by remember { mutableStateOf<StarWishTheaterSeed?>(null) }
     var showAddTheater by remember { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -148,7 +151,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                                 item {
                                     StarWishEmptyCard(
                                         title = "还没有画卷图片",
-                                        subtitle = "点亮任意套装后，在提示词里点“生成双图”，这里会留下从星愿馆发起的记录。",
+                                        subtitle = "点亮任意画卷后，在提示词里选择独美或互动生成，这里会留下从星愿馆发起的记录。",
                                         icon = HugeIcons.Image03,
                                         onClick = { scrollSubsection = ScrollSubsection.Prompts },
                                     )
@@ -198,6 +201,13 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                 }
                 StarWishSection.Theaters -> {
                     item {
+                        McDonaldsMcpCard(
+                            epicFragments = studyState.inventory.epicFragments,
+                            mcpCode = state.mcdonaldsMcpCode,
+                            onSave = vm::saveMcdonaldsMcpCode,
+                        )
+                    }
+                    item {
                         TheaterWalletCard(
                             rareFragments = studyState.inventory.universalRareFragments,
                             onAdd = { showAddTheater = true },
@@ -214,7 +224,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             unlocked = canCreate || hasChapter,
                             progress = (studyState.inventory.universalRareFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.BookOpen02,
-                            onClick = { if (canCreate || hasChapter) selectedTheater = theater },
+                            onClick = { if (canCreate || hasChapter) navController.navigate(Screen.StarWishTheater(theater.title)) },
                         )
                     }
                 }
@@ -238,25 +248,11 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                 clipboard.setText(AnnotatedString(it))
                 scope.launch { snackbarHostState.showSnackbar("提示词已复制") }
             },
-            onGenerate = {
-                val prompt = prompts.solo + "\n\n互动版：\n" + prompts.interaction
+            onGenerate = { prompt ->
                 vm.recordImageLaunch(outfit, prompt)
                 selectedScroll = null
-                navController.navigate(Screen.ImageGen(initialPrompt = prompt, count = 2, autoGenerate = true))
+                navController.navigate(Screen.ImageGen(initialPrompt = prompt, count = 1, autoGenerate = false))
             },
-        )
-    }
-
-    selectedTheater?.let { theater ->
-        val credits = StarWishRules.chapterCredits(studyState)
-        val chapters = state.theaterChapters[theater.title].orEmpty()
-        TheaterDetailDialog(
-            theater = theater,
-            credits = credits,
-            rareFragments = studyState.inventory.universalRareFragments,
-            chapters = chapters,
-            onDismiss = { selectedTheater = null },
-            onCreateChapter = { vm.createNextChapter(theater.title) },
         )
     }
 
@@ -268,6 +264,44 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                 showAddTheater = false
             },
         )
+    }
+}
+
+@Composable
+fun StarWishTheaterPage(
+    theaterTitle: String,
+    vm: StarWishVM = koinViewModel(),
+) {
+    val state by vm.state.collectAsStateWithLifecycle()
+    val studyState by vm.studyState.collectAsStateWithLifecycle()
+    val theater = StarWishRules.allTheaters(state.customTheaters).firstOrNull { it.title == theaterTitle }
+    Scaffold(
+        topBar = {
+            LargeFlexibleTopAppBar(
+                title = { Text(theaterTitle) },
+                navigationIcon = { BackButton() },
+                colors = CustomColors.topBarColors,
+            )
+        },
+        containerColor = StarWishColors.paper,
+    ) { padding ->
+        if (theater == null) {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text("这个小剧场暂时找不到了")
+            }
+        } else {
+            TheaterDetailContent(
+                theater = theater,
+                credits = StarWishRules.chapterCredits(studyState),
+                rareFragments = studyState.inventory.universalRareFragments,
+                chapters = state.theaterChapters[theater.title].orEmpty(),
+                modifier = Modifier.padding(padding).padding(horizontal = 16.dp, vertical = 14.dp),
+                onCreateChapter = { influence -> vm.createNextChapter(theater.title, influence) },
+            )
+        }
     }
 }
 
@@ -479,17 +513,24 @@ private fun ScrollDetailDialog(
     onDismiss: () -> Unit,
     onSave: (StarWishOutfitPrompts) -> Unit,
     onCopy: (String) -> Unit,
-    onGenerate: () -> Unit,
+    onGenerate: (String) -> Unit,
 ) {
     var solo by remember(outfit) { mutableStateOf(prompts.solo) }
     var interaction by remember(outfit) { mutableStateOf(prompts.interaction) }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = onGenerate) {
-                Icon(HugeIcons.AiMagic, null)
-                Spacer(Modifier.width(8.dp))
-                Text("生成双图")
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextButton(onClick = { onGenerate(interaction) }) {
+                    Icon(HugeIcons.Image03, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("生成互动")
+                }
+                Button(onClick = { onGenerate(solo) }) {
+                    Icon(HugeIcons.AiMagic, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("生成独美")
+                }
             }
         },
         dismissButton = {
@@ -531,7 +572,7 @@ private fun ScrollDetailDialog(
                 item {
                     Text("图片记录", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                     if (launches.isEmpty()) {
-                        Text("还没有从星愿馆发起过生成。点击生成双图后，会跳到生图页并预填提示词。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("还没有从星愿馆发起过生成。点生成独美或生成互动后，会跳到生图页并预填单条提示词。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         launches.take(5).forEach {
                             Text("· ${it.outfit} · ${it.createdAt}", maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -544,43 +585,134 @@ private fun ScrollDetailDialog(
 }
 
 @Composable
-private fun TheaterDetailDialog(
+private fun McDonaldsMcpCard(
+    epicFragments: Int,
+    mcpCode: String,
+    onSave: (String) -> Unit,
+) {
+    var code by remember(mcpCode) { mutableStateOf(mcpCode) }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(shape = CircleShape, color = Color(0xFFFFE7A8), modifier = Modifier.size(44.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Text("M", color = Color(0xFF9B6B10), fontWeight = FontWeight.Black)
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("麦当劳点单入口", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("麦当劳碎片 $epicFragments/2 · 先填 MCP 码，兑换后由角色帮你进入点单流程。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            OutlinedTextField(
+                value = code,
+                onValueChange = {
+                    code = it
+                    onSave(it)
+                },
+                label = { Text("麦当劳 MCP 码") },
+                placeholder = { Text("把你的 MCP 码粘到这里") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                "当前先保存入口信息；等你把 MCP 码格式和调用方式发我，我再接真实下单动作。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun TheaterDetailContent(
     theater: StarWishTheaterSeed,
     credits: Int,
     rareFragments: Int,
     chapters: List<me.rerere.rikkahub.data.starwish.StarWishTheaterChapter>,
-    onDismiss: () -> Unit,
-    onCreateChapter: () -> Unit,
+    modifier: Modifier = Modifier,
+    onCreateChapter: (String) -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        confirmButton = {
-            Button(onClick = onCreateChapter, enabled = rareFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER) {
+    var influence by remember(theater.title, chapters.size) { mutableStateOf("") }
+    var showGuide by remember { mutableStateOf(false) }
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.86f))) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(theater.title, modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
+                        Box {
+                            IconButton(onClick = { showGuide = true }) {
+                                Icon(HugeIcons.MoreVertical, contentDescription = "剧情指导")
+                            }
+                            DropdownMenu(expanded = showGuide, onDismissRequest = { showGuide = false }) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            StarWishRules.theaterGuide(theater),
+                                            style = MaterialTheme.typography.bodySmall,
+                                        )
+                                    },
+                                    onClick = { showGuide = false },
+                                )
+                            }
+                        }
+                    }
+                    Text("稀有碎片 $rareFragments · 可兑换 $credits 章 · 已生成 ${chapters.size} 章", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(theater.prompt, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 6, overflow = TextOverflow.Ellipsis)
+                    OutlinedTextField(
+                        value = influence,
+                        onValueChange = { influence = it },
+                        label = { Text(if (chapters.isEmpty()) "给第一章一点方向（可选）" else "我想影响下一章（可选）") },
+                        placeholder = { Text("例如：让露臣这章彻底低头，顺便狠狠打脸恶人") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+        }
+        item {
+            Button(
+                onClick = {
+                    onCreateChapter(influence)
+                    influence = ""
+                },
+                enabled = rareFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
+            ) {
                 Icon(HugeIcons.Play, null)
                 Spacer(Modifier.width(8.dp))
                 Text(if (chapters.isEmpty()) "生成第一章" else "续写下一章")
             }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("收起") } },
-        title = { Text(theater.title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("稀有碎片 $rareFragments · 可兑换 $credits 章 · 已生成 ${chapters.size} 章", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Text(theater.prompt, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 5, overflow = TextOverflow.Ellipsis)
-                if (chapters.isEmpty()) {
-                    Text("花 10 个稀有碎片生成第一章；之后每次再花 10 个稀有碎片续写下一章。")
-                }
-                chapters.forEach {
-                    Surface(color = StarWishColors.mistBlue.copy(alpha = 0.55f), shape = RoundedCornerShape(12.dp)) {
-                        Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(it.title, fontWeight = FontWeight.SemiBold)
-                            Text(it.content, maxLines = 4, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
-                    }
+        }
+        if (chapters.isEmpty()) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.78f))) {
+                    Text(
+                        "花 10 个稀有碎片生成第一章；之后每次再花 10 个稀有碎片续写下一章。",
+                        modifier = Modifier.padding(14.dp),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
-        },
-    )
+        }
+        items(chapters) {
+            Surface(color = Color.White.copy(alpha = 0.86f), shape = RoundedCornerShape(16.dp)) {
+                Column(Modifier.fillMaxWidth().padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(it.title, fontWeight = FontWeight.SemiBold)
+                    if (it.userInfluence.isNotBlank()) {
+                        Text("你的影响：${it.userInfluence}", style = MaterialTheme.typography.bodySmall, color = StarWishColors.inkBlue)
+                    }
+                    Text(it.content, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
 }
 
 @Composable

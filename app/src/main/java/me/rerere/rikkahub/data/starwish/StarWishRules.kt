@@ -95,12 +95,32 @@ object StarWishRules {
         return studyState.inventory.universalRareFragments / RARE_FRAGMENTS_PER_CHAPTER
     }
 
-    fun defaultTheaterChapter(seed: StarWishTheaterSeed, chapter: Int): String {
+    fun theaterGuide(seed: StarWishTheaterSeed): String {
+        return buildString {
+            appendLine("总剧情指导")
+            appendLine(seed.prompt)
+            appendLine()
+            appendLine("建议 6 章结构：")
+            appendLine("第 1 章：强钩子开局，女主被轻视或被推入困局，含“露”的核心角色登场。约 1200-1800 字。")
+            appendLine("第 2 章：女主第一次反击，露字角色开始被她吸引或臣服。约 1500-2200 字。")
+            appendLine("第 3 章：危机升级，恶人露出破绽，女主用智谋控场。约 1800-2500 字。")
+            appendLine("第 4 章：情感/主从关系爆发，强者低头，爽点集中。约 1800-2500 字。")
+            appendLine("第 5 章：终局反转，惩罚恶人或打脸旧秩序。约 1800-2600 字。")
+            appendLine("第 6 章：奖励、余韵、亲密收束，并留下可续写钩子。约 1200-2000 字。")
+        }
+    }
+
+    fun defaultTheaterChapter(seed: StarWishTheaterSeed, chapter: Int, influence: String = ""): String {
         return buildString {
             appendLine("第 $chapter 章 · ${seed.title}")
             appendLine()
             appendLine("生成提示词：")
             appendLine(seed.prompt)
+            if (influence.isNotBlank()) {
+                appendLine()
+                appendLine("用户对下一章的影响：")
+                appendLine(influence)
+            }
             appendLine()
             appendLine("请生成一个完整小剧场章节。要求：")
             appendLine("1. 女主是用户代入位，拥有主动权、选择权和爽感。")

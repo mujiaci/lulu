@@ -7,6 +7,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.study.StudyDrawResult
+import me.rerere.rikkahub.data.study.StudyMysteryBoxReward
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyShopItem
 import me.rerere.rikkahub.data.study.StudyState
@@ -46,7 +47,14 @@ class StudyVM(
 
     fun completePomodoro(minutes: Int) = reduce {
         val result = StudyRules.completePomodoro(it, minutes, Random.Default)
-        _effects.tryEmit(StudyEffect.MysteryBox(result.reward.mysteryBoxKudos))
+        _effects.tryEmit(
+            StudyEffect.MysteryBox(
+                StudyMysteryBoxReward(
+                    kudos = result.reward.mysteryBoxKudos,
+                    universalNormalFragments = result.reward.universalNormalFragments,
+                ),
+            ),
+        )
         result.state
     }
 
@@ -141,7 +149,7 @@ class StudyVM(
 
 sealed interface StudyEffect {
     data class Message(val text: String) : StudyEffect
-    data class MysteryBox(val kudos: Int) : StudyEffect
+    data class MysteryBox(val reward: StudyMysteryBoxReward) : StudyEffect
     data class DrawResults(val results: List<StudyDrawResult>) : StudyEffect
     data object McDonaldsRedeemed : StudyEffect
     data object SuperMomentReady : StudyEffect
