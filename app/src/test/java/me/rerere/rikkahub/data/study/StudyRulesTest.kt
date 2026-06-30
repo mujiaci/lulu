@@ -208,4 +208,42 @@ class StudyRulesTest {
         assertEquals(4, used.state.inventory.normalFragments[key])
         assertEquals(0, used.state.inventory.universalNormalFragments)
     }
+
+    @Test
+    fun `overflowing a completed normal outfit part converts universal fragment into single ticket`() {
+        val key = "normal:${StudyRules.outfitNames.first()}:${StudyRules.outfitParts.first()}"
+        val state = StudyState(
+            wallet = StudyWallet(singleDrawTickets = 1),
+            inventory = StudyInventory(
+                normalFragments = mapOf(key to 4),
+                universalNormalFragments = 1,
+            )
+        )
+
+        val used = StudyRules.useUniversalNormalFragment(state, key)
+
+        assertEquals(4, used.state.inventory.normalFragments[key])
+        assertEquals(0, used.state.inventory.universalNormalFragments)
+        assertEquals(2, used.state.wallet.singleDrawTickets)
+    }
+
+    @Test
+    fun `drawing a completed normal outfit part converts overflow into single ticket`() {
+        val key = "normal:${StudyRules.outfitNames.first()}:${StudyRules.outfitParts.first()}"
+        val state = StudyState(
+            wallet = StudyWallet(singleDrawTickets = 1),
+            inventory = StudyInventory(normalFragments = mapOf(key to 4)),
+        )
+        val result = StudyDrawResult(StudyRarity.Normal, key, StudyRules.normalTitle(key))
+
+        val drawn = StudyRules.draw(state, count = 1, random = object : Random() {
+            override fun nextBits(bitCount: Int): Int = 0
+            override fun nextInt(until: Int): Int = 0
+        })
+
+        assertEquals(4, drawn.state.inventory.normalFragments[key])
+        assertEquals(1, drawn.results.size)
+        assertEquals(result.fragmentKey, drawn.results.first().fragmentKey)
+        assertEquals(1, drawn.state.wallet.singleDrawTickets)
+    }
 }

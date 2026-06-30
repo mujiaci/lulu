@@ -228,17 +228,22 @@ object StudyRules {
             else -> return StudyDrawActionResult(state, emptyList())
         }
         var inventory = state.inventory
+        var overflowSingleTickets = 0
         val results = buildList {
             repeat(drawCount) {
                 val result = drawOne(random)
-                inventory = inventory.addDrawResult(result)
+                if (result.rarity == StudyRarity.Normal && (inventory.normalFragments[result.fragmentKey] ?: 0) >= 4) {
+                    overflowSingleTickets += 1
+                } else {
+                    inventory = inventory.addDrawResult(result)
+                }
                 add(result)
             }
         }
         val refreshed = inventory.refreshUnlockStats()
         return StudyDrawActionResult(
             state = state.copy(
-                wallet = nextWallet,
+                wallet = nextWallet.copy(singleDrawTickets = nextWallet.singleDrawTickets + overflowSingleTickets),
                 inventory = refreshed.first,
                 stats = state.stats.copy(
                     unlockedOutfitSets = refreshed.second.first,
@@ -247,7 +252,8 @@ object StudyRules {
                 recentEvents = state.recentEvents.addEvent(
                     StudyEventType.Draw,
                     if (drawCount == 10) "十连抽" else "单抽",
-                    "获得 ${results.size} 个碎片",
+                    "获得 ${results.size} 个碎片" +
+                        if (overflowSingleTickets > 0) "，溢出转换单抽券 x$overflowSingleTickets" else "",
                 ),
             ),
             results = results,
@@ -424,6 +430,23 @@ object StudyRules {
 
     fun useUniversalNormalFragment(state: StudyState, key: String): StudyActionResult {
         if (state.inventory.universalNormalFragments <= 0 || !key.startsWith("normal:")) return StudyActionResult(state)
+        val currentCount = state.inventory.normalFragments[key] ?: 0
+        if (currentCount >= 4) {
+            return StudyActionResult(
+                state = state.copy(
+                    wallet = state.wallet.copy(singleDrawTickets = state.wallet.singleDrawTickets + 1),
+                    inventory = state.inventory.copy(
+                        universalNormalFragments = state.inventory.universalNormalFragments - 1,
+                    ),
+                    recentEvents = state.recentEvents.addEvent(
+                        StudyEventType.Fragment,
+                        "碎片溢出转换",
+                        "${normalTitle(key)} 已满，转换为单抽券 x1",
+                    ),
+                ),
+                reward = StudyReward(singleDrawTickets = 1, title = "碎片已满，转换为单抽券 x1"),
+            )
+        }
         val inventory = state.inventory.copy(
             universalNormalFragments = state.inventory.universalNormalFragments - 1,
             normalFragments = state.inventory.normalFragments.plusCount(key, 1),
