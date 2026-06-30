@@ -51,7 +51,7 @@ class LuluPerceptionCollector(
                 (systemTools.locationAccess || systemTools.locationExploreEnabled) &&
                 SystemTools.hasLocationPermission(context)
             ) {
-                collectLocationState(settings)
+                collectLocationState(settings, userText)
             } else {
                 null
             },
@@ -113,13 +113,14 @@ class LuluPerceptionCollector(
         }.getOrNull()
     }
 
-    private suspend fun collectLocationState(settings: Settings): LuluLocationState? = runCatching {
+    private suspend fun collectLocationState(settings: Settings, userText: String): LuluLocationState? = runCatching {
         val apiKey = settings.systemToolsSetting.amapApiKey
         val locationService = LocationService(context, AmapService(apiKey))
+        val forceRefresh = userText.hasLocationIntent()
         val location = if (apiKey.isNotBlank()) {
-            locationService.getCurrentLocation(apiKey).getOrNull()
+            locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh).getOrNull()
         } else {
-            locationService.getCoordinatesOnly().getOrNull()
+            locationService.getCoordinatesOnly(forceRefresh = forceRefresh).getOrNull()
         } ?: return@runCatching null
 
         LuluLocationState(
@@ -128,6 +129,9 @@ class LuluPerceptionCollector(
             longitude = location.longitude,
         )
     }.getOrNull()
+
+    private fun String.hasLocationIntent(): Boolean =
+        lowercase().containsAny("在哪", "位置", "附近", "周边", "出门", "出去", "外面", "到没到")
 
     private suspend fun collectMusicState(): LuluMusicState? = runCatching {
         val output = createMusicTool(context).execute(

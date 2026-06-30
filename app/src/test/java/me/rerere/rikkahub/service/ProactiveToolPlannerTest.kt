@@ -22,8 +22,8 @@ class ProactiveToolPlannerTest {
             availableToolNames = setOf("get_location", "explore_nearby", "get_battery_info"),
         )
 
-        assertTrue(plan.any { it.toolName == "get_location" })
-        assertTrue(plan.any { it.toolName == "explore_nearby" })
+        assertTrue(plan.any { it.toolName == "get_location" && it.argumentsJson.contains("force_refresh") })
+        assertTrue(plan.any { it.toolName == "explore_nearby" && it.argumentsJson.contains("force_refresh") })
     }
 
     @Test
@@ -34,7 +34,7 @@ class ProactiveToolPlannerTest {
         )
 
         assertTrue(plan.any { it.toolName == "get_app_usage" })
-        assertTrue(plan.any { it.toolName == "get_location" })
+        assertTrue(plan.any { it.toolName == "get_location" && it.argumentsJson.contains("force_refresh") })
         assertTrue(plan.any { it.toolName == "set_alarm" && it.autoExecutable })
         assertTrue(plan.any { it.toolName == "set_alarm" && it.argumentsJson.contains("\"hour\":7") })
         assertTrue(plan.any { it.toolName == "set_alarm" && it.argumentsJson.contains("\"minute\":55") })
@@ -81,7 +81,11 @@ class ProactiveToolPlannerTest {
         )
 
         assertTrue(plan.any { it.toolName == "get_app_usage" })
-        assertTrue(plan.any { it.toolName == "explore_nearby" })
+        assertTrue(plan.any {
+            it.toolName == "explore_nearby" &&
+                it.argumentsJson.contains("force_refresh") &&
+                it.argumentsJson.contains("keyword")
+        })
     }
 
     @Test

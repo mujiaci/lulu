@@ -21,12 +21,20 @@ data class LocationInfo(
     val altitude: Double = 0.0,
     val accuracy: Float = 0f,
     val timestamp: Long = 0L,
+    val source: LocationSource = LocationSource.CACHED,
+    val forceRefreshRequested: Boolean = false,
     val address: String = "",
     val city: String = "",
     val district: String = "",
     val street: String = "",
     val poiList: List<PoiInfo> = emptyList()
 )
+
+enum class LocationSource {
+    FRESH,
+    CACHED,
+    FALLBACK_CACHED
+}
 
 data class PoiInfo(
     val name: String,
@@ -46,10 +54,13 @@ class LocationService(
     }
 
     @SuppressLint("MissingPermission")
-    suspend fun getCurrentLocation(amapApiKey: String): Result<LocationInfo> = withContext(Dispatchers.IO) {
+    suspend fun getCurrentLocation(
+        amapApiKey: String,
+        forceRefresh: Boolean = false
+    ): Result<LocationInfo> = withContext(Dispatchers.IO) {
         runCatching {
-            val location = getLastKnownLocation()
-                ?: requestFreshLocation()
+            val resolvedLocation = resolveLocation(forceRefresh)
+            val location = resolvedLocation?.location
 
             if (location != null) {
                 // GPS坐标(WGS84)需要先转换为高德坐标(GCJ02)才能正确逆地理编码
@@ -67,6 +78,8 @@ class LocationService(
                     altitude = location.altitude,
                     accuracy = location.accuracy,
                     timestamp = location.time,
+                    source = resolvedLocation.source,
+                    forceRefreshRequested = forceRefresh,
                     address = address.formattedAddress ?: "",
                     city = address.city ?: address.province ?: "",
                     district = address.district ?: "",
@@ -87,10 +100,10 @@ class LocationService(
      * 仅获取坐标，不需要高德API Key，不进行逆地理编码
      */
     @SuppressLint("MissingPermission")
-    suspend fun getCoordinatesOnly(): Result<LocationInfo> = withContext(Dispatchers.IO) {
+    suspend fun getCoordinatesOnly(forceRefresh: Boolean = false): Result<LocationInfo> = withContext(Dispatchers.IO) {
         runCatching {
-            val location = getLastKnownLocation()
-                ?: requestFreshLocation()
+            val resolvedLocation = resolveLocation(forceRefresh)
+            val location = resolvedLocation?.location
 
             if (location != null) {
                 LocationInfo(
@@ -99,6 +112,8 @@ class LocationService(
                     altitude = location.altitude,
                     accuracy = location.accuracy,
                     timestamp = location.time,
+                    source = resolvedLocation.source,
+                    forceRefreshRequested = forceRefresh,
                 )
             } else {
                 throw IllegalStateException("无法获取位置信息")
@@ -111,11 +126,11 @@ class LocationService(
         amapApiKey: String,
         keyword: String = "",
         radius: Int = 1000,
-        type: String = ""
+        type: String = "",
+        forceRefresh: Boolean = false
     ): Result<List<PoiInfo>> = withContext(Dispatchers.IO) {
         runCatching {
-            val location = getLastKnownLocation()
-                ?: requestFreshLocation()
+            val location = resolveLocation(forceRefresh)?.location
 
             if (location == null) {
                 throw IllegalStateException("无法获取位置信息，请先开启定位")
@@ -144,7 +159,7 @@ class LocationService(
     private fun getLastKnownLocation(): Location? {
         val providers = locationManager.getProviders(true)
         return providers.mapNotNull { provider ->
-            locationManager.getLastKnownLocation(provider)
+            runCatching { locationManager.getLastKnownLocation(provider) }.getOrNull()
         }
             .filter { it.isFreshEnough() }
             .minWithOrNull(
@@ -154,15 +169,38 @@ class LocationService(
     }
 
     @SuppressLint("MissingPermission")
+    private suspend fun resolveLocation(forceRefresh: Boolean): ResolvedLocation? {
+        if (shouldUseCachedLocation(forceRefresh)) {
+            getLastKnownLocation()?.let {
+                return ResolvedLocation(it, LocationSource.CACHED)
+            }
+        }
+
+        requestFreshLocation()?.let {
+            return ResolvedLocation(it, LocationSource.FRESH)
+        }
+
+        return if (forceRefresh) {
+            getLastKnownLocation()?.let { ResolvedLocation(it, LocationSource.FALLBACK_CACHED) }
+        } else {
+            null
+        }
+    }
+
+    @SuppressLint("MissingPermission")
     private suspend fun requestFreshLocation(): Location? {
         return try {
             kotlinx.coroutines.withTimeoutOrNull(10_000L) {
                 suspendCancellableCoroutine<Location?> { cont ->
                     val providers = locationManager.getProviders(true)
-                    val bestProvider = providers.firstOrNull()
-                        ?: locationManager.getProvider(LocationManager.GPS_PROVIDER)?.let { LocationManager.GPS_PROVIDER }
-                        ?: locationManager.getProvider(LocationManager.NETWORK_PROVIDER)?.let { LocationManager.NETWORK_PROVIDER }
-                        ?: return@suspendCancellableCoroutine cont.resume(null)
+                    val preferredProviders = listOf(
+                        LocationManager.GPS_PROVIDER,
+                        LocationManager.NETWORK_PROVIDER,
+                        LocationManager.PASSIVE_PROVIDER
+                    ).filter { it in providers }
+                    val requestProviders = (preferredProviders.ifEmpty { providers }).ifEmpty {
+                        return@suspendCancellableCoroutine cont.resume(null)
+                    }
 
                     val listener = object : LocationListener {
                         override fun onLocationChanged(location: Location) {
@@ -170,10 +208,7 @@ class LocationService(
                             if (cont.isActive) cont.resume(location)
                         }
 
-                        override fun onProviderDisabled(provider: String) {
-                            locationManager.removeUpdates(this)
-                            if (cont.isActive) cont.resume(null)
-                        }
+                        override fun onProviderDisabled(provider: String) {}
 
                         @Deprecated("Deprecated in Java")
                         override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
@@ -185,12 +220,19 @@ class LocationService(
                         locationManager.removeUpdates(listener)
                     }
 
-                    locationManager.requestLocationUpdates(
-                        bestProvider,
-                        0L,
-                        0f,
-                        listener
-                    )
+                    val requested = requestProviders.count { provider ->
+                        runCatching {
+                            locationManager.requestLocationUpdates(
+                                provider,
+                                0L,
+                                0f,
+                                listener
+                            )
+                        }.isSuccess
+                    }
+                    if (requested == 0 && cont.isActive) {
+                        cont.resume(null)
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -198,6 +240,13 @@ class LocationService(
         }
     }
 }
+
+private data class ResolvedLocation(
+    val location: Location,
+    val source: LocationSource
+)
+
+internal fun shouldUseCachedLocation(forceRefresh: Boolean): Boolean = !forceRefresh
 
 internal fun Location.isFreshEnough(nowMillis: Long = System.currentTimeMillis()): Boolean =
     time > 0L && nowMillis - time <= MAX_LAST_KNOWN_LOCATION_AGE_MS

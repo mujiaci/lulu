@@ -57,7 +57,7 @@ class SystemTools(private val context: Context, private val settings: Settings) 
     val locationTool: Tool by lazy {
         Tool(
             name = "get_location",
-            description = "Get the current device location with coordinates and address. Uses Amap API for reverse geocoding if API key is configured.",
+            description = "Get the device location with coordinates and address. Android system location provides coordinates; Amap is only used for reverse geocoding when configured. Use force_refresh=true when the user asks where they are now, is moving, or location freshness matters.",
             parameters = {
                 InputSchema.Obj(
                     properties = buildJsonObject {
@@ -65,22 +65,28 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                             put("type", "boolean")
                             put("description", "Whether to include address info (reverse geocoding)")
                         }
+                        putJsonObject("force_refresh") {
+                            put("type", "boolean")
+                            put("description", "Request a fresh Android system location instead of accepting the recent cached location")
+                        }
                     }
                 )
             },
-            execute = { _ ->
+            execute = { args ->
                 if (!hasLocationPermission(context)) {
                     return@Tool listOf(UIMessagePart.Text(
                         buildJsonObject { put("success", false); put("error", "Location permission not granted") }.toString()
                     ))
                 }
                 try {
+                    val params = args.jsonObject
+                    val forceRefresh = params["force_refresh"]?.jsonPrimitive?.booleanOrNull ?: false
                     val apiKey = settings.systemToolsSetting.amapApiKey
                     val locationService = LocationService(context, AmapService(apiKey))
                     val locationResult = if (apiKey.isNotBlank()) {
-                        runBlocking { locationService.getCurrentLocation(apiKey) }
+                        runBlocking { locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh) }
                     } else {
-                        runBlocking { locationService.getCoordinatesOnly() }
+                        runBlocking { locationService.getCoordinatesOnly(forceRefresh = forceRefresh) }
                     }
                     val loc = locationResult.getOrNull()
                     if (loc == null) {
@@ -101,6 +107,8 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                         put("timestamp", loc.timestamp)
                         put("time", dateFormat.format(Date(loc.timestamp)))
                         put("fresh_within_minutes", 10)
+                        put("force_refresh_requested", loc.forceRefreshRequested)
+                        put("location_source", loc.source.name.lowercase())
                         put("address", loc.address.ifBlank { "Unknown address" })
                         put("city", loc.city)
                         put("district", loc.district)

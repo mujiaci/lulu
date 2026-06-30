@@ -18,4 +18,10 @@ class LocationServiceTest {
             time = now - 11 * 60 * 1000L
         }.isFreshEnough(now))
     }
+
+    @Test
+    fun `cached location is skipped when force refresh is requested`() {
+        assertTrue(shouldUseCachedLocation(forceRefresh = false))
+        assertFalse(shouldUseCachedLocation(forceRefresh = true))
+    }
 }

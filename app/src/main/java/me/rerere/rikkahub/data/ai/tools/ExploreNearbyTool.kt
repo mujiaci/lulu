@@ -3,12 +3,11 @@ package me.rerere.rikkahub.data.ai.tools
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.location.Geocoder
-import android.location.LocationManager
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -19,6 +18,7 @@ import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.service.AmapService
+import me.rerere.rikkahub.data.service.LocationService
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -45,6 +45,10 @@ fun createExploreNearbyTool(context: Context, settings: Settings): Tool = Tool(
                     put("type", "integer")
                     put("description", "Maximum number of results (default 10)")
                 }
+                putJsonObject("force_refresh") {
+                    put("type", "boolean")
+                    put("description", "Request a fresh Android system location before searching nearby POI")
+                }
             }
         )
     },
@@ -70,21 +74,23 @@ fun createExploreNearbyTool(context: Context, settings: Settings): Tool = Tool(
             val radius = params["radius"]?.jsonPrimitive?.intOrNull ?: 1000
             val type = params["type"]?.jsonPrimitive?.content ?: ""
             val limit = params["limit"]?.jsonPrimitive?.intOrNull ?: 10
+            val forceRefresh = params["force_refresh"]?.jsonPrimitive?.booleanOrNull ?: false
 
-            // Get current location
-            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val loc = lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
-
+            val amapService = AmapService(apiKey)
+            val locationService = LocationService(context, amapService)
+            val locationResult = runBlocking {
+                locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh)
+            }
+            val loc = locationResult.getOrNull()
             if (loc == null) {
                 return@Tool listOf(UIMessagePart.Text(
-                    buildJsonObject { put("success", false); put("error", "Unable to get current location") }.toString()
+                    buildJsonObject {
+                        put("success", false)
+                        put("error", locationResult.exceptionOrNull()?.message ?: "Unable to get current location")
+                    }.toString()
                 ))
             }
 
-            val amapService = AmapService(apiKey)
             val pois = runBlocking {
                 amapService.searchNearbyPoi(
                     latitude = loc.latitude,
@@ -106,9 +112,6 @@ fun createExploreNearbyTool(context: Context, settings: Settings): Tool = Tool(
                 ))
             }
 
-            // Get current address
-            val addressResult = runBlocking { amapService.getAddressFromGps(loc.latitude, loc.longitude) }
-
             val arr = buildJsonArray {
                 pois.forEach { poi ->
                     add(buildJsonObject {
@@ -125,7 +128,10 @@ fun createExploreNearbyTool(context: Context, settings: Settings): Tool = Tool(
                 buildJsonObject {
                     put("success", true)
                     put("count", pois.size)
-                    put("current_location", addressResult.formattedAddress ?: "${loc.latitude},${loc.longitude}")
+                    put("current_location", loc.address.ifBlank { "${loc.latitude},${loc.longitude}" })
+                    put("location_time", dateFormat.format(Date(loc.timestamp)))
+                    put("location_source", loc.source.name.lowercase())
+                    put("force_refresh_requested", loc.forceRefreshRequested)
                     put("search_radius", radius)
                     put("places", arr)
                 }.toString()

@@ -40,8 +40,8 @@ object ProactiveToolPlanner {
         }
 
         if (normalized.containsAny(LOCATION_WORDS)) {
-            addAuto("get_location", "用户提到出门、附近或所在位置，需要主动查看位置。", """{"include_address":true}""")
-            addAuto("explore_nearby", "用户提到附近或外出，需要主动探索周边环境。", """{"radius":1000}""")
+            addAuto("get_location", "用户提到出门、附近或所在位置，需要主动查看位置。", """{"include_address":true,"force_refresh":true}""")
+            addAuto("explore_nearby", "用户提到附近或外出，需要主动探索周边环境。", """{"radius":1000,"force_refresh":true}""")
         }
 
         if (normalized.containsAny(MESSAGE_WORDS)) {
@@ -60,7 +60,7 @@ object ProactiveToolPlanner {
 
         if (normalized.containsAny(SCHEDULE_WORDS)) {
             addAuto("get_app_usage", "用户提到上课、学习或具体时间，需要判断现在是否可能正在忙。", """{"limit":5}""")
-            addAuto("get_location", "用户提到上课或行程，位置线索可能帮助判断是否已经到达相关场景。", """{"include_address":true}""")
+            addAuto("get_location", "用户提到上课或行程，位置线索可能帮助判断是否已经到达相关场景。", """{"include_address":true,"force_refresh":true}""")
             if (normalized.hasExplicitActionConsent()) {
                 addAuto("calendar_tool", "用户明确提到课程、日程或具体时间，可以主动读取或写入日历来延续安排。", """{"action":"read","limit":5}""")
                 normalized.buildAlarmArgumentsJson()?.let { alarmArgs ->
@@ -75,8 +75,8 @@ object ProactiveToolPlanner {
         if (normalized.containsAny(MEAL_WORDS)) {
             addAuto("get_app_usage", "用户提到吃饭，先看是否还在刷手机或忙别的。", """{"limit":5}""")
             addAuto("get_battery_info", "用户要吃饭或可能出门时，顺手确认设备电量。")
-            addAuto("get_location", "用户提到吃饭，位置线索能帮助判断是否在外面或适合推荐附近。", """{"include_address":true}""")
-            addAuto("explore_nearby", "用户提到吃饭，可以主动看看附近有没有合适的吃饭地点。", """{"radius":1000,"query":"餐厅 美食"}""")
+            addAuto("get_location", "用户提到吃饭，位置线索能帮助判断是否在外面或适合推荐附近。", """{"include_address":true,"force_refresh":true}""")
+            addAuto("explore_nearby", "用户提到吃饭，可以主动看看附近有没有合适的吃饭地点。", """{"radius":1000,"keyword":"餐厅 美食","force_refresh":true}""")
         }
 
         if (normalized.containsAny(STUDY_WORDS)) {

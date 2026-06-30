@@ -24,6 +24,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -31,6 +32,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Camera01
 import me.rerere.hugeicons.stroke.Location01
@@ -43,6 +45,8 @@ import me.rerere.hugeicons.stroke.Watch01
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.datastore.SystemToolsSetting
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
+import me.rerere.rikkahub.data.service.AmapService
+import me.rerere.rikkahub.data.service.LocationService
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionAccessBackgroundLocation
@@ -57,6 +61,9 @@ import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
 import org.koin.androidx.compose.koinViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 @Composable
 fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
@@ -92,6 +99,50 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
     val cameraPermissionState = rememberPermissionState(permissions = setOf(PermissionCamera))
 
     val smsPermissionState = rememberPermissionState(permissions = setOf(PermissionReadSms))
+    val locationRefreshScope = rememberCoroutineScope()
+    val manualLocationTimeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()) }
+    var isRefreshingLocation by remember { mutableStateOf(false) }
+    var manualLocationStatus by remember { mutableStateOf<String?>(null) }
+
+    fun refreshLocationNow() {
+        if (!locationPermissionState.allPermissionsGranted) {
+            manualLocationStatus = "位置权限还没授予，先点授权。"
+            locationPermissionState.requestPermissions()
+            return
+        }
+        locationRefreshScope.launch {
+            isRefreshingLocation = true
+            manualLocationStatus = "正在请求系统新定位..."
+            val apiKey = systemToolsSetting.amapApiKey
+            val service = LocationService(context, AmapService(apiKey))
+            val result = if (apiKey.isNotBlank()) {
+                service.getCurrentLocation(apiKey, forceRefresh = true)
+            } else {
+                service.getCoordinatesOnly(forceRefresh = true)
+            }
+            manualLocationStatus = result.fold(
+                onSuccess = { location ->
+                    val source = when (location.source.name) {
+                        "FRESH" -> "新定位"
+                        "FALLBACK_CACHED" -> "新定位超时，使用缓存兜底"
+                        else -> "缓存"
+                    }
+                    buildString {
+                        append(source)
+                        append(" · ")
+                        append(manualLocationTimeFormat.format(Date(location.timestamp)))
+                        append("\n")
+                        append(location.address.ifBlank { "${location.latitude}, ${location.longitude}" })
+                        append(" · 精度约 ")
+                        append(location.accuracy.toInt())
+                        append(" 米")
+                    }
+                },
+                onFailure = { error -> "刷新定位失败：${error.message ?: "未知错误"}" }
+            )
+            isRefreshingLocation = false
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -156,6 +207,23 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                                     shape = MaterialTheme.shapes.small,
                                     colors = TextFieldDefaults.colors(focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent)
                                 )
+                            }
+                        )
+                        item(
+                            headlineContent = { Text("手动刷新定位") },
+                            supportingContent = {
+                                Text(
+                                    manualLocationStatus
+                                        ?: "点击后会请求 Android 系统新定位；高德只负责地址解析和周边搜索。"
+                                )
+                            },
+                            trailingContent = {
+                                FilledTonalButton(
+                                    enabled = !isRefreshingLocation,
+                                    onClick = { refreshLocationNow() }
+                                ) {
+                                    Text(if (isRefreshingLocation) "刷新中" else "刷新")
+                                }
                             }
                         )
                     }
