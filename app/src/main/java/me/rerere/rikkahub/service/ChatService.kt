@@ -322,6 +322,7 @@ class ChatService(
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
     private val proactiveToolCooldowns = ConcurrentHashMap<String, Instant>()
+    private val chatTurnFollowUpCooldowns = ConcurrentHashMap<String, Instant>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -639,7 +640,12 @@ class ChatService(
             .withHumanLikeToolPrompts()
             .withProactiveCooldown()
         val latestUserText = hiddenMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
-        val proactiveContext = collectProactiveToolContext(hiddenMessages, availableTools)
+        val proactiveContext = collectProactiveToolContext(
+            messages = hiddenMessages,
+            tools = availableTools,
+            settings = settings,
+            assistant = assistant,
+        )
         val memoryContext = memoryBankService.buildRecallContext(
             assistantId = assistant.id.toString(),
             query = latestUserText,
@@ -871,7 +877,12 @@ class ChatService(
             val latestUserText = conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }
                 ?.toText()
                 .orEmpty()
-            val proactiveContext = collectProactiveToolContext(conversation.currentMessages, availableTools)
+            val proactiveContext = collectProactiveToolContext(
+                messages = conversation.currentMessages,
+                tools = availableTools,
+                settings = settings,
+                assistant = assistant,
+            )
             val memoryContext = memoryBankService.buildRecallContext(
                 assistantId = assistant.id.toString(),
                 query = latestUserText,
@@ -1259,23 +1270,43 @@ class ChatService(
         addAll(pluginToolProvider.getTools())
     }
 
-    private suspend fun collectProactiveToolContext(messages: List<UIMessage>, tools: List<Tool>): String {
+    private suspend fun collectProactiveToolContext(
+        messages: List<UIMessage>,
+        tools: List<Tool>,
+        settings: Settings,
+        assistant: Assistant,
+    ): String {
         val latestUserText = messages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
         if (latestUserText.isBlank()) return ""
         val recentTools = proactiveToolCooldowns
             .filterValues { java.time.Duration.between(it, Instant.now()).toMillis() < 5.minutes.inWholeMilliseconds }
             .keys
             .toSet()
-        val plan = ProactiveToolPlanner.plan(
-            userText = latestUserText,
+        val planResult = buildChatTurnPlan(
+            messages = messages,
+            settings = settings,
+            assistant = assistant,
             availableToolNames = tools.map { it.name }.toSet(),
             recentlyUsedToolNames = recentTools,
         )
-        if (plan.isEmpty()) return ""
+        val plan = planResult.plan
+        scheduleChatTurnFollowUp(settings, latestUserText, plan)
+        val toolRequests = plan.toolRequests.filter { it.toolName !in recentTools }
+        val fallbackRequests = if (!planResult.fromModel) {
+            ProactiveToolPlanner.plan(
+                userText = latestUserText,
+                availableToolNames = tools.map { it.name }.toSet(),
+                recentlyUsedToolNames = recentTools,
+            )
+        } else {
+            emptyList()
+        }
+        val requests = (toolRequests + fallbackRequests).distinctBy { it.toolName }.take(5)
+        if (requests.isEmpty() && plan.expressionGuidance.isNullOrBlank()) return ""
 
         val toolsByName = tools.associateBy { it.name }
-        val executableRequests = plan.filter { it.autoExecutable }
-        val actionCandidates = plan.filterNot { it.autoExecutable }
+        val executableRequests = requests.filter { it.autoExecutable }
+        val actionCandidates = requests.filterNot { it.autoExecutable }
         val results = executableRequests.mapNotNull { request ->
             val tool = toolsByName[request.toolName] ?: return@mapNotNull null
             val output = runCatching {
@@ -1293,8 +1324,13 @@ class ChatService(
             """.trimIndent()
         }
 
-        if (results.isEmpty() && actionCandidates.isEmpty()) return ""
+        if (results.isEmpty() && actionCandidates.isEmpty() && plan.expressionGuidance.isNullOrBlank()) return ""
         return buildString {
+            plan.expressionGuidance?.takeIf { it.isNotBlank() }?.let { guidance ->
+                appendLine("本轮露露自己的表达打算：$guidance")
+                appendLine("这只是后台表达方向，不要把它原样说给用户。")
+                appendLine()
+            }
             if (results.isNotEmpty()) {
                 appendLine("以下是程序在本轮回复前主动感知到的工具结果。")
                 appendLine("它们不是用户命令你查看的，而是你像真人一样主动留意到的上下文。")
@@ -1313,6 +1349,75 @@ class ChatService(
             }
         }
     }
+
+    private suspend fun buildChatTurnPlan(
+        messages: List<UIMessage>,
+        settings: Settings,
+        assistant: Assistant,
+        availableToolNames: Set<String>,
+        recentlyUsedToolNames: Set<String>,
+    ): ChatTurnPlanResult {
+        val currentState = settings.luluStates.currentLuluState(assistant.id)
+        val pendingThoughts = settings.luluThoughts
+            .thoughtHistory(assistant.id)
+            .map { it.content }
+        val input = LuluChatTurnPlanInput(
+            assistantName = assistant.name,
+            state = currentState,
+            recentMessages = messages,
+            pendingThoughts = pendingThoughts,
+            availableToolNames = availableToolNames,
+            recentlyUsedToolNames = recentlyUsedToolNames,
+        )
+        val modelPlan = settings.luluIntentModelId
+            ?.let { settings.findModelById(it) }
+            ?.takeIf { it.type == ModelType.CHAT }
+            ?.let { model ->
+                runCatching {
+                    LuluIntentModelPlanner.planChatTurnOrNull(
+                        input = input,
+                        settings = settings,
+                        model = model,
+                        providerManager = providerManager,
+                    )
+                }.getOrNull()
+            }
+        return if (modelPlan != null) {
+            ChatTurnPlanResult(plan = modelPlan, fromModel = true)
+        } else {
+            ChatTurnPlanResult(plan = LuluChatTurnPlan(), fromModel = false)
+        }
+    }
+
+    private fun scheduleChatTurnFollowUp(
+        settings: Settings,
+        latestUserText: String,
+        plan: LuluChatTurnPlan,
+    ) {
+        val delayMinutes = plan.followUpDelayMinutes ?: return
+        val cooldownKey = "${latestUserText.take(48)}:$delayMinutes"
+        val now = Instant.now()
+        val lastScheduled = chatTurnFollowUpCooldowns[cooldownKey]
+        if (lastScheduled != null && java.time.Duration.between(lastScheduled, now).toMillis() < 60_000L) {
+            return
+        }
+        chatTurnFollowUpCooldowns[cooldownKey] = now
+        val reason = plan.followUpReason?.takeIf { it.isNotBlank() }
+            ?: "露露在本轮聊天里自主决定稍后再来确认用户状态。"
+        ProactiveMessageService.scheduleTargeted(
+            context = context,
+            setting = settings.proactiveMessageSetting,
+            triggerAtMillis = System.currentTimeMillis() + delayMinutes * 60_000L,
+            reason = reason,
+            userText = latestUserText.take(160),
+            kind = ProactiveReminderKind.GENERAL.name.lowercase(Locale.ROOT),
+        )
+    }
+
+    private data class ChatTurnPlanResult(
+        val plan: LuluChatTurnPlan,
+        val fromModel: Boolean,
+    )
 
     private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant, proactiveContext: String): List<UIMessage> {
         val instruction = buildString {

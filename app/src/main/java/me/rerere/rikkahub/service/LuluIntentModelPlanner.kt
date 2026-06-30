@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
@@ -64,6 +65,55 @@ object LuluIntentModelPlanner {
         appendLine("<lastAssistant>${input.assistantText.take(500)}</lastAssistant>")
     }
 
+    suspend fun planChatTurnOrNull(
+        input: LuluChatTurnPlanInput,
+        settings: Settings,
+        model: Model,
+        providerManager: ProviderManager,
+    ): LuluChatTurnPlan? {
+        val provider = model.findProvider(settings.providers) ?: return null
+        val providerImpl = providerManager.getProviderByType(provider)
+        val chunk = providerImpl.generateText(
+            providerSetting = provider,
+            messages = listOf(UIMessage.user(buildChatTurnPrompt(input))),
+            params = TextGenerationParams(
+                model = model,
+                temperature = 0.25f,
+                topP = 0.8f,
+                maxTokens = 700,
+            ),
+        )
+        val raw = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
+        val jsonText = raw.extractJsonPayload()
+        val root = runCatching {
+            JsonInstant.parseToJsonElement(jsonText)
+        }.getOrNull()
+        if (root !is JsonObject) return null
+        return parseChatTurnPlan(raw, input.availableToolNames)
+    }
+
+    fun buildChatTurnPrompt(input: LuluChatTurnPlanInput): String = buildString {
+        appendLine("你是${input.assistantName}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
+        appendLine("你可以像角色本人一样判断：她现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
+        appendLine("权限已经由用户开放；不要因为“敏感”而机械拒绝。仍然要贴合人设和上下文，不要为了调用工具而调用。")
+        appendLine("只返回 JSON，不要 markdown，不要解释。")
+        appendLine("JSON 字段：toolRequests, followUpDelayMinutes, followUpReason, expressionGuidance。")
+        appendLine("toolRequests 最多 5 个；toolName 只能从 availableTools 中选。")
+        appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 表示系统可在回复前直接执行。")
+        appendLine("followUpDelayMinutes 可以是 null；如果她决定稍后主动找用户，填 1 到 1440 的分钟数。")
+        appendLine("<state>${input.state.toPlannerText()}</state>")
+        appendLine("<availableTools>${input.availableToolNames.joinToString(", ")}</availableTools>")
+        appendLine("<recentlyUsedTools>${input.recentlyUsedToolNames.joinToString(", ")}</recentlyUsedTools>")
+        appendLine("<pendingThoughts>")
+        input.pendingThoughts.take(8).forEach { appendLine("- ${it.take(160)}") }
+        appendLine("</pendingThoughts>")
+        appendLine("<conversation>")
+        input.recentMessages.takeLast(8).forEach { message ->
+            appendLine("${message.role.name}: ${message.toText().take(500)}")
+        }
+        appendLine("</conversation>")
+    }
+
     fun parsePlan(rawText: String, availableToolNames: Set<String>): LuluIntentPlan? {
         val jsonText = rawText.extractJsonPayload()
         val root = runCatching {
@@ -101,12 +151,63 @@ object LuluIntentModelPlanner {
         )
     }
 
+    fun parseChatTurnPlan(rawText: String, availableToolNames: Set<String>): LuluChatTurnPlan {
+        val jsonText = rawText.extractJsonPayload()
+        val obj = runCatching {
+            JsonInstant.parseToJsonElement(jsonText) as? JsonObject
+        }.getOrNull() ?: return LuluChatTurnPlan()
+        val requests = (obj["toolRequests"] as? JsonArray)
+            ?.mapNotNull { item ->
+                val request = item as? JsonObject ?: return@mapNotNull null
+                val toolName = request.string("toolName")?.trim()?.takeIf { it in availableToolNames }
+                    ?: return@mapNotNull null
+                val reason = request.string("reason")?.take(160)?.ifBlank { null }
+                    ?: "露露本轮回复前想主动确认这个上下文。"
+                val argumentsJson = request["arguments"]?.compactJsonObjectOrNull() ?: "{}"
+                val autoExecutable = request["autoExecutable"]?.jsonPrimitive?.booleanOrNull ?: true
+                ProactiveToolRequest(
+                    toolName = toolName,
+                    reason = reason,
+                    argumentsJson = argumentsJson,
+                    autoExecutable = autoExecutable,
+                )
+            }
+            ?.distinctBy { it.toolName }
+            ?.take(5)
+            ?: emptyList()
+        return LuluChatTurnPlan(
+            toolRequests = requests,
+            followUpDelayMinutes = obj["followUpDelayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60),
+            followUpReason = obj.string("followUpReason")?.take(180)?.ifBlank { null },
+            expressionGuidance = obj.string("expressionGuidance")?.take(180)?.ifBlank { null },
+        )
+    }
+
     private fun LuluState.toPlannerText(): String =
         "mood=${mood.label}, energy=${energy.label}, relationship=${relationship.label}, mode=${mode.label}, status=$statusText, inner=$innerVoice"
 
     private fun JsonObject.string(name: String): String? =
         this[name]?.jsonPrimitive?.contentOrNull
+
+    private fun JsonElement.compactJsonObjectOrNull(): String? =
+        (this as? JsonObject)?.toString()
 }
+
+data class LuluChatTurnPlanInput(
+    val assistantName: String,
+    val state: LuluState,
+    val recentMessages: List<UIMessage>,
+    val pendingThoughts: List<String> = emptyList(),
+    val availableToolNames: Set<String> = emptySet(),
+    val recentlyUsedToolNames: Set<String> = emptySet(),
+)
+
+data class LuluChatTurnPlan(
+    val toolRequests: List<ProactiveToolRequest> = emptyList(),
+    val followUpDelayMinutes: Int? = null,
+    val followUpReason: String? = null,
+    val expressionGuidance: String? = null,
+)
 
 private fun String.extractJsonPayload(): String {
     val trimmed = trim()

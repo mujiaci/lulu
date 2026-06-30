@@ -129,4 +129,70 @@ class LuluIntentPlannerTest {
 
         assertEquals(null, plan)
     }
+
+    @Test
+    fun `model planner parses chat turn action plan with executable and candidate tools`() {
+        val plan = LuluIntentModelPlanner.parseChatTurnPlan(
+            rawText = """
+                {
+                  "toolRequests": [
+                    {
+                      "toolName": "get_location",
+                      "reason": "先看看用户是不是已经到上课地点",
+                      "arguments": {"include_address": true},
+                      "autoExecutable": true
+                    },
+                    {
+                      "toolName": "set_alarm",
+                      "reason": "如果时间明确就顺手提醒",
+                      "arguments": {"hour": 19, "minute": 55, "label": "露露提醒上课"},
+                      "autoExecutable": false
+                    },
+                    {
+                      "toolName": "unknown_tool",
+                      "reason": "应该被过滤",
+                      "autoExecutable": true
+                    }
+                  ],
+                  "followUpDelayMinutes": 25,
+                  "followUpReason": "等一会儿确认他有没有准备好",
+                  "expressionGuidance": "短一点，像自然想起来"
+                }
+            """.trimIndent(),
+            availableToolNames = setOf("get_location", "set_alarm", "get_app_usage"),
+        )
+
+        assertEquals(2, plan.toolRequests.size)
+        assertEquals("get_location", plan.toolRequests[0].toolName)
+        assertTrue(plan.toolRequests[0].autoExecutable)
+        assertEquals("""{"include_address":true}""", plan.toolRequests[0].argumentsJson)
+        assertEquals("set_alarm", plan.toolRequests[1].toolName)
+        assertFalse(plan.toolRequests[1].autoExecutable)
+        assertEquals(25, plan.followUpDelayMinutes)
+        assertTrue(plan.followUpReason!!.contains("确认"))
+        assertTrue(plan.expressionGuidance!!.contains("短一点"))
+    }
+
+    @Test
+    fun `model planner clamps chat turn action plan and limits tools`() {
+        val plan = LuluIntentModelPlanner.parseChatTurnPlan(
+            rawText = """
+                {
+                  "toolRequests": [
+                    {"toolName": "a", "reason": "1"},
+                    {"toolName": "b", "reason": "2"},
+                    {"toolName": "c", "reason": "3"},
+                    {"toolName": "d", "reason": "4"},
+                    {"toolName": "e", "reason": "5"},
+                    {"toolName": "f", "reason": "6"}
+                  ],
+                  "followUpDelayMinutes": 99999
+                }
+            """.trimIndent(),
+            availableToolNames = setOf("a", "b", "c", "d", "e", "f"),
+        )
+
+        assertEquals(listOf("a", "b", "c", "d", "e"), plan.toolRequests.map { it.toolName })
+        assertEquals(24 * 60, plan.followUpDelayMinutes)
+    }
 }
