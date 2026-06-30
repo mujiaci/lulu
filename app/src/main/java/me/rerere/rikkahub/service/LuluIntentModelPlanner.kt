@@ -55,6 +55,8 @@ object LuluIntentModelPlanner {
         appendLine("intent 只能是 CARE_REMINDER, STAY_NEAR, REACH_OUT, CHECK_CONTEXT, DO_NOT_DISTURB。")
         appendLine("delayMinutes 可以是 null；如果 shouldMessageNow=true，delayMinutes 可以为 null。")
         appendLine("toolNames 只能从 availableTools 里选择，最多 5 个。")
+        appendLine("Follow-up planning contract: return followUps when several future proactive checks are useful. Each item only has delayMinutes, reason, kind. Do not write future message text.")
+        appendLine("Never simulate future turns or no-reply timelines. The app will regenerate the actual message at trigger time.")
         appendLine("<state>${input.state.toPlannerText()}</state>")
         appendLine("<minutesSinceLastChat>${input.minutesSinceLastChat}</minutesSinceLastChat>")
         appendLine("<availableTools>${input.availableToolNames.joinToString(", ")}</availableTools>")
@@ -146,8 +148,9 @@ object LuluIntentModelPlanner {
             shouldMessageNow = shouldMessageNow,
             delayMinutes = delayMinutes,
             toolNames = toolNames,
-            reason = reason,
+            reason = reason.sanitizePlanReason(),
             tone = tone,
+            followUps = parseFollowUps(obj),
         )
     }
 
@@ -178,10 +181,32 @@ object LuluIntentModelPlanner {
         return LuluChatTurnPlan(
             toolRequests = requests,
             followUpDelayMinutes = obj["followUpDelayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60),
-            followUpReason = obj.string("followUpReason")?.take(180)?.ifBlank { null },
+            followUpReason = obj.string("followUpReason")?.sanitizePlanReason()?.take(180)?.ifBlank { null },
+            followUps = parseFollowUps(obj),
             expressionGuidance = obj.string("expressionGuidance")?.take(180)?.ifBlank { null },
         )
     }
+
+    private fun parseFollowUps(obj: JsonObject): List<LuluFollowUpPlan> =
+        (obj["followUps"] as? JsonArray)
+            ?.mapNotNull { item ->
+                val plan = item as? JsonObject ?: return@mapNotNull null
+                val delay = plan["delayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60)
+                    ?: return@mapNotNull null
+                val reason = plan.string("reason")
+                    ?.sanitizePlanReason()
+                    ?.take(180)
+                    ?.ifBlank { null }
+                    ?: return@mapNotNull null
+                LuluFollowUpPlan(
+                    delayMinutes = delay,
+                    reason = reason,
+                    kind = plan.string("kind")?.take(40)?.ifBlank { null },
+                )
+            }
+            ?.distinctBy { it.delayMinutes to it.reason }
+            ?.take(5)
+            ?: emptyList()
 
     private fun LuluState.toPlannerText(): String =
         "mood=${mood.label}, energy=${energy.label}, relationship=${relationship.label}, mode=${mode.label}, status=$statusText, scene=$selfScene, inner=$innerVoice"
@@ -206,8 +231,32 @@ data class LuluChatTurnPlan(
     val toolRequests: List<ProactiveToolRequest> = emptyList(),
     val followUpDelayMinutes: Int? = null,
     val followUpReason: String? = null,
+    val followUps: List<LuluFollowUpPlan> = emptyList(),
     val expressionGuidance: String? = null,
 )
+
+data class LuluFollowUpPlan(
+    val delayMinutes: Int,
+    val reason: String,
+    val kind: String? = null,
+)
+
+private fun String.sanitizePlanReason(): String =
+    lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .filterNot { line ->
+            line.contains("佳辞") ||
+                line.contains("露露") ||
+                line.contains("～") ||
+                line.contains("呀") ||
+                line.contains("哦") ||
+                line.contains("吗") ||
+                line.contains("呢") ||
+                line.contains("zzz", ignoreCase = true)
+        }
+        .joinToString(" ")
+        .ifBlank { take(80) }
 
 private fun String.extractJsonPayload(): String {
     val trimmed = trim()

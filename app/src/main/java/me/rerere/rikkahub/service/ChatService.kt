@@ -125,6 +125,7 @@ import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
 import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
@@ -504,6 +505,7 @@ class ChatService(
             val settings = runBlocking { settingsStore.settingsFlow.first() }
             val proactiveSetting = settings.proactiveMessageSetting
             if (proactiveSetting.enabled) {
+                me.rerere.rikkahub.data.service.ProactiveMessageService.clearTargetedQueue(context)
                 me.rerere.rikkahub.data.service.ProactiveMessageService.scheduleNext(
                     context = context,
                     settings = settings,
@@ -978,12 +980,12 @@ class ChatService(
                 assistantText = lastAssistantText,
                 finalConversation = finalConversation,
             )
-            val scheduledPlan = luluIntentPlan
-                .toProactiveReminderPlan(userText = lastUserText)
-                ?: ProactiveReminderPlanner.plan(
-                    userText = lastUserText,
-                    assistantText = lastAssistantText,
-                )
+            val scheduledPlans = buildProactiveReminderPlansFromTurn(
+                plan = luluIntentPlan,
+                userText = lastUserText,
+                assistantText = lastAssistantText,
+            )
+            val scheduledPlan = scheduledPlans.firstOrNull()
             settingsStore.update { currentSettings ->
                 currentSettings.recordLuluPresenceTurn(
                     assistantId = assistant.id,
@@ -995,7 +997,7 @@ class ChatService(
             }
             scheduleProactiveReminderFromTurn(
                 settings = settings,
-                plan = scheduledPlan,
+                plans = scheduledPlans,
             )
             launchAffectiveMemoryExtraction(
                 conversationId = conversationId,
@@ -1030,17 +1032,45 @@ class ChatService(
 
     private fun scheduleProactiveReminderFromTurn(
         settings: Settings,
-        plan: ProactiveReminderPlan?,
+        plans: List<ProactiveReminderPlan>,
     ) {
-        plan ?: return
-        ProactiveMessageService.scheduleTargeted(
+        ProactiveMessageService.replaceTargetedQueue(
             context = context,
             setting = settings.proactiveMessageSetting,
-            triggerAtMillis = plan.triggerAtMillis,
-            reason = plan.toTargetedReason(),
-            userText = plan.userText,
-            kind = plan.kind.name.lowercase(Locale.ROOT),
+            plans = plans,
         )
+    }
+
+    private fun buildProactiveReminderPlansFromTurn(
+        plan: LuluIntentPlan,
+        userText: String,
+        assistantText: String,
+    ): List<ProactiveReminderPlan> {
+        val fromFollowUps = plan.followUps.map { followUp ->
+            ProactiveReminderPlan(
+                triggerAtMillis = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(followUp.delayMinutes.toLong()),
+                kind = followUp.kind.toProactiveReminderKind(),
+                reason = followUp.reason,
+                userText = userText.take(160),
+                preferredToolNames = plan.toolNames,
+            )
+        }
+        if (fromFollowUps.isNotEmpty()) return fromFollowUps
+
+        val fromIntent = plan.toProactiveReminderPlan(userText = userText)
+        val fallback = ProactiveReminderPlanner.plan(
+            userText = userText,
+            assistantText = assistantText,
+        )
+        return listOfNotNull(fromIntent ?: fallback)
+    }
+
+    private fun String?.toProactiveReminderKind(): ProactiveReminderKind = when (this?.lowercase(Locale.ROOT)) {
+        "sleep" -> ProactiveReminderKind.SLEEP
+        "schedule" -> ProactiveReminderKind.SCHEDULE
+        "meal" -> ProactiveReminderKind.MEAL
+        "study" -> ProactiveReminderKind.STUDY
+        else -> ProactiveReminderKind.GENERAL
     }
 
     private suspend fun buildLuluIntentPlan(
@@ -1297,7 +1327,6 @@ class ChatService(
             recentlyUsedToolNames = recentTools,
         )
         val plan = planResult.plan
-        scheduleChatTurnFollowUp(settings, latestUserText, plan)
         val toolRequests = plan.toolRequests.filter { it.toolName !in recentTools }
         val fallbackRequests = if (!planResult.fromModel) {
             ProactiveToolPlanner.plan(

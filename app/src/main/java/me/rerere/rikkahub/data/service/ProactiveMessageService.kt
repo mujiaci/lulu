@@ -58,7 +58,13 @@ import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.Settings
@@ -107,6 +113,7 @@ class ProactiveMessageService : KoinComponent {
         internal const val KEY_TARGETED_REASON = "targeted_reason"
         internal const val KEY_TARGETED_USER_TEXT = "targeted_user_text"
         internal const val KEY_TARGETED_KIND = "targeted_kind"
+        internal const val KEY_TARGETED_QUEUE = "targeted_queue"
         internal const val EXTRA_TARGETED_REASON = "targeted_reason"
         internal const val EXTRA_TARGETED_USER_TEXT = "targeted_user_text"
         internal const val EXTRA_TARGETED_KIND = "targeted_kind"
@@ -292,6 +299,108 @@ class ProactiveMessageService : KoinComponent {
             }
 
             Log.d(TAG, "Scheduled targeted proactive message kind=$kind at ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(triggerAtMillis))}")
+        }
+
+        fun replaceTargetedQueue(
+            context: Context,
+            setting: ProactiveMessageSetting,
+            plans: List<ProactiveReminderPlan>,
+        ) {
+            clearTargetedQueue(context)
+            val upcoming = plans
+                .filter { it.triggerAtMillis > java.lang.System.currentTimeMillis() }
+                .sortedBy { it.triggerAtMillis }
+                .take(5)
+            if (!setting.enabled || upcoming.isEmpty()) return
+
+            val queue = JsonArray(upcoming.map { plan ->
+                buildJsonObject {
+                    put("triggerAtMillis", JsonPrimitive(plan.triggerAtMillis))
+                    put("reason", JsonPrimitive(plan.toQueuedTargetedReason()))
+                    put("userText", JsonPrimitive(plan.userText))
+                    put("kind", JsonPrimitive(plan.kind.name.lowercase(java.util.Locale.ROOT)))
+                }
+            })
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putString(KEY_TARGETED_QUEUE, queue.toString())
+                .apply()
+            scheduleTargeted(
+                context = context,
+                setting = setting,
+                triggerAtMillis = upcoming.first().triggerAtMillis,
+                reason = upcoming.first().toQueuedTargetedReason(),
+                userText = upcoming.first().userText,
+                kind = upcoming.first().kind.name.lowercase(java.util.Locale.ROOT),
+            )
+        }
+
+        private fun ProactiveReminderPlan.toQueuedTargetedReason(): String = buildString {
+            appendLine(reason)
+            if (preferredToolNames.isNotEmpty()) {
+                appendLine("At trigger time, check these sensing tools first if available: ${preferredToolNames.joinToString(", ")}.")
+            }
+            appendLine("This is only a proactive-plan reason. Do not treat it as prewritten message text; generate the actual user-facing message fresh.")
+        }.trim()
+
+        fun clearTargetedQueue(context: Context) {
+            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .remove(KEY_TARGETED_TRIGGER_TIME)
+                .remove(KEY_TARGETED_REASON)
+                .remove(KEY_TARGETED_USER_TEXT)
+                .remove(KEY_TARGETED_KIND)
+                .remove(KEY_TARGETED_QUEUE)
+                .apply()
+
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
+                action = ACTION_PROACTIVE_MESSAGE
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                TARGETED_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            pendingIntent?.let { alarmManager.cancel(it) }
+        }
+
+        internal fun popCurrentTargetedAndScheduleNext(
+            context: Context,
+            setting: ProactiveMessageSetting,
+        ): Boolean {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val now = java.lang.System.currentTimeMillis()
+            val queue = runCatching {
+                (Json.parseToJsonElement(prefs.getString(KEY_TARGETED_QUEUE, "[]").orEmpty()) as? JsonArray)
+                    ?.mapNotNull { it as? JsonObject }
+            }.getOrNull().orEmpty()
+            val remaining = queue
+                .drop(1)
+                .filter { item ->
+                    (item["triggerAtMillis"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: 0L) > now
+                }
+            val next = remaining.minByOrNull {
+                it["triggerAtMillis"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: Long.MAX_VALUE
+            }
+            if (next == null) {
+                clearTargetedQueue(context)
+                return false
+            }
+
+            prefs.edit()
+                .putString(KEY_TARGETED_QUEUE, JsonArray(remaining).toString())
+                .apply()
+            scheduleTargeted(
+                context = context,
+                setting = setting,
+                triggerAtMillis = next["triggerAtMillis"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: return false,
+                reason = next["reason"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                userText = next["userText"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                kind = next["kind"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            )
+            return true
         }
 
         fun getNextTriggerTime(context: Context): Long? {
@@ -881,18 +990,25 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 if (isTargetedTrigger) {
-                    prefs.edit()
-                        .remove(ProactiveMessageService.KEY_TARGETED_TRIGGER_TIME)
-                        .remove(ProactiveMessageService.KEY_TARGETED_REASON)
-                        .remove(ProactiveMessageService.KEY_TARGETED_USER_TEXT)
-                        .remove(ProactiveMessageService.KEY_TARGETED_KIND)
-                        .apply()
+                    val hasNextTargeted = ProactiveMessageService.popCurrentTargetedAndScheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        setting = proactiveSetting,
+                    )
+                    if (!hasNextTargeted) {
+                        ProactiveMessageService.scheduleNext(
+                            context = this@ProactiveMessageTriggerService,
+                            settings = settings,
+                            minutesSinceLastChat = 0L,
+                        )
+                    }
                 }
-                ProactiveMessageService.scheduleNext(
-                    context = this@ProactiveMessageTriggerService,
-                    settings = settings,
-                    minutesSinceLastChat = 0L,
-                )
+                if (!isTargetedTrigger) {
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        minutesSinceLastChat = 0L,
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(ProactiveMessageService.TAG, "Failed to trigger proactive message", e)
             } finally {

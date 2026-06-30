@@ -21,6 +21,7 @@ data class LuluIntentPlan(
     val toolNames: List<String>,
     val reason: String,
     val tone: String,
+    val followUps: List<LuluFollowUpPlan> = emptyList(),
 )
 
 enum class LuluIntent {
