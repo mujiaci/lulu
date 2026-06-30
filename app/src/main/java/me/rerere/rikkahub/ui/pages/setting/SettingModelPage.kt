@@ -107,6 +107,7 @@ fun SettingModelPage(vm: SettingVM = koinViewModel()) {
                         ModelSettingSection.MEMORY_EMBEDDING -> DefaultMemoryEmbeddingModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.MEMORY_RERANK -> DefaultMemoryRerankModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.MEMORY_EXTRACTION -> DefaultMemoryExtractionModelSetting(settings = settings, vm = vm)
+                        ModelSettingSection.LULU_INTENT -> DefaultLuluIntentModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.IMAGE_GENERATION -> DefaultImageGenerationModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.SUGGESTION -> DefaultSuggestionModelSetting(settings = settings, vm = vm)
                         ModelSettingSection.TRANSLATION -> DefaultTranslationModelSetting(settings = settings, vm = vm)
@@ -125,6 +126,7 @@ internal enum class ModelSettingSection {
     MEMORY_EMBEDDING,
     MEMORY_RERANK,
     MEMORY_EXTRACTION,
+    LULU_INTENT,
     IMAGE_GENERATION,
     SUGGESTION,
     TRANSLATION,
@@ -138,6 +140,7 @@ internal fun defaultModelSettingSections(): List<ModelSettingSection> = listOf(
     ModelSettingSection.MEMORY_EMBEDDING,
     ModelSettingSection.MEMORY_RERANK,
     ModelSettingSection.MEMORY_EXTRACTION,
+    ModelSettingSection.LULU_INTENT,
     ModelSettingSection.IMAGE_GENERATION,
     ModelSettingSection.SUGGESTION,
     ModelSettingSection.TRANSLATION,
@@ -394,6 +397,42 @@ private fun DefaultMemoryExtractionModelSetting(
                                 memoryEmbeddingConfig = config.copy(
                                     extractionModelId = model.id.takeUnless { model.modelId.isBlank() }
                                 )
+                            )
+                        )
+                    },
+                    providers = settings.providers,
+                    allowClear = true,
+                    modifier = Modifier.wrapContentWidth()
+                )
+            }
+        }
+    )
+}
+
+@Composable
+private fun DefaultLuluIntentModelSetting(
+    settings: Settings,
+    vm: SettingVM
+) {
+    ModelFeatureCard(
+        title = {
+            Text(stringResource(R.string.setting_model_page_lulu_intent_model), maxLines = 1)
+        },
+        description = {
+            Text(stringResource(R.string.setting_model_page_lulu_intent_model_desc))
+        },
+        icon = {
+            Icon(HugeIcons.MessageMultiple01, null)
+        },
+        actions = {
+            Box(modifier = Modifier.weight(1f)) {
+                ModelSelector(
+                    modelId = settings.luluIntentModelId,
+                    type = ModelType.CHAT,
+                    onSelect = { model ->
+                        vm.updateSettings(
+                            settings.copy(
+                                luluIntentModelId = model.id.takeUnless { model.modelId.isBlank() }
                             )
                         )
                     },

@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+﻿<?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <string name="about_page_github">Github</string>
   <string name="about_page_license">授權條款</string>
@@ -1055,4 +1055,6 @@
   <string name="video">影片</string>
   <string name="web_search_disabled">已禁用網頁搜尋</string>
   <string name="web_search_enabled">已啟用網頁搜尋</string>
+  <string name="setting_model_page_lulu_intent_model">Secondary API / Lulu intent planner model</string>
+  <string name="setting_model_page_lulu_intent_model_desc">Used in the background to decide what Lulu wants to do, whether to proactively message, and which tools to check first; leave empty to use local fallback rules</string>
 </resources>

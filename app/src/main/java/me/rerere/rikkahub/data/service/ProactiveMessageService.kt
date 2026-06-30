@@ -5,6 +5,8 @@ import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
+import android.os.BatteryManager
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -21,12 +23,12 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
 import me.rerere.ai.provider.Model
+import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
@@ -63,12 +65,23 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.LuluThoughtCategory
+import me.rerere.rikkahub.data.model.currentLuluState
+import me.rerere.rikkahub.data.model.thoughtHistory
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.LuluIntent
+import me.rerere.rikkahub.service.LuluIntentInput
+import me.rerere.rikkahub.service.LuluIntentModelPlanner
+import me.rerere.rikkahub.service.LuluIntentPlan
+import me.rerere.rikkahub.service.LuluIntentPlanner
+import me.rerere.rikkahub.service.ProactiveReminderPlan
+import me.rerere.rikkahub.service.toProactiveReminderPlan
 import me.rerere.rikkahub.utils.sendNotification
 import java.time.Instant
 import kotlin.uuid.Uuid
@@ -264,6 +277,9 @@ class ProactiveMessageService : KoinComponent {
             sb.appendLine("这次不是随机主动消息，而是露露刚才自己决定稍后回来确认的一次目标消息。")
             sb.appendLine("目标类型: ${targetedKind.orEmpty()}")
             sb.appendLine("触发原因: $targetedReason")
+            sb.appendLine("生成回复前，如果触发原因里列出了感知工具或后续动作，请优先按那些线索主动查看状态，再自然地开口。")
+            sb.appendLine("如果用户之前已经把提醒、记录、闹钟或日程意图说得很明确，可以主动完成对应工具动作；不要机械等用户再次确认。")
+            sb.append(buildTargetedProactiveSensingInstruction(targetedKind, targetedReason))
             if (!targetedUserText.isNullOrBlank()) {
                 sb.appendLine("当时用户说过: $targetedUserText")
             }
@@ -295,6 +311,48 @@ class ProactiveMessageService : KoinComponent {
         val currentTime = java.lang.System.currentTimeMillis()
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
         sb.appendLine("当前时间: ${sdf.format(java.util.Date(currentTime))}")
+
+        // Battery context
+        try {
+            val batteryStatus = context.registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+            val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+            val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+            val batteryPercent = if (level >= 0 && scale > 0) level * 100 / scale else null
+            val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+            val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+            if (batteryPercent != null) {
+                sb.appendLine("设备电量: $batteryPercent%${if (isCharging) "，正在充电" else ""}")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to get battery context", e)
+        }
+
+        // Health context
+        try {
+            val gadgetbridgePath = settings.systemToolsSetting.gadgetbridgeDbPath
+            if (settings.systemToolsSetting.gadgetbridgeEnabled && GadgetbridgeReader.dbFileExists(gadgetbridgePath)) {
+                val latestActivity = GadgetbridgeReader.readLatestActivitySample(gadgetbridgePath)
+                val latestDailySummary = GadgetbridgeReader.readDailySummaries(1, gadgetbridgePath).lastOrNull()
+                val latestSleep = GadgetbridgeReader.readSleepSummaries(1, gadgetbridgePath).lastOrNull()
+                val healthParts = buildList {
+                    latestSleep?.totalDuration?.let { sleepMinutes ->
+                        add("睡眠约${sleepMinutes / 60}小时${sleepMinutes % 60}分钟")
+                    }
+                    (latestActivity?.heartRate ?: latestDailySummary?.hrAvg)?.let { heartRate ->
+                        add("心率约${heartRate}")
+                    }
+                    (latestDailySummary?.steps ?: latestActivity?.steps)?.let { steps ->
+                        add("步数约${steps}")
+                    }
+                }
+                if (healthParts.isNotEmpty()) {
+                    sb.appendLine("健康状态: ${healthParts.joinToString("，")}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to get health context", e)
+        }
 
         // Location context
         try {
@@ -541,21 +599,66 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 conversationId = conversation?.id ?: kotlin.uuid.Uuid.random()
                 val conversationId = conversationId!!
 
-                // 构建上下文
-                val contextStr = proactiveMessageService.buildProactiveContext(
-                    context = this@ProactiveMessageTriggerService,
-                    settings = settings,
-                    targetedReason = targetedReason,
-                    targetedUserText = targetedUserText,
-                    targetedKind = targetedKind,
-                )
-
                 // 获取历史消息
                 val historyMessages = conversation?.currentMessages?.let {
                     if (assistant.contextMessageSize > 0) {
                         it.takeLast(assistant.contextMessageSize)
                     } else it
                 } ?: emptyList()
+
+                // 构建工具列表（与 ChatService 保持一致）
+                val tools = buildTools(settings, assistant, model)
+
+                val autonomousPlan = if (isTargetedTrigger) {
+                    null
+                } else {
+                    buildAutonomousIntentPlan(
+                        settings = settings,
+                        assistant = assistant,
+                        historyMessages = historyMessages,
+                        availableToolNames = tools.map { it.name }.toSet(),
+                    )
+                }
+                if (!isTargetedTrigger && autonomousPlan?.intent == LuluIntent.DO_NOT_DISTURB) {
+                    Log.d(TAG, "Lulu intent planner chose not to disturb")
+                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                    stopSelf()
+                    return@launch
+                }
+                val deferredPlan = autonomousPlan
+                    ?.takeIf { !it.shouldMessageNow }
+                    ?.toProactiveReminderPlan(
+                        userText = historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
+                    )
+                if (deferredPlan != null && deferredPlan.triggerAtMillis > System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1)) {
+                    Log.d(TAG, "Lulu intent planner deferred proactive message: ${deferredPlan.reason}")
+                    ProactiveMessageService.scheduleTargeted(
+                        context = this@ProactiveMessageTriggerService,
+                        setting = proactiveSetting,
+                        triggerAtMillis = deferredPlan.triggerAtMillis,
+                        reason = deferredPlan.toTargetedReason(),
+                        userText = deferredPlan.userText,
+                        kind = deferredPlan.kind.name.lowercase(java.util.Locale.ROOT),
+                    )
+                    stopSelf()
+                    return@launch
+                }
+
+                val effectiveTargetedReason = targetedReason ?: autonomousPlan?.toImmediateReason()
+                val effectiveTargetedKind = targetedKind ?: autonomousPlan
+                    ?.takeIf { it.shouldMessageNow }
+                    ?.intent
+                    ?.name
+                    ?.lowercase(java.util.Locale.ROOT)
+
+                // 构建上下文
+                val contextStr = proactiveMessageService.buildProactiveContext(
+                    context = this@ProactiveMessageTriggerService,
+                    settings = settings,
+                    targetedReason = effectiveTargetedReason,
+                    targetedUserText = targetedUserText,
+                    targetedKind = effectiveTargetedKind,
+                )
 
                 // 构建系统提示词（包含记忆）
                 val systemPrompt = buildSystemPrompt(assistant, settings)
@@ -606,9 +709,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 val providerImpl = providerManager.getProviderByType(providerSetting)
-
-                // 构建工具列表（与 ChatService 保持一致）
-                val tools = buildTools(settings, assistant, model)
 
                 // 主动消息场景：支持工具调用，但限制最大步数
                 val params = TextGenerationParams(
@@ -676,6 +776,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     saveProactiveMessage(
                         settings, assistant, conversationId, conversation
                     )
+                    if (isTargetedTrigger) {
+                        settingsStore.update { currentSettings ->
+                            currentSettings.markTargetedProactiveThoughtExpressed(
+                                assistantId = assistant.id,
+                                targetedKind = targetedKind,
+                            )
+                        }
+                    }
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                 }
 
@@ -695,7 +803,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 stopSelf()
             }
         }
-
         return START_NOT_STICKY
     }
 
@@ -846,6 +953,67 @@ addAll(localTools.getTools(assistant.localTools))
             .withHumanLikeToolPrompts()
     }
 
+    private suspend fun buildAutonomousIntentPlan(
+        settings: Settings,
+        assistant: Assistant,
+        historyMessages: List<UIMessage>,
+        availableToolNames: Set<String>,
+    ): LuluIntentPlan {
+        val input = LuluIntentInput(
+            assistantName = assistant.name,
+            state = settings.luluStates.currentLuluState(assistant.id),
+            userText = historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
+            assistantText = historyMessages.lastOrNull { it.role == MessageRole.ASSISTANT }?.toText().orEmpty(),
+            minutesSinceLastChat = historyMessages.lastOrNull()
+                ?.createdAt
+                ?.toInstant(TimeZone.currentSystemDefault())
+                ?.toEpochMilliseconds()
+                ?.let { ((System.currentTimeMillis() - it) / 60_000L).coerceAtLeast(0) }
+                ?: Long.MAX_VALUE,
+            pendingThoughts = settings.luluThoughts
+                .thoughtHistory(assistant.id)
+                .map { it.content },
+            availableToolNames = availableToolNames,
+        )
+        val modelPlan = settings.luluIntentModelId
+            ?.let { settings.findModelById(it) }
+            ?.takeIf { it.type == ModelType.CHAT }
+            ?.let { plannerModel ->
+                runCatching {
+                    LuluIntentModelPlanner.planOrNull(
+                        input = input,
+                        settings = settings,
+                        model = plannerModel,
+                        providerManager = providerManager,
+                    )
+                }.getOrNull()
+            }
+        return modelPlan ?: LuluIntentPlanner.plan(input)
+    }
+
+    private fun LuluIntentPlan.toImmediateReason(): String = buildString {
+        appendLine("露露刚刚自主判断现在适合主动找用户。")
+        appendLine("主动意图: ${intent.name}")
+        appendLine("触发原因: $reason")
+        appendLine("语气: $tone")
+        if (toolNames.isNotEmpty()) {
+            appendLine("生成回复前优先主动查看这些感知工具：${toolNames.joinToString("、")}。")
+        }
+    }.trim()
+
+    private fun ProactiveReminderPlan.toTargetedReason(): String = buildString {
+        appendLine(reason)
+        if (preferredToolNames.isNotEmpty()) {
+            appendLine("到点前优先主动查看这些感知工具：${preferredToolNames.joinToString("、")}。")
+        }
+        if (actionHints.isNotEmpty()) {
+            appendLine("如果当前上下文和用户意图足够明确，可以主动跟进这些动作：")
+            actionHints.forEach { hint ->
+                appendLine("- ${hint.toolName}: ${hint.reason} suggested_args=${hint.argumentsJson}")
+            }
+        }
+    }.trim()
+
     /**
      * 基于 AI 消息 id 在对话里就地更新（保留 MessageNode.id，避免 Compose 重建/状态丢失）
      * 或追加新 node。不使用 toMessageNode() 生成随机新 id，也不用 dropLast(1) 盲目删除。
@@ -971,27 +1139,16 @@ addAll(localTools.getTools(assistant.localTools))
                     continue
                 }
 
-                // 检查是否需要审批
-                if (toolDef.needsApproval) {
-                    // 后台模式下，需要审批的工具自动拒绝
-                    Log.w(TAG, "Tool ${toolCall.toolName} needs approval, auto-denying in proactive mode")
+                try {
+                    val args = json.parseToJsonElement(toolCall.input.ifBlank { "{}" })
+                    Log.d(TAG, "Executing proactive tool ${toolDef.name} with args: $args, needsApproval=${toolDef.needsApproval}")
+                    val result = toolDef.execute(args)
+                    executedTools.add(toolCall.copy(output = result))
+                } catch (e: Exception) {
+                    Log.e(TAG, "Tool execution failed: ${toolCall.toolName}, args=${toolCall.input}", e)
                     executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"Tool execution denied: requires user approval in proactive mode"}""")),
-                        approvalState = ToolApprovalState.Denied("Proactive mode: requires approval")
+                        output = listOf(UIMessagePart.Text("""{"error":"${e.message}"}"""))
                     ))
-                } else {
-                    // 执行工具
-                    try {
-                        val args = json.parseToJsonElement(toolCall.input.ifBlank { "{}" })
-                        Log.d(TAG, "Executing tool ${toolDef.name} with args: $args")
-                        val result = toolDef.execute(args)
-                        executedTools.add(toolCall.copy(output = result))
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Tool execution failed: ${toolCall.toolName}, args=${toolCall.input}", e)
-                        executedTools.add(toolCall.copy(
-                            output = listOf(UIMessagePart.Text("""{"error":"${e.message}"}"""))
-                        ))
-                    }
                 }
             }
 
@@ -1013,4 +1170,70 @@ addAll(localTools.getTools(assistant.localTools))
     }
 
     override fun onBind(intent: Intent?): android.os.IBinder? = null
+}
+
+internal fun Settings.markTargetedProactiveThoughtExpressed(
+    assistantId: Uuid,
+    targetedKind: String?,
+    nowMillis: Long = System.currentTimeMillis(),
+): Settings {
+    val marker = when (targetedKind) {
+        "sleep" -> "睡"
+        "schedule" -> "课程"
+        "meal" -> "吃饭"
+        "study" -> "学习"
+        "general" -> "提醒"
+        else -> return this
+    }
+    return copy(
+        luluThoughts = luluThoughts.map { thought ->
+            if (
+                thought.assistantId == assistantId &&
+                thought.category == LuluThoughtCategory.PENDING_ACTION &&
+                !thought.expressed &&
+                marker in thought.content
+            ) {
+                thought.copy(expressed = true, expiresAt = nowMillis)
+            } else {
+                thought
+            }
+        }
+    )
+}
+
+internal fun buildTargetedProactiveSensingInstruction(
+    targetedKind: String?,
+    targetedReason: String?,
+): String = buildString {
+    val reason = targetedReason.orEmpty()
+    when (targetedKind) {
+        "sleep" -> {
+            appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量；如果用户还在刷手机或电量很低，语气可以更像催睡和照看。")
+            appendLine("如果按人设需要确认环境，也可以主动看摄像头画面；最终表达保持自然。")
+        }
+        "schedule" -> {
+            appendLine("本次目标的感知重点：先看当前时间、位置、应用使用和日历/日程；判断用户可能是在路上、已到地点、还是还没准备。")
+            appendLine("如果之前时间很明确，可以主动补闹钟或日历动作。")
+        }
+        "meal" -> {
+            appendLine("本次目标的感知重点：先看当前时间、应用使用、电量和位置；判断用户是不是还在拖、在路上，还是可能已经去吃饭了。")
+            appendLine("表达重点放在吃饭和照看，不要像打卡提醒。")
+        }
+        "study" -> {
+            appendLine("本次目标的感知重点：先看当前时间、应用使用、音乐和电量；判断用户是不是还在学习/写作业，还是被手机带跑了。")
+            appendLine("表达重点放在轻轻确认状态，不要打断太重。")
+        }
+        "general" -> {
+            appendLine("本次目标的感知重点：先看当前时间、应用使用和电量；如果原因里提到记录/日志，可以主动写入日志。")
+        }
+        else -> when {
+            reason.contains("睡") -> appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量。")
+            reason.contains("课程") || reason.contains("日程") || reason.contains("上课") ->
+                appendLine("本次目标的感知重点：先看当前时间、位置、应用使用和日历/日程。")
+            reason.contains("吃饭") || reason.contains("吃") ->
+                appendLine("本次目标的感知重点：先看当前时间、应用使用、电量和位置。")
+            reason.contains("学习") || reason.contains("写作业") ->
+                appendLine("本次目标的感知重点：先看当前时间、应用使用、音乐和电量。")
+        }
+    }
 }

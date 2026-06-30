@@ -9,6 +9,7 @@ import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.LuluMood
 import me.rerere.rikkahub.data.model.LuluThought
 import me.rerere.rikkahub.data.model.LuluThoughtCategory
+import me.rerere.rikkahub.data.service.markTargetedProactiveThoughtExpressed
 import me.rerere.rikkahub.data.model.currentLuluState
 import me.rerere.rikkahub.data.model.toMessageNode
 import org.junit.Assert.assertEquals
@@ -160,6 +161,109 @@ class VoiceCallChatSyncTest {
             userText = "我回来了，学完了",
             assistantText = "欢迎回来。",
             nowMillis = 2_000L,
+        )
+
+        assertTrue(updated.luluThoughts.single { it.id == pending.id }.expressed)
+    }
+
+    @Test
+    fun `presence turn records proactive reminder as pending action`() {
+        val assistantId = Uuid.parse("cccccccc-cccc-cccc-cccc-cccccccccccc")
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+        )
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "十分钟后提醒我睡觉",
+            assistantText = "好，我十分钟后叫你。",
+            nowMillis = 10_000L,
+        )
+
+        val updated = settings.recordLuluPresenceTurn(
+            assistantId = assistantId,
+            userText = "十分钟后提醒我睡觉",
+            assistantText = "好，我十分钟后叫你。",
+            proactiveReminderPlan = plan,
+            nowMillis = 10_000L,
+        )
+
+        val pending = updated.luluThoughts.single { it.category == LuluThoughtCategory.PENDING_ACTION }
+        assertTrue(pending.content.contains("十分钟后"))
+        assertTrue(pending.content.contains("提醒"))
+        assertEquals(4, pending.importance)
+    }
+
+    @Test
+    fun `targeted proactive reply marks matching pending action expressed`() {
+        val assistantId = Uuid.parse("dddddddd-dddd-dddd-dddd-dddddddddddd")
+        val pending = LuluThought(
+            assistantId = assistantId,
+            content = "我刚才答应了要提醒他睡觉：十分钟后提醒我睡觉",
+            category = LuluThoughtCategory.PENDING_ACTION,
+            importance = 4,
+            createdAt = 1_000L,
+            expiresAt = 100_000L,
+        )
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+            luluThoughts = listOf(pending),
+        )
+
+        val updated = settings.markTargetedProactiveThoughtExpressed(
+            assistantId = assistantId,
+            targetedKind = "sleep",
+            nowMillis = 20_000L,
+        )
+
+        val resolved = updated.luluThoughts.single { it.id == pending.id }
+        assertTrue(resolved.expressed)
+        assertEquals(20_000L, resolved.expiresAt)
+    }
+
+    @Test
+    fun `targeted meal proactive reply marks meal pending action expressed`() {
+        val assistantId = Uuid.parse("eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee")
+        val pending = LuluThought(
+            assistantId = assistantId,
+            content = "我刚才决定稍后来确认他有没有好好吃饭：我还没吃饭",
+            category = LuluThoughtCategory.PENDING_ACTION,
+            importance = 4,
+            createdAt = 1_000L,
+            expiresAt = 100_000L,
+        )
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+            luluThoughts = listOf(pending),
+        )
+
+        val updated = settings.markTargetedProactiveThoughtExpressed(
+            assistantId = assistantId,
+            targetedKind = "meal",
+            nowMillis = 20_000L,
+        )
+
+        assertTrue(updated.luluThoughts.single { it.id == pending.id }.expressed)
+    }
+
+    @Test
+    fun `targeted study proactive reply marks study pending action expressed`() {
+        val assistantId = Uuid.parse("ffffffff-ffff-ffff-ffff-ffffffffffff")
+        val pending = LuluThought(
+            assistantId = assistantId,
+            content = "我刚才决定晚点确认他的学习/写作业状态：我去写作业了",
+            category = LuluThoughtCategory.PENDING_ACTION,
+            importance = 4,
+            createdAt = 1_000L,
+            expiresAt = 100_000L,
+        )
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+            luluThoughts = listOf(pending),
+        )
+
+        val updated = settings.markTargetedProactiveThoughtExpressed(
+            assistantId = assistantId,
+            targetedKind = "study",
+            nowMillis = 20_000L,
         )
 
         assertTrue(updated.luluThoughts.single { it.id == pending.id }.expressed)

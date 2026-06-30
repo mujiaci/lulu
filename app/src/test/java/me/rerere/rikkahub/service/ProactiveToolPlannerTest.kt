@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.service
 
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -26,7 +27,7 @@ class ProactiveToolPlannerTest {
     }
 
     @Test
-    fun `class time should request state context and follow up candidates`() {
+    fun `class time should request state context and direct action hints`() {
         val plan = ProactiveToolPlanner.plan(
             userText = "我八点有课，七点五十五记得叫我一下",
             availableToolNames = setOf("get_location", "get_app_usage", "set_alarm", "calendar_tool"),
@@ -34,7 +35,10 @@ class ProactiveToolPlannerTest {
 
         assertTrue(plan.any { it.toolName == "get_app_usage" })
         assertTrue(plan.any { it.toolName == "get_location" })
-        assertTrue(plan.any { it.toolName == "set_alarm" && !it.autoExecutable })
+        assertTrue(plan.any { it.toolName == "set_alarm" && it.autoExecutable })
+        assertTrue(plan.any { it.toolName == "set_alarm" && it.argumentsJson.contains("\"hour\":7") })
+        assertTrue(plan.any { it.toolName == "set_alarm" && it.argumentsJson.contains("\"minute\":55") })
+        assertTrue(plan.any { it.toolName == "calendar_tool" && it.autoExecutable })
     }
 
     @Test
@@ -59,13 +63,35 @@ class ProactiveToolPlannerTest {
     }
 
     @Test
-    fun `camera and log intents should become explicit action candidates`() {
+    fun `camera and journal can be automatic when user asks to look and record`() {
         val plan = ProactiveToolPlanner.plan(
             userText = "等下可以帮我看一下桌面，然后把今天这件事记进日志吗",
             availableToolNames = setOf("camera_capture", "write_lulu_journal"),
         )
 
-        assertTrue(plan.any { it.toolName == "camera_capture" && !it.autoExecutable })
-        assertTrue(plan.any { it.toolName == "write_lulu_journal" && !it.autoExecutable })
+        assertTrue(plan.any { it.toolName == "camera_capture" && it.autoExecutable })
+        assertTrue(plan.any { it.toolName == "write_lulu_journal" && it.autoExecutable })
+    }
+
+    @Test
+    fun `meal mention should inspect phone state and nearby food context`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "我还没吃饭，等会儿点外卖吧",
+            availableToolNames = setOf("get_app_usage", "get_battery_info", "get_location", "explore_nearby"),
+        )
+
+        assertTrue(plan.any { it.toolName == "get_app_usage" })
+        assertTrue(plan.any { it.toolName == "explore_nearby" })
+    }
+
+    @Test
+    fun `study mention should inspect focus context`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "我去写作业了，先不聊啦",
+            availableToolNames = setOf("get_app_usage", "control_music", "get_battery_info"),
+        )
+
+        assertTrue(plan.any { it.toolName == "get_app_usage" })
+        assertTrue(plan.any { it.toolName == "control_music" })
     }
 }

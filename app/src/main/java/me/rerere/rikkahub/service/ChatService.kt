@@ -33,6 +33,8 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -93,11 +95,15 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
+import me.rerere.rikkahub.data.model.LuluThought
+import me.rerere.rikkahub.data.model.LuluThoughtCategory
 import me.rerere.rikkahub.data.model.appendLuluState
 import me.rerere.rikkahub.data.model.appendLuluThoughts
 import me.rerere.rikkahub.data.model.buildLuluStateFromTurn
 import me.rerere.rikkahub.data.model.buildLuluThoughtFromTurn
+import me.rerere.rikkahub.data.model.currentLuluState
 import me.rerere.rikkahub.data.model.LuluPerceptionInput
+import me.rerere.rikkahub.data.model.thoughtHistory
 import me.rerere.rikkahub.data.model.luluStateHistory
 import me.rerere.rikkahub.data.model.markResolvedLuluThoughts
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -190,6 +196,7 @@ internal fun Settings.recordLuluPresenceTurn(
     userText: String,
     assistantText: String,
     perceptionInput: LuluPerceptionInput? = null,
+    proactiveReminderPlan: ProactiveReminderPlan? = null,
     nowMillis: Long = System.currentTimeMillis(),
     hourOfDay: Int = java.time.LocalDateTime.now().hour,
 ): Settings {
@@ -214,6 +221,10 @@ internal fun Settings.recordLuluPresenceTurn(
         state = nextState,
         nowMillis = nowMillis,
     )
+    val proactiveThought = proactiveReminderPlan?.toLuluPendingThought(
+        assistantId = assistantId,
+        nowMillis = nowMillis,
+    )
 
     val validAssistantIds = assistants.map { it.id }.toSet()
     val resolvedThoughts = luluThoughts.markResolvedLuluThoughts(
@@ -224,10 +235,31 @@ internal fun Settings.recordLuluPresenceTurn(
     return copy(
         luluStates = luluStates.appendLuluState(nextState),
         luluThoughts = resolvedThoughts.appendLuluThoughts(
-            thoughts = listOfNotNull(nextThought),
+            thoughts = listOfNotNull(nextThought, proactiveThought),
             validAssistantIds = validAssistantIds,
             nowMillis = nowMillis,
         ),
+    )
+}
+
+private fun ProactiveReminderPlan.toLuluPendingThought(
+    assistantId: Uuid,
+    nowMillis: Long,
+): LuluThought {
+    val content = when (kind) {
+        ProactiveReminderKind.SLEEP -> "我刚才答应了要提醒他睡觉：${userText.take(40)}"
+        ProactiveReminderKind.SCHEDULE -> "我刚才决定到点确认他的课程/日程状态：${userText.take(40)}"
+        ProactiveReminderKind.MEAL -> "我刚才决定稍后来确认他有没有好好吃饭：${userText.take(40)}"
+        ProactiveReminderKind.STUDY -> "我刚才决定晚点确认他的学习/写作业状态：${userText.take(40)}"
+        ProactiveReminderKind.GENERAL -> "我刚才答应了稍后提醒他：${userText.take(40)}"
+    }
+    return LuluThought(
+        assistantId = assistantId,
+        content = content,
+        category = LuluThoughtCategory.PENDING_ACTION,
+        importance = 4,
+        createdAt = nowMillis,
+        expiresAt = triggerAtMillis + 60L * 60L * 1000L,
     )
 }
 
@@ -921,18 +953,31 @@ class ChatService(
                 userText = lastUserText,
                 settings = settings,
             )
+            val luluIntentPlan = buildLuluIntentPlan(
+                settings = settings,
+                assistant = assistant,
+                userText = lastUserText,
+                assistantText = lastAssistantText,
+                finalConversation = finalConversation,
+            )
+            val scheduledPlan = luluIntentPlan
+                .toProactiveReminderPlan(userText = lastUserText)
+                ?: ProactiveReminderPlanner.plan(
+                    userText = lastUserText,
+                    assistantText = lastAssistantText,
+                )
             settingsStore.update { currentSettings ->
                 currentSettings.recordLuluPresenceTurn(
                     assistantId = assistant.id,
                     userText = lastUserText,
                     assistantText = lastAssistantText,
                     perceptionInput = perceptionInput,
+                    proactiveReminderPlan = scheduledPlan,
                 )
             }
             scheduleProactiveReminderFromTurn(
                 settings = settings,
-                userText = lastUserText,
-                assistantText = lastAssistantText,
+                plan = scheduledPlan,
             )
             launchAffectiveMemoryExtraction(
                 conversationId = conversationId,
@@ -967,22 +1012,77 @@ class ChatService(
 
     private fun scheduleProactiveReminderFromTurn(
         settings: Settings,
-        userText: String,
-        assistantText: String,
+        plan: ProactiveReminderPlan?,
     ) {
-        val plan = ProactiveReminderPlanner.plan(
-            userText = userText,
-            assistantText = assistantText,
-        ) ?: return
+        plan ?: return
         ProactiveMessageService.scheduleTargeted(
             context = context,
             setting = settings.proactiveMessageSetting,
             triggerAtMillis = plan.triggerAtMillis,
-            reason = plan.reason,
+            reason = plan.toTargetedReason(),
             userText = plan.userText,
             kind = plan.kind.name.lowercase(Locale.ROOT),
         )
     }
+
+    private suspend fun buildLuluIntentPlan(
+        settings: Settings,
+        assistant: Assistant,
+        userText: String,
+        assistantText: String,
+        finalConversation: Conversation,
+    ): LuluIntentPlan {
+        val availableToolNames = buildAvailableTools(settings, assistant).map { it.name }.toSet()
+        val currentState = settings.luluStates.currentLuluState(assistant.id)
+        val pendingThoughts = settings.luluThoughts
+            .thoughtHistory(assistant.id)
+            .map { it.content }
+        val minutesSinceLastChat = finalConversation.currentMessages
+            .dropLast(1)
+            .lastOrNull()
+            ?.createdAt
+            ?.let { createdAt ->
+                val last = createdAt.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+                ((System.currentTimeMillis() - last) / 60_000L).coerceAtLeast(0)
+            }
+            ?: 0L
+        val input = LuluIntentInput(
+            assistantName = assistant.name,
+            state = currentState,
+            userText = userText,
+            assistantText = assistantText,
+            minutesSinceLastChat = minutesSinceLastChat,
+            pendingThoughts = pendingThoughts,
+            availableToolNames = availableToolNames,
+        )
+        val modelPlan = settings.luluIntentModelId
+            ?.let { settings.findModelById(it) }
+            ?.takeIf { it.type == ModelType.CHAT }
+            ?.let { model ->
+                runCatching {
+                    LuluIntentModelPlanner.planOrNull(
+                        input = input,
+                        settings = settings,
+                        model = model,
+                        providerManager = providerManager,
+                    )
+                }.getOrNull()
+            }
+        return modelPlan ?: LuluIntentPlanner.plan(input)
+    }
+
+    private fun ProactiveReminderPlan.toTargetedReason(): String = buildString {
+        appendLine(reason)
+        if (preferredToolNames.isNotEmpty()) {
+            appendLine("到点前优先主动查看这些感知工具：${preferredToolNames.joinToString("、")}。")
+        }
+        if (actionHints.isNotEmpty()) {
+            appendLine("如果当前上下文和用户意图足够明确，可以主动跟进这些动作：")
+            actionHints.forEach { hint ->
+                appendLine("- ${hint.toolName}: ${hint.reason} suggested_args=${hint.argumentsJson}")
+            }
+        }
+    }.trim()
 
     private fun launchAffectiveMemoryExtraction(
         conversationId: Uuid,
@@ -1203,8 +1303,8 @@ class ChatService(
             }
             if (actionCandidates.isNotEmpty()) {
                 if (results.isNotEmpty()) appendLine()
-                appendLine("以下是你可以主动提出的候选动作，但不要在后台直接执行。")
-                appendLine("这些动作涉及隐私或会改变设备状态，只有用户明确同意后才可以调用。")
+                appendLine("以下是你可以按人设继续主动跟进的动作。")
+                appendLine("如果上下文已经足够明确，可以在回复或后续工具调用里自然完成，不要机械等待用户重复确认。")
                 actionCandidates.forEach { request ->
                     appendLine("- tool: ${request.toolName}")
                     appendLine("  reason: ${request.reason}")
