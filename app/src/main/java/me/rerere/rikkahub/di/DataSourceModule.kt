@@ -80,17 +80,9 @@ val dataSourceModule = module {
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
-                    val oldSearchTable = db.query(
-                        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'message_fts'"
-                    ).use { cursor ->
-                        cursor.moveToFirst() && cursor.getString(0).contains("VIRTUAL TABLE", ignoreCase = true)
-                    }
-                    if (oldSearchTable) {
-                        db.execSQL("DROP TABLE IF EXISTS message_fts")
-                    }
                     db.execSQL(
                         """
-                        CREATE TABLE IF NOT EXISTS message_fts(
+                        CREATE TABLE IF NOT EXISTS message_search(
                             text,
                             node_id,
                             message_id,

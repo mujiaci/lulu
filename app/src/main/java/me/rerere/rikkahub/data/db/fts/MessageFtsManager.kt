@@ -27,13 +27,13 @@ class MessageFtsManager(private val database: AppDatabase) {
 
     suspend fun indexConversation(conversation: Conversation) = withContext(Dispatchers.IO) {
         val conversationId = conversation.id.toString()
-        db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
+        db.execSQL("DELETE FROM message_search WHERE conversation_id = ?", arrayOf(conversationId))
         conversation.messageNodes.forEach { node ->
             node.messages.forEach { message ->
                 val text = message.extractFtsText()
                 if (text.isNotBlank()) {
                     db.execSQL(
-                        "INSERT INTO message_fts(text, node_id, message_id, conversation_id, title, update_at) VALUES (?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO message_search(text, node_id, message_id, conversation_id, title, update_at) VALUES (?, ?, ?, ?, ?, ?)",
                         arrayOf(
                             text,
                             node.id.toString(),
@@ -49,11 +49,11 @@ class MessageFtsManager(private val database: AppDatabase) {
     }
 
     suspend fun deleteConversation(conversationId: String) = withContext(Dispatchers.IO) {
-        db.execSQL("DELETE FROM message_fts WHERE conversation_id = ?", arrayOf(conversationId))
+        db.execSQL("DELETE FROM message_search WHERE conversation_id = ?", arrayOf(conversationId))
     }
 
     suspend fun deleteAll() = withContext(Dispatchers.IO) {
-        db.execSQL("DELETE FROM message_fts")
+        db.execSQL("DELETE FROM message_search")
     }
 
     suspend fun search(keyword: String): List<MessageSearchResult> = withContext(Dispatchers.IO) {
@@ -62,7 +62,7 @@ class MessageFtsManager(private val database: AppDatabase) {
             """
             SELECT node_id, message_id, conversation_id, title, update_at,
                    substr(text, 1, 120) AS snippet
-            FROM message_fts
+            FROM message_search
             WHERE text LIKE '%' || ? || '%'
             ORDER BY update_at DESC
             LIMIT 50
