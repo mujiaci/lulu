@@ -87,6 +87,7 @@ import me.rerere.hugeicons.stroke.Delete01
 import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Play
+import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.datastore.getAssistantTTSProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -433,13 +434,44 @@ fun StudyPomodoroFocusPage(
     val tts = LocalTTSState.current
     val scope = rememberCoroutineScope()
     val safeMinutes = minutes.coerceAtLeast(1)
-    var remainingSeconds by remember(safeMinutes) { mutableIntStateOf(safeMinutes * 60) }
+    val totalSeconds = safeMinutes * 60
+    var remainingSeconds by remember(safeMinutes) { mutableIntStateOf(totalSeconds) }
     var finished by remember { mutableStateOf(false) }
     var studyConversationId by remember { mutableStateOf<Uuid?>(null) }
     var chatText by remember { mutableStateOf("") }
     var userLine by remember { mutableStateOf("") }
     var coachReply by remember { mutableStateOf("") }
     var waitingReply by remember { mutableStateOf(false) }
+    val studiedSeconds = (totalSeconds - remainingSeconds).coerceIn(0, totalSeconds)
+
+    fun finishPomodoro(early: Boolean) {
+        if (finished) return
+        finished = true
+        val elapsedSeconds = (totalSeconds - remainingSeconds).coerceIn(0, totalSeconds)
+        val recordedMinutes = elapsedSeconds.toRecordedMinutes()
+        if (recordedMinutes > 0) {
+            vm.completePomodoro(recordedMinutes)
+        }
+        val line = if (early) {
+            if (recordedMinutes > 0) {
+                "这一轮先收住，已经学习了 ${studyDurationText(elapsedSeconds)}。奖励按实际学习时长记好了。"
+            } else {
+                "这一轮还没正式开始计时，先不记奖励。重新开一轮也来得及。"
+            }
+        } else {
+            "这一轮完成了，已经学习了 ${studyDurationText(totalSeconds)}。你真的坐住了，奖励我已经替你收好啦。"
+        }
+        coachReply = line
+        if (voiceEnabled) {
+            scope.launch {
+                tts.speak(
+                    text = line,
+                    flushCalled = true,
+                    providerOverride = settings.getAssistantTTSProvider(assistant.id),
+                )
+            }
+        }
+    }
 
     LaunchedEffect(safeMinutes) {
         val target = conversationRepository.getRecentConversations(assistant.id, limit = 1)
@@ -470,22 +502,14 @@ fun StudyPomodoroFocusPage(
                 )
             }
         }
-        while (remainingSeconds > 0) {
+        while (!finished && remainingSeconds > 0) {
             delay(1_000)
-            remainingSeconds -= 1
-        }
-        if (!finished) {
-            finished = true
-            vm.completePomodoro(safeMinutes)
-            val line = "这一轮完成了。你真的坐住了，奖励我已经替你收好啦。"
-            coachReply = line
-            if (voiceEnabled) {
-                tts.speak(
-                    text = line,
-                    flushCalled = true,
-                    providerOverride = settings.getAssistantTTSProvider(assistant.id),
-                )
+            if (!finished) {
+                remainingSeconds -= 1
             }
+        }
+        if (!finished && remainingSeconds <= 0) {
+            finishPomodoro(early = false)
         }
     }
 
@@ -510,8 +534,23 @@ fun StudyPomodoroFocusPage(
             PomodoroTimerCircle(
                 timeText = secondsText(remainingSeconds),
                 task = task.ifBlank { "专注这一轮" },
-                progress = remainingSeconds.toFloat() / (safeMinutes * 60).coerceAtLeast(1),
+                progress = remainingSeconds.toFloat() / totalSeconds.coerceAtLeast(1),
             )
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "已学习 ${studyDurationText(studiedSeconds)}",
+                color = Color(0xFF445063),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            OutlinedButton(
+                onClick = { finishPomodoro(early = true) },
+                enabled = !finished,
+            ) {
+                Icon(HugeIcons.StopCircle, null)
+                Spacer(Modifier.width(8.dp))
+                Text("提前结束")
+            }
             Spacer(Modifier.height(34.dp))
             if (waitingReply || coachReply.isNotBlank()) {
                 Text(
@@ -1973,6 +2012,21 @@ private fun mysteryBoxText(kudos: Int): String = when (kudos) {
 private fun secondsText(seconds: Int): String {
     val safe = seconds.coerceAtLeast(0)
     return "%02d:%02d".format(safe / 60, safe % 60)
+}
+
+private fun Int.toRecordedMinutes(): Int {
+    return (this.coerceAtLeast(0) / 60).coerceAtLeast(0)
+}
+
+private fun studyDurationText(seconds: Int): String {
+    val safe = seconds.coerceAtLeast(0)
+    val minutes = safe / 60
+    val restSeconds = safe % 60
+    return when {
+        safe < 60 -> "${restSeconds}秒"
+        restSeconds == 0 -> "${minutes}分钟"
+        else -> "${minutes}分${restSeconds}秒"
+    }
 }
 
 private fun buildEncourageLine(taskText: String, assistant: Assistant): String {

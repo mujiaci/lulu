@@ -52,6 +52,7 @@ class StudyRulesTest {
     fun `pomodoro completion gives fixed kudos and a mystery box reward`() {
         val result = StudyRules.completePomodoro(
             state = StudyState(today = "2026-06-30"),
+            minutes = 18,
             random = Random(1),
         )
 
@@ -59,6 +60,7 @@ class StudyRulesTest {
         assertTrue(result.reward.mysteryBoxKudos in listOf(15, 25, 50, 100, 200))
         assertEquals(50 + result.reward.mysteryBoxKudos, result.state.wallet.kudos)
         assertEquals(1, result.state.stats.totalPomodoros)
+        assertEquals(18, result.state.stats.totalStudyMinutes)
     }
 
     @Test
