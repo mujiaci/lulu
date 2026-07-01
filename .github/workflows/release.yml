@@ -75,13 +75,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p apk-artifacts
-          universal_apk="$(find app/build/outputs/apk/release -name '*universal*.apk' -print -quit)"
-          if [ -z "$universal_apk" ]; then
-            echo "::error title=Missing universal APK::Could not find the universal release APK."
+          release_apk="$(find app/build/outputs/apk/release -name '*-release.apk' -print -quit)"
+          if [ -z "$release_apk" ]; then
+            echo "::error title=Missing release APK::Could not find the release APK."
             find app/build/outputs/apk/release -name '*.apk' -print
             exit 1
           fi
-          cp "$universal_apk" apk-artifacts/lulu-signed.apk
+          cp "$release_apk" apk-artifacts/lulu-signed.apk
           ls -lh apk-artifacts
 
       - name: Upload artifacts
