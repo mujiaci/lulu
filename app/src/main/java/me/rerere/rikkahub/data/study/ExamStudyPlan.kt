@@ -39,12 +39,13 @@ object ExamStudyPlan {
         WeeklyStudyPlan(
             id = "2026-07-w1",
             title = "第1周：轻启动，先把系统跑起来",
-            dateRange = "2026-07-01 至 2026-07-07",
+            dateRange = "2026-07-02 至 2026-07-07",
             tasks = listOf(
-                "从 7 月 1 日正式进入章节制，但强度轻起步，先恢复作息和连续性",
+                "从 7 月 2 日正式进入章节制，7 月 1 日作为登录、调研、校准和资料整理日",
                 "法理学第 1-4 章：错题回看、目录式背诵、框架图，不重复从零听课",
                 "刑法学第 1-2 章、民法第 1 章：看课后立刻做 10-15 题，建立题感",
                 "每天复习单词 60-90 个，状态好再加 1 句长难句",
+                "建立 Everything 命名和检索规则，每天只整理一个小资料块",
                 "第 7 天做休息/缓冲/复盘，只补最小漏项",
             ),
         ),
@@ -99,7 +100,7 @@ object ExamStudyPlan {
 
     val dailyPlans: Map<LocalDate, DailyStudyPlan> = listOf(
         daily("2026-06-30", "启动准备日", "确认 7 月备考资料：文运/众合题册、考试分析、网课目录", "不背单词复习 50 个，只做热身", "散步 15 分钟，给大脑换气"),
-        daily("2026-07-01", "7月正式开局：轻启动", "确认五科章节账本：法理 13、刑法 25、民法 21、宪法 7、法制史 7", "法理学第 1 章：只回看错题和笔记，不重复从零听课", "法理学第 1 章：第一轮背诵关键词并画框架", "英语单词 60-80 个", "晚上 23:30 前收尾，散步 15 分钟"),
+        daily("2026-07-01", "启动调研日：不计正式进度", "登录和调研小红书法硕非法经验", "确认五科章节账本：法理 13、刑法 25、民法 21、宪法 7、法制史 7", "整理资料命名规则：科目-章节-题型-错因", "把 7 月计划校准到 7 月 2 日开始执行", "晚上只做收尾，不再开新章节"),
         daily("2026-07-02", "法理2 + 刑法1", "法理学第 2 章：错题回看、框架整理、第一轮背诵", "刑法学第 1 章：听课抓犯罪论总入口", "刑法学第 1 章：做 10-15 题并标错因", "英语长难句 1 句", "睡前 10 分钟整理明日最小任务"),
         daily("2026-07-03", "法理3 + 民法1", "法理学第 3 章：目录式回忆并补框架", "民法第 1 章：看课并做 10 题", "背诵：法理第 1-2 章第一轮滚动", "画民法第 1 章主体框架", "散步 15 分钟"),
         daily("2026-07-04", "刑法2 + 英语恢复", "刑法学第 2 章：看课并做题", "刑法第 1-2 章：整理犯罪论入口图", "法理第 1-3 章：口头背目录 15 分钟", "英语单词 80 个", "晚上不要加新课，只收错题"),
@@ -134,6 +135,120 @@ object ExamStudyPlan {
 
     fun todayPlan(date: LocalDate = LocalDate.now()): DailyStudyPlan? = dailyPlans[date]
 
+    fun todaySchedule(date: LocalDate = LocalDate.now()): List<StudyScheduleBlock> {
+        val plan = todayPlan(date)
+        val tasks = plan?.tasks.orEmpty()
+        if (tasks.isEmpty()) {
+            return listOf(
+                StudyScheduleBlock("09:30-09:45", "启动", "写下今天最小任务：1 个专业课小块 + 1 个英语小块。"),
+                StudyScheduleBlock("10:00-11:30", "主线学习", "优先做最怕但最重要的一项，不先整理资料。"),
+                StudyScheduleBlock("14:30-15:30", "回炉", "回看错题或补框架，把今天的输入变成可复习痕迹。"),
+                StudyScheduleBlock("22:30-22:45", "收尾", "只写明天第一步，不再开新章节。"),
+            )
+        }
+
+        val hasLesson = tasks.any { it.title.hasAny("看课", "听课") }
+        val hasPractice = tasks.any { it.title.hasAny("做题", "10-15", "错题", "题") }
+        val hasRecite = tasks.any { it.title.hasAny("背诵", "回背", "口头", "关键词", "目录") }
+        val hasFramework = tasks.any { it.title.hasAny("框架", "思维导图", "目录图", "时间线") }
+        val hasEnglish = tasks.any { it.kind == StudyPlanTaskKind.English }
+        val hasReviewDay = tasks.any { it.title.hasAny("复盘", "缓冲", "收口", "整理 7 月") }
+        val lawTasks = tasks.filter { it.kind == StudyPlanTaskKind.Law }.map { it.title }
+        val reviewTasks = tasks.filter { it.kind == StudyPlanTaskKind.Review }.map { it.title }
+        val englishTask = tasks.firstOrNull { it.kind == StudyPlanTaskKind.English }?.title
+
+        val mainInput = when {
+            hasReviewDay -> "只处理复盘和漏项，不开大新章节。"
+            lawTasks.isNotEmpty() -> lawTasks.take(2).joinToString("；")
+            else -> tasks.first().title
+        }
+        val practice = when {
+            hasPractice -> "做题后立刻标错因：概念混淆、法条不熟、题干没读懂、选项陷阱。"
+            reviewTasks.isNotEmpty() -> reviewTasks.take(2).joinToString("；")
+            else -> "把上午内容写成 3-5 个可回看的关键词。"
+        }
+        val eveningOutput = when {
+            hasRecite -> reviewTasks.firstOrNull { it.hasAny("背诵", "回背", "口头", "关键词", "目录") }
+                ?: "目录式背诵 15-25 分钟，先复述结构，不追求一字不差。"
+            hasFramework -> reviewTasks.firstOrNull { it.hasAny("框架", "思维导图", "目录图", "时间线") }
+                ?: "补一张小框架图，只画主干和易混点。"
+            else -> "回看今天最不稳的 3 个点，用自己的话说出来。"
+        }
+
+        return buildList {
+            add(StudyScheduleBlock("09:30-09:45", "启动", "看一眼待办，只选今天最关键的专业课入口；手机和资料搜索先放后面。"))
+            add(StudyScheduleBlock("10:00-11:40", if (hasLesson) "看课/新内容" else "主线推进", mainInput))
+            add(StudyScheduleBlock("11:40-12:00", "即时封口", "写下本块 3 个关键词和 1 个不懂点，午饭前别继续开新内容。"))
+            add(StudyScheduleBlock("12:00-14:00", "午饭 + 午休", "吃饭和休息不计入学习时长；午休 20-40 分钟，避免下午断电。"))
+            add(StudyScheduleBlock("14:20-16:00", if (hasPractice) "章节题/错题" else "回炉复习", practice))
+            add(StudyScheduleBlock("16:20-17:20", if (hasFramework) "框架整理" else "二次消化", "把今天专业课压成目录、表格或错题清单，资料整理最多占 20 分钟。"))
+            if (hasEnglish || englishTask != null) {
+                add(StudyScheduleBlock("19:30-20:10", "英语", englishTask ?: "单词滚动复习，状态好再加 1 句长难句。"))
+            }
+            add(StudyScheduleBlock("20:20-21:10", "背诵输出", eveningOutput))
+            add(StudyScheduleBlock("21:10-21:40", "散步/拉伸", "离开桌面 15-30 分钟，让明天还能继续，而不是今晚硬熬。"))
+            add(StudyScheduleBlock("22:30-22:45", "睡前收尾", "勾选待办，写明天第一步；不再补课、不刷经验帖、不临时买资料。"))
+        }
+    }
+
+    fun todayTips(date: LocalDate = LocalDate.now()): List<StudyTip> {
+        val plan = todayPlan(date)
+        val tasks = plan?.tasks.orEmpty()
+        val tips = linkedSetOf<StudyTip>()
+
+        tips += StudyTip(
+            "今天的原则",
+            "先完成专业课主线，再整理资料。经验帖只提供方法，不能替你完成看课、做题、背诵和错题回炉。",
+        )
+        if (tasks.any { it.title.hasAny("看课", "听课") }) {
+            tips += StudyTip(
+                "看课别做抄写员",
+                "课前看目录，课中只记定义、构成要件、易混点和例子；课后 10 分钟内做 10-15 题，题感比漂亮笔记更重要。",
+            )
+        }
+        if (tasks.any { it.title.hasAny("做题", "题", "错题") }) {
+            tips += StudyTip(
+                "错题要写错因",
+                "每道错题只标一个主错因：概念混淆、法条不熟、题干没读懂、选项陷阱。第二天先看错因，不先看答案。",
+            )
+        }
+        if (tasks.any { it.title.hasAny("背诵", "回背", "口头", "关键词", "目录") }) {
+            tips += StudyTip(
+                "背书三步走",
+                "先背目录树，再背关键词，最后用自己的话复述。卡住时看 10 秒提示就合上书继续说，不要从头重读。",
+            )
+        }
+        if (tasks.any { it.title.hasAny("框架", "思维导图", "目录图", "时间线") }) {
+            tips += StudyTip(
+                "框架只画主干",
+                "一张图只放章标题、核心概念、易混关系和真题高频点。不要把教材搬进图里，图是为了回忆，不是为了收藏。",
+            )
+        }
+        if (tasks.any { it.title.hasAny("整理", "资料", "清单", "命名") }) {
+            tips += StudyTip(
+                "Everything 规则",
+                "文件名按“科目-章节-任务-日期”写，例如“刑法-第1章-错题-0702.md”。每天资料整理最多一个小块，必须转成题、背诵或框架。",
+            )
+        }
+        if (tasks.any { it.kind == StudyPlanTaskKind.English }) {
+            tips += StudyTip(
+                "英语不断线",
+                "单词用滚动复习，不要一天塞爆。长难句只拆主干、修饰和翻译，保持手感比追求一次吃透更重要。",
+            )
+        }
+        if (tasks.any { it.kind == StudyPlanTaskKind.Health || it.title.hasAny("复盘", "缓冲", "休息") }) {
+            tips += StudyTip(
+                "缓冲不是偷懒",
+                "复盘日只补最小漏项：错题 10 题、目录背 15 分钟、散步 20 分钟。保住连续性，比硬凑时长更值钱。",
+            )
+        }
+        tips += StudyTip(
+            "资料优先级",
+            "考试分析/大纲、历年真题、章节题和错题清单优先；内部资料、保过押题、私下转账网盘群直接跳过。",
+        )
+        return tips.take(5)
+    }
+
     fun daysLeft(date: LocalDate = LocalDate.now()): Long =
         ChronoUnit.DAYS.between(date, examDate).coerceAtLeast(0)
 
@@ -158,6 +273,9 @@ object ExamStudyPlan {
 
     private fun planTask(title: String, kind: StudyPlanTaskKind): StudyPlanTask =
         StudyPlanTask(title = title, kind = kind)
+
+    private fun String.hasAny(vararg keywords: String): Boolean =
+        keywords.any { contains(it) }
 }
 
 data class MonthlyStudyPlan(
@@ -177,6 +295,17 @@ data class DailyStudyPlan(
     val date: LocalDate,
     val title: String,
     val tasks: List<StudyPlanTask>,
+)
+
+data class StudyScheduleBlock(
+    val time: String,
+    val title: String,
+    val detail: String,
+)
+
+data class StudyTip(
+    val title: String,
+    val detail: String,
 )
 
 data class StudyPlanTask(

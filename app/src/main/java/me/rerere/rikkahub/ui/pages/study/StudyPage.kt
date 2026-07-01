@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
@@ -94,7 +95,9 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.study.DailyStudyPlan
 import me.rerere.rikkahub.data.study.StudyAchievement
+import me.rerere.rikkahub.data.study.StudyScheduleBlock
 import me.rerere.rikkahub.data.study.StudyDrawResult
 import me.rerere.rikkahub.data.study.ExamStudyPlan
 import me.rerere.rikkahub.data.study.StudyEvent
@@ -104,6 +107,7 @@ import me.rerere.rikkahub.data.study.StudyRarity
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyShopItem
 import me.rerere.rikkahub.data.study.StudyState
+import me.rerere.rikkahub.data.study.StudyTip
 import me.rerere.rikkahub.data.study.StudyTask
 import me.rerere.rikkahub.data.study.StudyTaskSource
 import me.rerere.rikkahub.data.study.SuperMomentChoice
@@ -136,7 +140,6 @@ private enum class CollectionSection(val label: String) {
 }
 
 private enum class PlanView(val label: String) {
-    Daily("日计划"),
     Weekly("周计划"),
     Monthly("月计划"),
 }
@@ -213,7 +216,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                         )
                     }
                     item {
-                        TaskCard(
+                        DailyStudyDashboard(
                             tasks = state.tasks,
                             newTask = newTask,
                             onNewTask = { newTask = it },
@@ -225,7 +228,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             onDelete = vm::deleteTask,
                         )
                     }
-                    item { PlanOverviewCard(state = state) }
+                    item { PlanOverviewCard() }
                     item {
                         TodayProgressCard(
                             state = state,
@@ -777,6 +780,57 @@ private fun TodayProgressCard(
 }
 
 @Composable
+private fun DailyStudyDashboard(
+    tasks: List<StudyTask>,
+    newTask: String,
+    onNewTask: (String) -> Unit,
+    onAdd: () -> Unit,
+    onToggle: (String, Boolean) -> Unit,
+    onDelete: (String) -> Unit,
+) {
+    val today = LocalDate.now()
+    val todayPlan = ExamStudyPlan.todayPlan(today)
+    val schedule = ExamStudyPlan.todaySchedule(today)
+    val tips = ExamStudyPlan.todayTips(today)
+
+    BoxWithConstraints {
+        if (maxWidth < 900.dp) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                TaskCard(
+                    tasks = tasks,
+                    newTask = newTask,
+                    onNewTask = onNewTask,
+                    onAdd = onAdd,
+                    onToggle = onToggle,
+                    onDelete = onDelete,
+                )
+                TodayPlanCard(todayPlan = todayPlan, schedule = schedule)
+                StudyTipsCard(tips = tips)
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+                Box(Modifier.weight(1.05f)) {
+                    TaskCard(
+                        tasks = tasks,
+                        newTask = newTask,
+                        onNewTask = onNewTask,
+                        onAdd = onAdd,
+                        onToggle = onToggle,
+                        onDelete = onDelete,
+                    )
+                }
+                Box(Modifier.weight(1.15f)) {
+                    TodayPlanCard(todayPlan = todayPlan, schedule = schedule)
+                }
+                Box(Modifier.weight(1f)) {
+                    StudyTipsCard(tips = tips)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TaskCard(
     tasks: List<StudyTask>,
     newTask: String,
@@ -790,7 +844,7 @@ private fun TaskCard(
     StudyCard {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
-                Text("今日待办", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("待办", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 if (planCount > 0) {
                     Text("计划任务 $donePlanCount/$planCount，手动任务 ${tasks.size - planCount} 个", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
@@ -832,10 +886,58 @@ private fun TaskCard(
 }
 
 @Composable
-private fun PlanOverviewCard(state: StudyState) {
-    var planView by remember { mutableStateOf(PlanView.Daily) }
+private fun TodayPlanCard(
+    todayPlan: DailyStudyPlan?,
+    schedule: List<StudyScheduleBlock>,
+) {
+    StudyCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(HugeIcons.Clock02, null, tint = StudyColors.blue)
+            Column(Modifier.weight(1f)) {
+                Text("今日计划", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(todayPlan?.title ?: "今天先守住最小学习闭环", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        schedule.forEach { block ->
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Text(
+                    block.time,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = StudyColors.blue,
+                    modifier = Modifier.width(82.dp),
+                )
+                Column(Modifier.weight(1f)) {
+                    Text(block.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                    Text(block.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StudyTipsCard(tips: List<StudyTip>) {
+    StudyCard {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(HugeIcons.AiMagic, null, tint = StudyColors.goldText)
+            Column(Modifier.weight(1f)) {
+                Text("tips", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("按今天任务给你提效，不照搬经验帖强度。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        tips.forEach { tip ->
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(tip.title, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Text(tip.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+@Composable
+private fun PlanOverviewCard() {
+    var planView by remember { mutableStateOf(PlanView.Weekly) }
     val today = LocalDate.now()
-    val todayPlan = ExamStudyPlan.todayPlan(today)
     val month = ExamStudyPlan.monthlyPlans.firstOrNull { it.month == "2026-07" }
     val week = ExamStudyPlan.julyWeeks.firstOrNull { week ->
         val parts = week.dateRange.split(" 至 ")
@@ -854,18 +956,6 @@ private fun PlanOverviewCard(state: StudyState) {
             }
         }
         when (planView) {
-            PlanView.Daily -> {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Icon(HugeIcons.BookOpen02, null, tint = StudyColors.blue)
-                    Column(Modifier.weight(1f)) {
-                        Text(todayPlan?.title ?: "今日计划待生成", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                        Text("目标初试：2026-12-21，剩余 ${ExamStudyPlan.daysLeft(today)} 天", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-                todayPlan?.tasks?.forEach { task ->
-                    Text("· ${task.title}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                } ?: Text("今天还没有自动计划，可以先手动加 1 个最小任务。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
             PlanView.Weekly -> {
                 week?.let {
                     Text(it.title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
