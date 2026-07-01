@@ -86,7 +86,6 @@ import me.rerere.rikkahub.plugin.model.PluginUIAction
 import me.rerere.rikkahub.plugin.model.PluginUIComponent
 import me.rerere.rikkahub.plugin.model.PluginUIDeclaration
 import me.rerere.rikkahub.plugin.model.PluginUIQuery
-import me.rerere.document.PdfParser
 import org.json.JSONObject
 import java.io.File
 import java.util.Base64
@@ -179,17 +178,7 @@ fun PluginUIDeclarativePage(
                         } ?: "已选择文件"
 
                     val content: String = if (displayName.endsWith(".pdf", ignoreCase = true)) {
-                        // PDF 文件：保存到临时文件后用 PdfParser 提取文本
-                        val tempFile = File(context.cacheDir, "plugin_pick_${System.currentTimeMillis()}.pdf")
-                        context.contentResolver.openInputStream(it)?.use { stream ->
-                            tempFile.outputStream().use { out -> stream.copyTo(out) }
-                        }
-                        val text = try {
-                            PdfParser.parserPdf(tempFile)
-                        } finally {
-                            tempFile.delete()
-                        }
-                        text
+                        "[PDF parsing is not bundled in this build.]"
                     } else {
                         // 普通文本文件
                         context.contentResolver.openInputStream(it)?.use { stream ->

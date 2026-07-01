@@ -8,8 +8,6 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.http.HttpHeaders
 import io.pebbletemplates.pebble.PebbleEngine
-import io.requery.android.database.sqlite.RequerySQLiteOpenHelperFactory
-import io.requery.android.database.sqlite.SQLiteCustomExtension
 import kotlinx.serialization.json.Json
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.common.http.AcceptLanguageBuilder
@@ -24,7 +22,6 @@ import me.rerere.rikkahub.data.api.SponsorAPI
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
-import me.rerere.rikkahub.data.db.fts.SimpleDictManager
 import me.rerere.rikkahub.data.db.migrations.Migration_6_7
 import me.rerere.rikkahub.data.db.migrations.Migration_11_12
 import me.rerere.rikkahub.data.db.migrations.Migration_13_14
@@ -83,48 +80,28 @@ val dataSourceModule = module {
             )
             .addCallback(object : RoomDatabase.Callback() {
                 override fun onOpen(db: SupportSQLiteDatabase) {
-                    val dictDir = SimpleDictManager.extractDict(context)
-                    val cursor = db.query("SELECT jieba_dict(?)", arrayOf(dictDir.absolutePath))
-                    cursor.use {
-                        if (it.moveToFirst()) {
-                            val result = it.getString(0)
-                            val success = result?.trimEnd('/') == dictDir.absolutePath.trimEnd('/')
-                            if (!success) {
-                                android.util.Log.e(
-                                    "DataSourceModule",
-                                    "jieba_dict failed: $result, path=${dictDir.absolutePath}"
-                                )
-                            }
-                        }
+                    val oldSearchTable = db.query(
+                        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'message_fts'"
+                    ).use { cursor ->
+                        cursor.moveToFirst() && cursor.getString(0).contains("VIRTUAL TABLE", ignoreCase = true)
+                    }
+                    if (oldSearchTable) {
+                        db.execSQL("DROP TABLE IF EXISTS message_fts")
                     }
                     db.execSQL(
                         """
-                        CREATE VIRTUAL TABLE IF NOT EXISTS message_fts USING fts5(
+                        CREATE TABLE IF NOT EXISTS message_fts(
                             text,
-                            node_id UNINDEXED,
-                            message_id UNINDEXED,
-                            conversation_id UNINDEXED,
-                            title UNINDEXED,
-                            update_at UNINDEXED,
-                            tokenize = 'simple'
+                            node_id,
+                            message_id,
+                            conversation_id,
+                            title,
+                            update_at
                         )
                         """.trimIndent()
                     )
                 }
             })
-            .openHelperFactory(
-                RequerySQLiteOpenHelperFactory(
-                    listOf(
-                RequerySQLiteOpenHelperFactory.ConfigurationOptions { options ->
-                    options.customExtensions.add(
-                        SQLiteCustomExtension(
-                            context.applicationInfo.nativeLibraryDir + "/libsimple",
-                            null
-                        )
-                    )
-                    options
-                }
-            )))
             .build()
     }
 

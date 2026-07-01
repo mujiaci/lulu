@@ -8,7 +8,6 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.document.DocxParser
 import me.rerere.document.EpubParser
-import me.rerere.document.PdfParser
 import me.rerere.document.PptxParser
 import java.io.File
 
@@ -42,10 +41,6 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
         }
     }
 
-    private fun parsePdfAsText(file: File): String {
-        return PdfParser.parserPdf(file)
-    }
-
     private fun parseDocxAsText(file: File): String {
         return DocxParser.parse(file)
     }
@@ -66,7 +61,7 @@ object DocumentAsPromptTransformer : InputMessageTransformer {
         }
         return runCatching {
             when (document.mime) {
-                "application/pdf" -> parsePdfAsText(file)
+                "application/pdf" -> "[PDF parsing is not bundled in this build.]"
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> parseDocxAsText(file)
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> parsePptxAsText(file)
                 "application/epub+zip" -> parseEpubAsText(file)
