@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
@@ -227,9 +228,9 @@ class StarWishVM(
         influence: String,
     ): String {
         val settings = settingsStore.settingsFlow.first()
-        val model = settings.theaterModelId
-            ?.let { settings.findModelById(it) }
-            ?.takeIf { it.type == ModelType.CHAT }
+        val selectedModel: Model? = settings.theaterModelId?.let { settings.findModelById(it) }
+        val model = selectedModel
+            ?.takeIf { selected -> selected.type == ModelType.CHAT }
             ?: error("请先在默认模型里设置“小剧场模型”，用来生成小剧场正文。")
         val providerSetting = model.findProvider(settings.providers)
             ?: error("小剧场模型没有找到对应提供商。")
