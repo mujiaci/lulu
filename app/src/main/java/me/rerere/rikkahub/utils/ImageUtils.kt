@@ -7,7 +7,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.net.Uri
-import androidx.exifinterface.media.ExifInterface
+import android.media.ExifInterface
 import com.drew.imaging.ImageMetadataReader
 import com.drew.imaging.png.PngChunkType
 import com.drew.metadata.png.PngDirectory
