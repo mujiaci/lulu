@@ -298,11 +298,11 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                 clipboard.setText(AnnotatedString(it))
                 scope.launch { snackbarHostState.showSnackbar("提示词已复制") }
             },
-            onGenerate = { prompt ->
+            onGenerate = { prompt, isInteraction ->
                 val finalPrompt = StarWishRules.imagePromptForCompanion(
                     basePrompt = prompt,
                     assistant = companionAssistant,
-                    interaction = prompt == interaction,
+                    interaction = isInteraction,
                 )
                 vm.recordImageLaunch(outfit, finalPrompt)
                 selectedScroll = null
@@ -626,7 +626,7 @@ private fun ScrollDetailDialog(
     onDismiss: () -> Unit,
     onSave: (StarWishOutfitPrompts) -> Unit,
     onCopy: (String) -> Unit,
-    onGenerate: (String) -> Unit,
+    onGenerate: (String, Boolean) -> Unit,
 ) {
     var solo by remember(outfit) { mutableStateOf(prompts.solo) }
     var interaction by remember(outfit) { mutableStateOf(prompts.interaction) }
@@ -634,12 +634,12 @@ private fun ScrollDetailDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = { onGenerate(interaction) }) {
+                TextButton(onClick = { onGenerate(interaction, true) }) {
                     Icon(HugeIcons.Image03, null)
                     Spacer(Modifier.width(6.dp))
                     Text("生成互动")
                 }
-                Button(onClick = { onGenerate(solo) }) {
+                Button(onClick = { onGenerate(solo, false) }) {
                     Icon(HugeIcons.AiMagic, null)
                     Spacer(Modifier.width(6.dp))
                     Text("生成独美")
