@@ -61,6 +61,14 @@ class StarWishVM(
     val mcpDiagnostic = settingsStore.settingsFlow
         .map { settings -> buildMcdonaldsMcpDiagnostic(settings.mcpServers) }
         .stateIn(viewModelScope, SharingStarted.Lazily, "正在读取 MCP 配置...")
+    val videoModelStatus = settingsStore.settingsFlow
+        .map { settings ->
+            settings.findModelById(settings.videoGenerationModelId)
+                ?.takeIf { it.type == ModelType.VIDEO }
+                ?.let { "已选择视频模型：${it.displayName.ifBlank { it.modelId }}" }
+                ?: "还没有选择视频模型；去设置-默认模型里选择一个视频模型。"
+        }
+        .stateIn(viewModelScope, SharingStarted.Lazily, "正在读取视频模型...")
     private val _generatedImages = MutableStateFlow<List<StarWishGeneratedImage>>(emptyList())
     val generatedImages = _generatedImages.asStateFlow()
     private val _isGeneratingChapter = MutableStateFlow(false)
@@ -174,9 +182,9 @@ class StarWishVM(
         }
     }
 
-    fun redeemMcDonalds() {
+    fun redeemVideo() {
         viewModelScope.launch {
-            studyStore.update { current -> StudyRules.redeemMcDonalds(current).state }
+            studyStore.update { current -> StudyRules.redeemVideo(current).state }
         }
     }
 

@@ -95,7 +95,7 @@ private enum class StarWishSection(val label: String) {
     Scrolls("画卷"),
     Theaters("小剧场"),
     SpecialStories("特殊剧情"),
-    McDonalds("麦当劳"),
+    Video("视频"),
 }
 
 private enum class ScrollSubsection(val label: String) {
@@ -111,6 +111,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     val generatedImages by vm.generatedImages.collectAsStateWithLifecycle()
     val studyState by vm.studyState.collectAsStateWithLifecycle()
     val mcpDiagnostic by vm.mcpDiagnostic.collectAsStateWithLifecycle()
+    val videoModelStatus by vm.videoModelStatus.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
@@ -265,16 +266,22 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         )
                     }
                 }
-                StarWishSection.McDonalds -> {
+                StarWishSection.Video -> {
+                    item {
+                        VideoRewardCard(
+                            epicFragments = studyState.inventory.epicFragments,
+                            redeemed = studyState.stats.videoRewardsRedeemed,
+                            videoModelStatus = videoModelStatus,
+                            onRedeem = vm::redeemVideo,
+                            onOpenImageGen = { navController.navigate(Screen.ImageGen()) },
+                        )
+                    }
                     item {
                         McDonaldsMcpCard(
-                            epicFragments = studyState.inventory.epicFragments,
-                            redeemed = studyState.stats.mcdonaldsRedeemed,
                             mcpCode = state.mcdonaldsMcpCode,
                             mcpDiagnostic = mcpDiagnostic,
                             onSave = vm::saveMcdonaldsMcpCode,
                             onInstallMcp = vm::installMcdonaldsMcp,
-                            onRedeem = vm::redeemMcDonalds,
                         )
                     }
                 }
@@ -699,14 +706,62 @@ private fun ScrollDetailDialog(
 }
 
 @Composable
-private fun McDonaldsMcpCard(
+private fun VideoRewardCard(
     epicFragments: Int,
     redeemed: Int,
+    videoModelStatus: String,
+    onRedeem: () -> Unit,
+    onOpenImageGen: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Surface(shape = CircleShape, color = Color(0xFFFFE7A8), modifier = Modifier.size(44.dp)) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(HugeIcons.Play, null, tint = Color(0xFF9B6B10), modifier = Modifier.size(24.dp))
+                    }
+                }
+                Column(Modifier.weight(1f)) {
+                    Text("视频奖励", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("视频碎片 $epicFragments/2 · 已兑换 $redeemed 次", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+            Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
+                Text(
+                    "$videoModelStatus\n2 个视频碎片可兑换 1 次视频生成机会。这里先留视频生成入口，具体生成参数可以继续接你的视频模型 API。",
+                    modifier = Modifier.padding(12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = StarWishColors.inkBlue,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = onRedeem,
+                    enabled = epicFragments >= 2,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("兑换视频机会")
+                }
+                TextButton(
+                    onClick = onOpenImageGen,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text("打开生成入口")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun McDonaldsMcpCard(
     mcpCode: String,
     mcpDiagnostic: String,
     onSave: (String) -> Unit,
     onInstallMcp: (String) -> Unit,
-    onRedeem: () -> Unit,
 ) {
     var code by remember(mcpCode) { mutableStateOf(mcpCode) }
     Card(
@@ -721,8 +776,8 @@ private fun McDonaldsMcpCard(
                     }
                 }
                 Column(Modifier.weight(1f)) {
-                    Text("麦当劳点单渠道", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("麦当劳碎片 $epicFragments/2 · 已兑换 $redeemed 次", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("麦当劳 MCP 接口", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    Text("普通工具连接，不再作为抽卡奖励", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             OutlinedTextField(
@@ -739,15 +794,8 @@ private fun McDonaldsMcpCard(
             )
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
-                    onClick = onRedeem,
-                    enabled = epicFragments >= 2,
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Text("兑换点单机会")
-                }
-                TextButton(
                     onClick = { onInstallMcp(code.trim()) },
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text("保存并接通")
                 }

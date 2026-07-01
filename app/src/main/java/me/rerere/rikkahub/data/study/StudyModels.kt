@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.data.study
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
@@ -74,7 +75,8 @@ data class StudyStats(
     val totalStudyMinutes: Int = 0,
     val unlockedOutfitSets: Int = 0,
     val unlockedTheaters: Int = 0,
-    val mcdonaldsRedeemed: Int = 0,
+    @SerialName("mcdonaldsRedeemed")
+    val videoRewardsRedeemed: Int = 0,
 )
 
 @Serializable
@@ -98,6 +100,7 @@ enum class StudyEventType {
     Achievement,
     Shop,
     Penalty,
+    Video,
     McDonalds,
     Fragment,
 }

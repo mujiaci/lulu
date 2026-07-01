@@ -87,8 +87,8 @@ object StudyRules {
         StudyAchievement("outfit_collector", "画卷收藏家", "解锁任意3套普通画卷", StudyReward(universalRareFragments = 2, title = "稀有碎片 x2")),
         StudyAchievement("theater_open", "剧场开幕", "攒够一次小剧场章节兑换", StudyReward(singleDrawTickets = 3, title = "单抽券 x3")),
         StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 120, title = "夸夸值 120")),
-        StudyAchievement("epic_touch", "金光一闪", "获得第一枚麦当劳碎片", StudyReward(singleDrawTickets = 2, kudos = 120, title = "单抽券 x2 + 夸夸值 120")),
-        StudyAchievement("mcdonalds_arrival", "麦门降临", "首次兑换麦当劳", StudyReward(kudos = 500, title = "夸夸值 500")),
+        StudyAchievement("epic_touch", "镜头亮起", "获得第一枚视频碎片", StudyReward(singleDrawTickets = 2, kudos = 120, title = "单抽券 x2 + 夸夸值 120")),
+        StudyAchievement("mcdonalds_arrival", "第一支视频", "首次兑换视频奖励", StudyReward(kudos = 500, title = "夸夸值 500")),
     )
 
     fun rolloverToDate(state: StudyState, date: LocalDate = LocalDate.now()): StudyState {
@@ -116,7 +116,7 @@ object StudyRules {
             wallet = state.wallet.add(reward),
             inventory = state.inventory.copy(epicFragments = state.inventory.epicFragments + 2),
             internalTestGrantVersion = INTERNAL_TEST_GRANT_VERSION,
-            recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "内部测试资源", "夸夸值 100000 · 麦当劳碎片 x2"),
+            recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "内部测试资源", "夸夸值 100000 · 视频碎片 x2"),
         )
     }
 
@@ -363,7 +363,7 @@ object StudyRules {
                     state.inventory.normalFragments.values.sum() +
                         state.inventory.universalRareFragments + state.inventory.epicFragments >= 20
                 "epic_touch" -> state.inventory.epicFragments >= 1
-                "mcdonalds_arrival" -> state.stats.mcdonaldsRedeemed >= 1
+                "mcdonalds_arrival" -> state.stats.videoRewardsRedeemed >= 1
                 else -> false
             }
         }
@@ -450,19 +450,19 @@ object StudyRules {
         )
     }
 
-    fun redeemMcDonalds(state: StudyState): StudyActionResult {
+    fun redeemVideo(state: StudyState): StudyActionResult {
         if (state.inventory.epicFragments < 2) return StudyActionResult(state)
         return StudyActionResult(
             state = state.copy(
                 inventory = state.inventory.copy(epicFragments = state.inventory.epicFragments - 2),
-                stats = state.stats.copy(mcdonaldsRedeemed = state.stats.mcdonaldsRedeemed + 1),
+                stats = state.stats.copy(videoRewardsRedeemed = state.stats.videoRewardsRedeemed + 1),
                 recentEvents = state.recentEvents.addEvent(
-                    StudyEventType.McDonalds,
-                    "麦当劳奖励",
-                    "角色帮你安排一顿小奖励",
+                    StudyEventType.Video,
+                    "视频奖励",
+                    "消耗 2 枚视频碎片，点亮一次视频生成机会",
                 ),
             ),
-            reward = StudyReward(title = "麦当劳点餐机会 x1"),
+            reward = StudyReward(title = "视频生成机会 x1"),
         )
     }
 
@@ -526,9 +526,9 @@ object StudyRules {
                     universalEpicFragments = state.inventory.universalEpicFragments - 1,
                     epicFragments = state.inventory.epicFragments + 1,
                 ),
-                recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "使用通用史诗碎片", "麦当劳碎片 +1"),
+                recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "使用通用史诗碎片", "视频碎片 +1"),
             ),
-            reward = StudyReward(title = "麦当劳碎片 +1"),
+            reward = StudyReward(title = "视频碎片 +1"),
         )
     }
 
@@ -581,7 +581,7 @@ object StudyRules {
             roll < 0.97 -> {
                 StudyDrawResult(StudyRarity.Rare, "rare:any", "稀有碎片")
             }
-            roll < 0.985 -> StudyDrawResult(StudyRarity.Epic, "epic:mcdonalds", "麦当劳碎片")
+            roll < 0.985 -> StudyDrawResult(StudyRarity.Epic, "epic:video", "视频碎片")
             else -> StudyDrawResult(StudyRarity.Epic, "epic:special_story", "特殊剧情碎片")
         }
     }

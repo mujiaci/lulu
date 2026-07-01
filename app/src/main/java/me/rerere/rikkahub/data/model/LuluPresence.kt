@@ -416,7 +416,7 @@ fun buildLuluExpressionPlan(
             LuluExpressionLength.NORMAL -> "自然表达即可；必要时按语义拆成 $bubbleCount 个气泡。"
         } + when {
             state.mode == LuluMode.LEARNING -> " 用户在学习/专注时，动作要安静，表情少一点，不要抢注意力。"
-            state.mode == LuluMode.RESTING -> " 休息场景里保持轻声和低打扰，不要突然活泼。"
+            state.mode == LuluMode.RESTING -> " 休息场景里保持轻声和慢一点，不要突然活泼。"
             else -> ""
         },
         emojiHint = embodied.emojiHint,

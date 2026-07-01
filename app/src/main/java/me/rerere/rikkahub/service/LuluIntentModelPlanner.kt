@@ -50,6 +50,7 @@ object LuluIntentModelPlanner {
         appendLine("你是${input.assistantName}的后台小脑，只判断她接下来想做什么，不生成聊天正文。")
         appendLine("目标：根据角色状态、最近对话、沉默时间、未完成想法和可用工具，决定是否主动联系用户、多久后联系、优先看哪些工具。")
         appendLine("不要按固定关键词死板判断，要像角色本人在想：她现在的心情、她不回消息的时间、她刚才答应过什么、她想不想靠近。")
+        appendLine("必须读取并服从 <persona>：角色的人设、语言风格、性格、职责优先级都在里面。沉默分钟数只是事实，不是自动降低主动性的规则；是否催、监督、等待、撒娇、靠近，都由这个角色自己决定。")
         appendLine("只返回 JSON，不要解释，不要 markdown。")
         appendLine("JSON 字段：intent, shouldMessageNow, delayMinutes, toolNames, reason, tone。")
         appendLine("intent 只能是 CARE_REMINDER, STAY_NEAR, REACH_OUT, CHECK_CONTEXT, DO_NOT_DISTURB。")
@@ -57,6 +58,9 @@ object LuluIntentModelPlanner {
         appendLine("toolNames 只能从 availableTools 里选择，最多 5 个。")
         appendLine("Follow-up planning contract: return followUps when several future proactive checks are useful. Each item only has delayMinutes, reason, kind. Do not write future message text.")
         appendLine("Never simulate future turns or no-reply timelines. The app will regenerate the actual message at trigger time.")
+        appendLine("<persona>")
+        appendLine(input.assistantPersona.take(2000))
+        appendLine("</persona>")
         appendLine("<state>${input.state.toPlannerText()}</state>")
         appendLine("<minutesSinceLastChat>${input.minutesSinceLastChat}</minutesSinceLastChat>")
         appendLine("<availableTools>${input.availableToolNames.joinToString(", ")}</availableTools>")
@@ -98,11 +102,16 @@ object LuluIntentModelPlanner {
         appendLine("你是${input.assistantName}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
         appendLine("你可以像角色本人一样判断：她现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
         appendLine("权限已经由用户开放；不要因为“敏感”而机械拒绝。仍然要贴合人设和上下文，不要为了调用工具而调用。")
+        appendLine("必须读取并服从 <persona>：包括角色语言风格、性格、职责和边界。不要把动作写进聊天正文括号里；如果需要动作/状态方向，放进 expressionGuidance，让 UI 状态栏承接。")
+        appendLine("沉默、待办、番茄钟、学习状态只是观察事实，不代表自动安静下来；如果角色是学习监督员，可以主动监督、追问未完成任务，最终由人设决定。")
         appendLine("只返回 JSON，不要 markdown，不要解释。")
         appendLine("JSON 字段：toolRequests, followUpDelayMinutes, followUpReason, expressionGuidance。")
         appendLine("toolRequests 最多 5 个；toolName 只能从 availableTools 中选。")
         appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 表示系统可在回复前直接执行。")
         appendLine("followUpDelayMinutes 可以是 null；如果她决定稍后主动找用户，填 1 到 1440 的分钟数。")
+        appendLine("<persona>")
+        appendLine(input.assistantPersona.take(2000))
+        appendLine("</persona>")
         appendLine("<state>${input.state.toPlannerText()}</state>")
         appendLine("<availableTools>${input.availableToolNames.joinToString(", ")}</availableTools>")
         appendLine("<recentlyUsedTools>${input.recentlyUsedToolNames.joinToString(", ")}</recentlyUsedTools>")
@@ -220,6 +229,7 @@ object LuluIntentModelPlanner {
 
 data class LuluChatTurnPlanInput(
     val assistantName: String,
+    val assistantPersona: String = "",
     val state: LuluState,
     val recentMessages: List<UIMessage>,
     val pendingThoughts: List<String> = emptyList(),

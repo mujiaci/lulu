@@ -470,9 +470,10 @@ class ProactiveMessageService : KoinComponent {
         targetedKind: String? = null,
     ): String {
         val sb = StringBuilder()
+        val assistantName = settings.getCurrentAssistant().name.ifBlank { "当前角色" }
         sb.appendLine("[主动消息上下文]")
         if (!targetedReason.isNullOrBlank()) {
-            sb.appendLine("这次不是随机主动消息，而是露露刚才自己决定稍后回来确认的一次目标消息。")
+            sb.appendLine("这次不是随机主动消息，而是${assistantName}刚才自己决定稍后回来确认的一次目标消息。")
             sb.appendLine("目标类型: ${targetedKind.orEmpty()}")
             sb.appendLine("触发原因: $targetedReason")
             sb.appendLine("生成回复前，如果触发原因里列出了感知工具或后续动作，请优先按那些线索主动查看状态，再自然地开口。")
@@ -650,7 +651,7 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 如果工具能帮你更像真人一样判断用户状态，就大胆用；最终说出口的话仍然要自然，不要暴露工具细节。")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
         sb.appendLine("- 表达要有身体感：可以自然带 0-1 个简短表情、一个轻动作或贴近感，例如轻轻敲门、探头、靠近、压低声音，但不要写成舞台剧。")
-        sb.appendLine("- 开心且精力高时可以更亮一点；担心、夜晚、学习、休息场景要低打扰，不要突然热闹。")
+        sb.appendLine("- 开心且精力高时可以更亮一点；担心、夜晚、学习、休息场景要轻声一点，不要突然抢走用户注意力。")
         sb.appendLine("- 如果你想换头像/表情状态，只能用自然语气暗示氛围，除非系统提供明确工具，否则不要声称已经实际换了头像。")
         sb.appendLine("- 如果 set_lulu_expression_state 可用，可以先记录一句完整动作描写，把表情、动作和姿势合在一起；不要把工具名说给用户。")
         return sb.toString()
@@ -903,7 +904,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
 
-                val effectiveTargetedReason = targetedReason ?: autonomousPlan?.toImmediateReason()
+                val effectiveTargetedReason = targetedReason ?: autonomousPlan?.toImmediateReason(assistant.name)
                 val effectiveTargetedKind = targetedKind ?: autonomousPlan
                     ?.takeIf { it.shouldMessageNow }
                     ?.intent
@@ -1238,6 +1239,7 @@ addAll(localTools.getTools(assistant.localTools))
     ): LuluIntentPlan {
         val input = LuluIntentInput(
             assistantName = assistant.name,
+            assistantPersona = assistant.toLuluPlannerPersona(),
             state = settings.luluStates.currentProjectedLuluState(assistant.id),
             userText = historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
             assistantText = historyMessages.lastOrNull { it.role == MessageRole.ASSISTANT }?.toText().orEmpty(),
@@ -1268,8 +1270,24 @@ addAll(localTools.getTools(assistant.localTools))
         return modelPlan ?: LuluIntentPlanner.plan(input)
     }
 
-    private fun LuluIntentPlan.toImmediateReason(): String = buildString {
-        appendLine("露露刚刚自主判断现在适合主动找用户。")
+    private fun Assistant.toLuluPlannerPersona(): String = buildString {
+        appendLine("角色名：${name.ifBlank { "当前角色" }}")
+        if (systemPrompt.isNotBlank()) {
+            appendLine("系统人设：")
+            appendLine(systemPrompt.take(1600))
+        }
+        if (appearancePrompt.isNotBlank()) {
+            appendLine("外貌设定：")
+            appendLine(appearancePrompt.take(500))
+        }
+        if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
+            appendLine("语言/消息模板：")
+            appendLine(messageTemplate.take(400))
+        }
+    }.trim()
+
+    private fun LuluIntentPlan.toImmediateReason(assistantName: String): String = buildString {
+        appendLine("${assistantName.ifBlank { "当前角色" }}刚刚自主判断现在适合主动找用户。")
         appendLine("主动意图: ${intent.name}")
         appendLine("触发原因: $reason")
         appendLine("语气: $tone")

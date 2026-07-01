@@ -155,7 +155,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     var newTask by remember { mutableStateOf("") }
     var drawDialog by remember { mutableStateOf<List<StudyDrawResult>?>(null) }
     var boxDialog by remember { mutableStateOf<StudyMysteryBoxReward?>(null) }
-    var showMcDonaldsDialog by remember { mutableStateOf(false) }
+    var showVideoDialog by remember { mutableStateOf(false) }
     var showSuperDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -167,7 +167,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                 is StudyEffect.Message -> snackbarHostState.showSnackbar(effect.text)
                 is StudyEffect.MysteryBox -> boxDialog = effect.reward
                 is StudyEffect.DrawResults -> drawDialog = effect.results
-                StudyEffect.McDonaldsRedeemed -> showMcDonaldsDialog = true
+                StudyEffect.VideoRedeemed -> showVideoDialog = true
                 StudyEffect.SuperMomentReady -> showSuperDialog = true
             }
         }
@@ -324,8 +324,8 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
         )
     }
 
-    if (showMcDonaldsDialog) {
-        McDonaldsCelebration(onDismissRequest = { showMcDonaldsDialog = false })
+    if (showVideoDialog) {
+        VideoRewardCelebration(onDismissRequest = { showVideoDialog = false })
     }
 
     if (showLevelDialog) {
@@ -1202,8 +1202,8 @@ private fun MysteryBoxCelebration(reward: StudyMysteryBoxReward, onDismissReques
 }
 
 @Composable
-private fun McDonaldsCelebration(onDismissRequest: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "mcdonalds")
+private fun VideoRewardCelebration(onDismissRequest: () -> Unit) {
+    val transition = rememberInfiniteTransition(label = "video_reward")
     val pulse by transition.animateFloat(
         initialValue = 0.9f,
         targetValue = 1.1f,
@@ -1212,8 +1212,8 @@ private fun McDonaldsCelebration(onDismissRequest: () -> Unit) {
     )
     AlertDialog(
         onDismissRequest = onDismissRequest,
-        confirmButton = { Button(onClick = onDismissRequest) { Text("好耶，去确认") } },
-        title = { Text("麦门奖励仪式启动") },
+        confirmButton = { Button(onClick = onDismissRequest) { Text("好耶，去星愿馆") } },
+        title = { Text("视频奖励点亮") },
         text = {
             Column(
                 modifier = Modifier
@@ -1225,12 +1225,12 @@ private fun McDonaldsCelebration(onDismissRequest: () -> Unit) {
             ) {
                 Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.size((92 * pulse).dp)) {
                     Box(contentAlignment = Alignment.Center) {
-                        Text("M", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Black, color = StudyColors.goldText)
+                        Icon(HugeIcons.Play, null, tint = StudyColors.goldText, modifier = Modifier.size(44.dp))
                     }
                 }
-                Text("角色帮你安排一顿小奖励啦。", color = Color.White, fontWeight = FontWeight.SemiBold)
+                Text("角色为你点亮了一次视频生成机会。", color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "这里先扣除 2 个麦当劳碎片；真实点餐仍需要你自己确认、自己支付。",
+                    "已消耗 2 个视频碎片。去星愿馆的视频板块，把想要的镜头感、剧情感和角色互动写进去。",
                     color = Color.White.copy(alpha = 0.9f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1258,13 +1258,13 @@ private fun GachaCard(
                     Icon(HugeIcons.AiMagic, null, tint = Color.White)
                     Column {
                         Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("画卷碎片 85% · 小剧场 12% · 麦当劳 3%", color = Color.White.copy(alpha = 0.84f))
+                        Text("画卷碎片 85% · 小剧场 12% · 视频 3%", color = Color.White.copy(alpha = 0.84f))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     DrawPoolChip("画卷", "85%", StudyColors.blue)
                     DrawPoolChip("剧场", "12%", StudyColors.purple)
-                    DrawPoolChip("麦当劳", "3%", StudyColors.goldText)
+                    DrawPoolChip("视频", "3%", StudyColors.goldText)
                 }
             }
         }
@@ -1686,7 +1686,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "画卷碎片 85%，小剧场 12%，麦当劳碎片 3%。",
+                "画卷碎片 85%，小剧场 12%，视频碎片 3%。",
                 "每套画卷需要 10 个专属碎片；通用普通碎片可以补任意未满画卷。",
                 "稀有碎片不区分剧情，10 个稀有碎片可在星愿馆兑换或续写 1 章小剧场。",
             ),
@@ -1724,7 +1724,7 @@ private fun StudyGuideCard() {
                 "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；稀有碎片用于星愿馆章节兑换。",
                 "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
-                "更深的角色主动督学、画卷提示词自动带入、真实麦当劳点餐接口可以作为后续增强。",
+                "更深的角色主动督学、画卷提示词自动带入、视频生成接口可以作为后续增强。",
             ),
         )
     }

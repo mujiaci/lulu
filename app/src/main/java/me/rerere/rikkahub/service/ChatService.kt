@@ -220,7 +220,7 @@ internal fun Settings.recordLuluPresenceTurn(
         perceptionInput = input,
         assistantText = cleanAssistantText,
         assistantName = assistant?.name.orEmpty(),
-        assistantPersona = assistant?.systemPrompt.orEmpty(),
+        assistantPersona = assistant?.toLuluStatePersona().orEmpty(),
         nowMillis = nowMillis,
     )
     val nextThought = buildLuluThoughtFromTurn(
@@ -249,6 +249,22 @@ internal fun Settings.recordLuluPresenceTurn(
         ),
     )
 }
+
+private fun Assistant.toLuluStatePersona(): String = buildString {
+    appendLine("角色名：${name.ifBlank { "当前角色" }}")
+    if (systemPrompt.isNotBlank()) {
+        appendLine("系统人设：")
+        appendLine(systemPrompt.take(1600))
+    }
+    if (appearancePrompt.isNotBlank()) {
+        appendLine("外貌设定：")
+        appendLine(appearancePrompt.take(500))
+    }
+    if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
+        appendLine("语言/消息模板：")
+        appendLine(messageTemplate.take(400))
+    }
+}.trim()
 
 private fun ProactiveReminderPlan.toLuluPendingThought(
     assistantId: Uuid,
@@ -1106,6 +1122,7 @@ class ChatService(
             ?: 0L
         val input = LuluIntentInput(
             assistantName = assistant.name,
+            assistantPersona = assistant.toLuluPlannerPersona(),
             state = currentState,
             userText = userText,
             assistantText = assistantText,
@@ -1169,7 +1186,7 @@ class ChatService(
                 val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
                     turns = plan.turns,
                     assistantName = assistant.name,
-                    assistantPersona = assistant.systemPrompt,
+                    assistantPersona = assistant.toLuluStatePersona(),
                 )
                 val chunk = providerImpl.generateText(
                     providerSetting = provider,
@@ -1413,6 +1430,7 @@ class ChatService(
             .map { it.content }
         val input = LuluChatTurnPlanInput(
             assistantName = assistant.name,
+            assistantPersona = assistant.toLuluPlannerPersona(),
             state = currentState,
             recentMessages = messages,
             pendingThoughts = pendingThoughts,
@@ -1464,6 +1482,22 @@ class ChatService(
             kind = ProactiveReminderKind.GENERAL.name.lowercase(Locale.ROOT),
         )
     }
+
+    private fun Assistant.toLuluPlannerPersona(): String = buildString {
+        appendLine("角色名：${name.ifBlank { "当前角色" }}")
+        if (systemPrompt.isNotBlank()) {
+            appendLine("系统人设：")
+            appendLine(systemPrompt.take(1600))
+        }
+        if (appearancePrompt.isNotBlank()) {
+            appendLine("外貌设定：")
+            appendLine(appearancePrompt.take(500))
+        }
+        if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
+            appendLine("语言/消息模板：")
+            appendLine(messageTemplate.take(400))
+        }
+    }.trim()
 
     private data class ChatTurnPlanResult(
         val plan: LuluChatTurnPlan,

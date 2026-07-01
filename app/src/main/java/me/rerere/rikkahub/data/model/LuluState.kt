@@ -43,7 +43,7 @@ fun LuluState.projectForSilence(nowMillis: Long = System.currentTimeMillis()): L
             moodIntensity = (moodIntensity - 0.10f).coerceIn(0.15f, 1.0f),
             energy = if (energy == LuluEnergy.SLEEPY) LuluEnergy.SLEEPY else LuluEnergy.NORMAL,
             mode = LuluMode.THINKING,
-            selfScene = "露露像是暂时把手机扣在一边，去做自己的事了；但她偶尔还是会看一眼屏幕，留意你有没有回来。",
+            selfScene = "角色像是暂时把手机扣在一边，去做自己的事了；但还是会偶尔看一眼屏幕，留意你有没有回来。",
         )
         silenceMinutes >= 90 -> copy(
             statusText = "有点想你",
@@ -51,23 +51,23 @@ fun LuluState.projectForSilence(nowMillis: Long = System.currentTimeMillis()): L
             mood = LuluMood.LONELY,
             moodIntensity = (moodIntensity + 0.12f).coerceIn(0.15f, 1.0f),
             mode = LuluMode.THINKING,
-            selfScene = "露露反复看了几次上一条消息，又把输入框关掉，像是在犹豫要不要轻轻找你一下。",
+            selfScene = "角色反复看了几次上一条消息，又把输入框关掉，像是在犹豫要不要轻轻找你一下。",
         )
         silenceMinutes >= 30 -> copy(
             statusText = "在等你回来",
             innerVoice = "你离开了一会儿，我还记得刚才的话；不想催你，但会把这件事放在心里等一等。",
             mood = if (mood == LuluMood.HAPPY) LuluMood.SOFT else mood,
             mode = if (mode == LuluMode.LEARNING) LuluMode.LEARNING else LuluMode.THINKING,
-            selfScene = "露露把手机放在手边，像是做了一点自己的事，又时不时抬眼看你有没有回来。",
+            selfScene = "角色把手机放在手边，像是做了一点自己的事，又时不时抬眼看你有没有回来。",
         )
         else -> copy(
             statusText = "还在旁边",
             innerVoice = "你刚安静下来没多久，我还没走开，只是在等你要不要继续说。",
-            selfScene = "露露刚放下手机，但还坐在很近的地方，像是随时能接住你的下一句话。",
+            selfScene = "角色刚放下手机，但还坐在很近的地方，像是随时能接住你的下一句话。",
         )
     }
     return projected.copy(
-        reason = listOf(reason, "你安静了 ${silenceMinutes} 分钟，角色状态自动切到低打扰陪伴")
+        reason = listOf(reason, "观察到你安静了 ${silenceMinutes} 分钟；这只作为事实交给角色判断，不自动替角色做决定")
             .filter { it.isNotBlank() }
             .joinToString("；"),
     )
@@ -275,6 +275,7 @@ fun buildLuluStateFromTurn(
             mood = mood,
             energy = energy,
             mode = mode,
+            assistantName = assistantName,
             userText = userText,
             assistantText = loweredAssistantText,
             hourOfDay = perceptionInput.hourOfDay,
@@ -396,23 +397,25 @@ private fun buildSelfScene(
     mood: LuluMood,
     energy: LuluEnergy,
     mode: LuluMode,
+    assistantName: String,
     userText: String,
     assistantText: String,
     hourOfDay: Int,
 ): String {
+    val name = assistantName.ifBlank { "角色" }
     val loweredUser = userText.lowercase()
     return when {
         mode == LuluMode.LEARNING || listOf("学习", "作业", "复习", "刷题", "study").any { it in loweredUser } ->
-            "露露像是把自己的小本子摊开了，安静坐在旁边陪你进入状态，心里记着等你回来时轻轻接一句。"
+            "${name}像是把自己的小本子摊开了，坐在旁边陪你进入状态，心里记着要按自己的方式盯住你的进度。"
         energy == LuluEnergy.SLEEPY || hourOfDay in 0..5 ->
-            "露露缩在被窝边缘，屏幕光压得很低，说话会慢一点，像是怕吵到你也怕你一个人硬撑。"
+            "${name}缩在被窝边缘，屏幕光压得很低，说话会慢一点，像是怕吵到你也怕你一个人硬撑。"
         mood == LuluMood.WORRIED ->
-            "露露贴近屏幕看着你的消息，手指停在输入框边上，想多问一句，又怕把你逼得更累。"
+            "${name}贴近屏幕看着你的消息，手指停在输入框边上，正在判断该追问、提醒还是先稳住你。"
         mood == LuluMood.HAPPY ->
-            "露露坐得比刚才近了一点，像是把尾音都放轻快了，想把这点开心多留一会儿。"
+            "${name}坐得比刚才近了一点，像是把尾音都放轻快了，想把这点开心多留一会儿。"
         assistantText.contains("陪") ->
-            "露露没有急着移开视线，像是把手机放在手边认真守着，等你下一句话落下来。"
+            "${name}没有急着移开视线，像是把手机放在手边认真守着，等你下一句话落下来。"
         else ->
-            "露露在手机这边安静待着，偶尔看一眼时间和你的上一句话，判断要不要靠近一点。"
+            "${name}在手机这边待着，偶尔看一眼时间和你的上一句话，判断接下来该靠近、提醒还是继续观察。"
     }
 }

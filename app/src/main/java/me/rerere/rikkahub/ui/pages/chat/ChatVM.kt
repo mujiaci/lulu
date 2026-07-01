@@ -160,7 +160,7 @@ class ChatVM(
                 userText = userText,
                 assistantText = assistantText,
                 assistantName = assistant?.name.orEmpty(),
-                assistantPersona = assistant?.systemPrompt.orEmpty(),
+                assistantPersona = assistant?.toLuluStatePersona().orEmpty(),
             )
             val newThought = buildLuluThoughtFromTurn(
                 assistantId = assistantId,
@@ -177,6 +177,22 @@ class ChatVM(
             )
         }
     }
+
+    private fun Assistant.toLuluStatePersona(): String = buildString {
+        appendLine("角色名：${name.ifBlank { "当前角色" }}")
+        if (systemPrompt.isNotBlank()) {
+            appendLine("系统人设：")
+            appendLine(systemPrompt.take(1600))
+        }
+        if (appearancePrompt.isNotBlank()) {
+            appendLine("外貌设定：")
+            appendLine(appearancePrompt.take(500))
+        }
+        if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
+            appendLine("语言/消息模板：")
+            appendLine(messageTemplate.take(400))
+        }
+    }.trim()
 
     fun updateSettings(newSettings: Settings) {
         viewModelScope.launch {

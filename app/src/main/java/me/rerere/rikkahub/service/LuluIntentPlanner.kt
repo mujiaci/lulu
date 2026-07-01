@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.model.LuluState
 
 data class LuluIntentInput(
     val assistantName: String,
+    val assistantPersona: String = "",
     val state: LuluState,
     val userText: String,
     val assistantText: String,
@@ -35,8 +36,9 @@ enum class LuluIntent {
 object LuluIntentPlanner {
     fun plan(input: LuluIntentInput): LuluIntentPlan {
         val text = "${input.userText}\n${input.assistantText}\n${input.pendingThoughts.joinToString("\n")}".lowercase()
+        val personaText = input.assistantPersona.lowercase()
         val explicitDelay = findExplicitRelativeMinutes(text)
-        val intent = chooseIntent(input, text, explicitDelay)
+        val intent = chooseIntent(input, text, personaText, explicitDelay)
         val delayMinutes = when (intent) {
             LuluIntent.CARE_REMINDER -> explicitDelay ?: when {
                 text.hasAny("睡", "困", "晚安") -> 30
@@ -61,12 +63,15 @@ object LuluIntentPlanner {
     private fun chooseIntent(
         input: LuluIntentInput,
         text: String,
+        personaText: String,
         explicitDelay: Int?,
     ): LuluIntent = when {
         explicitDelay != null || text.hasAny("提醒我", "叫我", "催我", "晚安", "睡", "吃饭", "没吃") ->
             LuluIntent.CARE_REMINDER
         text.hasAny("写作业", "学习", "复习", "刷题", "背书", "先不聊", "去学") ->
             LuluIntent.STAY_NEAR
+        input.minutesSinceLastChat >= 30 && personaText.isStudySupervisorPersona() ->
+            LuluIntent.CHECK_CONTEXT
         input.minutesSinceLastChat >= 120 && input.state.energy.canReachOut() ->
             LuluIntent.REACH_OUT
         input.minutesSinceLastChat >= 45 && input.pendingThoughts.isNotEmpty() ->
@@ -115,10 +120,10 @@ object LuluIntentPlanner {
     }
 
     private fun buildReason(input: LuluIntentInput, text: String, intent: LuluIntent): String = when (intent) {
-        LuluIntent.CARE_REMINDER -> "露露根据刚才的对话想继续照看用户：${input.userText.take(40)}"
-        LuluIntent.STAY_NEAR -> "用户刚才像是要去学习/写作业，露露想晚点轻轻确认状态：${input.userText.take(40)}"
-        LuluIntent.REACH_OUT -> "已经很久没有聊天了，露露状态还可以，想自然地找用户说句话。"
-        LuluIntent.CHECK_CONTEXT -> "露露心里还有没完成的想法，想先看看用户状态再决定怎么开口。"
+        LuluIntent.CARE_REMINDER -> "${input.assistantName}根据刚才的对话想继续照看用户：${input.userText.take(40)}"
+        LuluIntent.STAY_NEAR -> "用户刚才像是要去学习/写作业，${input.assistantName}想按人设晚点确认状态：${input.userText.take(40)}"
+        LuluIntent.REACH_OUT -> "已经很久没有聊天了，${input.assistantName}状态还可以，想按自己的人设自然地找用户说句话。"
+        LuluIntent.CHECK_CONTEXT -> "${input.assistantName}需要结合人设、未完成想法和当前感知，再决定要监督、提醒、靠近还是等待。"
         LuluIntent.DO_NOT_DISTURB -> "现在没有足够自然的主动理由，先不打扰。"
     }
 
@@ -174,6 +179,9 @@ object LuluIntentPlanner {
 
     private fun String.hasAny(vararg words: String): Boolean =
         words.any { it in this }
+
+    private fun String.isStudySupervisorPersona(): Boolean =
+        listOf("学习", "考研", "监督", "督学", "待办", "任务", "番茄钟", "自律", "复习").any { it in this }
 
     private fun LuluEnergy.canReachOut(): Boolean = this == LuluEnergy.NORMAL || this == LuluEnergy.HIGH
 }
