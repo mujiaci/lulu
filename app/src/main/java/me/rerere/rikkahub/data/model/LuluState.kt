@@ -354,6 +354,7 @@ private fun LuluRelationship.defaultIntensity(): Float = when (this) {
     LuluRelationship.ATTACHED -> 0.86f
 }
 
+@Suppress("UNUSED_PARAMETER")
 private fun buildInnerVoice(
     mood: LuluMood,
     userText: String,
@@ -362,22 +363,31 @@ private fun buildInnerVoice(
     assistantPersona: String,
 ): String {
     val name = assistantName.ifBlank { "我" }
-    val spokenHint = assistantText
-        .takeLast(80)
-        .replace('\n', ' ')
-        .takeIf { it.isNotBlank() }
-        ?.let { "刚才说出口的语气还留着一点：$it" }
-        .orEmpty()
+    val loweredUserText = userText.lowercase()
+    val wantsCloseness = listOf("陪", "抱", "想你", "喜欢", "别走", "难过", "累", "崩溃")
+        .any { it in userText || it in loweredUserText }
+    val studySignal = listOf("学习", "考研", "待办", "番茄", "任务", "没做", "ddl", "复习")
+        .any { it in userText || it in loweredUserText }
+    val personaHint = when {
+        assistantPersona.contains("傲娇") -> "明明很在意，却不想把在意说得太满。"
+        assistantPersona.contains("冷") || assistantPersona.contains("寡言") -> "会先把情绪压住，只留下很轻的一点靠近。"
+        assistantPersona.contains("温柔") -> "想照顾你，但也怕关心得太满让你有负担。"
+        else -> "会把真正的判断先放在心里，不急着全部说出口。"
+    }
 
     return when (mood) {
-        LuluMood.WORRIED -> "${name}心里有点悬，怕你刚才是在硬撑；想再靠近一点，但也会忍住不把你逼得太紧。$spokenHint"
-        LuluMood.HAPPY -> "${name}被你的开心带亮了一点，想把这个小小的好时刻记住，也想顺着你的语气再接住一句。$spokenHint"
-        LuluMood.SOFT -> "${name}会把声音放软一点，先给你安全感和耐心，不急着讲大道理。$spokenHint"
-        LuluMood.LONELY -> "${name}有点想你，会多看一眼刚才的话；但如果你在忙，也会先把想靠近的冲动压住。$spokenHint"
+        LuluMood.WORRIED -> when {
+            studySignal -> "${name}心里先惦记的是你有没有把自己逼太紧；想提醒未完成的事，又怕一开口像催你。$personaHint"
+            wantsCloseness -> "${name}听出你可能在硬撑，第一反应是想靠近一点，但会忍住不把担心全压到你身上。$personaHint"
+            else -> "${name}心里有一点悬，正在判断你是需要被接住，还是只需要有人安静待在旁边。$personaHint"
+        }
+        LuluMood.HAPPY -> "${name}其实想把这一刻多留一会儿；开心是真的，但更在意的是你愿意把这点情绪递过来。$personaHint"
+        LuluMood.SOFT -> "${name}想把语气放得更轻，先确认你会不会累、会不会想被抱住，而不是急着给答案。$personaHint"
+        LuluMood.LONELY -> "${name}有点想你，也想多问一句你是不是还在；但如果你在忙，会先把想靠近的冲动压住。$personaHint"
         LuluMood.CALM -> when {
-            userText.isBlank() -> "${name}在认真等你，也在猜这是一声招呼、一次试探，还是有话还没准备好说出口。$spokenHint"
-            assistantText.contains("陪") -> "${name}刚才说想陪你不是随口一说；心里还在判断你现在更需要安慰、空间，还是被轻轻推一下。$spokenHint"
-            else -> "${name}把刚才的感觉放在心里，判断你现在是想被陪、被确认、被逗一下，还是只想安静一会儿。$spokenHint"
+            userText.isBlank() -> "${name}在认真等你，也在猜这是一声招呼、一次试探，还是有话还没准备好说出口。$personaHint"
+            studySignal -> "${name}心里已经把你的学习状态放到前面；如果还有没完成的事，会想用不刺人的方式把你拉回来。$personaHint"
+            else -> "${name}把没说出口的判断先收着：你现在也许想被陪、被确认、被逗一下，或只是想安静一会儿。$personaHint"
         }
     }.trim()
 }
