@@ -185,9 +185,46 @@ private fun GenerationLogCard(log: AILogging.Generation) {
                 TokenStat("总计", usage?.totalTokens, Modifier.weight(1f))
             }
 
+            log.breakdown?.let { breakdown ->
+                val realPromptTokens = usage?.promptTokens
+                val estimatedTotal = breakdown.estimatedTokens.coerceAtLeast(1)
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "输入 token 拆账",
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = if (realPromptTokens != null) {
+                            "模型真实输入 ${realPromptTokens.formatNumber()}；下方按内容长度估算并折算到真实总数。"
+                        } else {
+                            "模型还没返回真实输入 token；下方先显示本地粗略估算。"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    breakdown.sections.forEach { section ->
+                        val scaledTokens = realPromptTokens?.let {
+                            (section.estimatedTokens.toDouble() / estimatedTotal * it).toInt()
+                        } ?: section.estimatedTokens
+                        DetailLine(
+                            section.label,
+                            buildString {
+                                append("约 ${scaledTokens.formatNumber()} token")
+                                if (section.messageCount > 0) append(" · ${section.messageCount} 条/个")
+                                append(" · ${section.charCount.formatNumber()} 字符")
+                            }
+                        )
+                    }
+                }
+            }
+
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                DetailLine("消息", "${log.messages.size} 条")
-                DetailLine("工具", "${log.params.tools.size} 个")
+                DetailLine("聊天消息", "${log.messages.size} 条（变换前）")
+                DetailLine("实际发送消息", "${log.sentMessages.size} 条")
+                DetailLine("工具定义", "${log.params.tools.size} 个（发给模型可选，不等于实际调用）")
+                log.breakdown?.toolNames?.takeIf { it.isNotEmpty() }?.let { toolNames ->
+                    DetailLine("工具名", toolNames.take(12).joinToString("、") + if (toolNames.size > 12) " 等 ${toolNames.size} 个" else "")
+                }
                 DetailLine("温度", log.params.temperature?.toString() ?: "默认")
                 DetailLine("Top P", log.params.topP?.toString() ?: "默认")
                 DetailLine("最大输出", log.params.maxTokens?.toString() ?: "默认")

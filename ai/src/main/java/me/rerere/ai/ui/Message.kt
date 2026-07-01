@@ -312,7 +312,7 @@ fun List<UIMessage>.limitContext(size: Int): List<UIMessage> {
         }
     }
 
-    return this.subList(adjustedStartIndex, this.size)
+    return this.subList(adjustedStartIndex, this.size).takeLast(size)
 }
 
 @Serializable

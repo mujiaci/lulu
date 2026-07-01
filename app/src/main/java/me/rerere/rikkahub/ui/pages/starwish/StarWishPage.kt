@@ -110,7 +110,6 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     val state by vm.state.collectAsStateWithLifecycle()
     val generatedImages by vm.generatedImages.collectAsStateWithLifecycle()
     val studyState by vm.studyState.collectAsStateWithLifecycle()
-    val mcpDiagnostic by vm.mcpDiagnostic.collectAsStateWithLifecycle()
     val videoModelStatus by vm.videoModelStatus.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
@@ -230,7 +229,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         val hasChapter = chapters > 0
                         StarWishListRow(
                             title = theater.title,
-                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 10 稀有碎片续写" else "候选剧场 · 花 10 稀有碎片生成第一章",
+                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 1 个小剧场碎片续写" else "候选剧场 · 花 1 个小剧场碎片生成第一章",
                             unlocked = canCreate || hasChapter,
                             progress = (studyState.inventory.universalRareFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.BookOpen02,
@@ -254,9 +253,9 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         StarWishListRow(
                             title = story.title,
                             subtitle = if (hasChapter) {
-                                "已生成 $chapters 章 · 再花 2 特殊剧情碎片续写"
+                                "已生成 $chapters 章 · 再花 1 个特殊剧情碎片续写"
                             } else {
-                                "候选特殊剧情 · 花 2 特殊剧情碎片生成第一章"
+                                "候选特殊剧情 · 花 1 个特殊剧情碎片生成第一章"
                             },
                             unlocked = canCreate || hasChapter,
                             progress = studyState.inventory.specialStoryFragments.coerceAtMost(StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER) /
@@ -274,14 +273,6 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             videoModelStatus = videoModelStatus,
                             onRedeem = vm::redeemVideo,
                             onOpenImageGen = { navController.navigate(Screen.ImageGen()) },
-                        )
-                    }
-                    item {
-                        McDonaldsMcpCard(
-                            mcpCode = state.mcdonaldsMcpCode,
-                            mcpDiagnostic = mcpDiagnostic,
-                            onSave = vm::saveMcdonaldsMcpCode,
-                            onInstallMcp = vm::installMcdonaldsMcp,
                         )
                     }
                 }
@@ -386,7 +377,7 @@ fun StarWishTheaterPage(
                 error = chapterError,
                 modifier = Modifier.padding(padding).padding(horizontal = 16.dp, vertical = 14.dp),
                 costPerChapter = if (special) StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER else StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
-                fragmentLabel = if (special) "特殊剧情碎片" else "稀有碎片",
+                fragmentLabel = if (special) "特殊剧情碎片" else "小剧场碎片",
                 onCreateChapter = { influence ->
                     if (special) vm.createNextSpecialStoryChapter(theater.title, influence) else vm.createNextChapter(theater.title, influence)
                 },
@@ -486,8 +477,8 @@ private fun TheaterWalletCard(
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text("稀有碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("10 个稀有碎片可生成或续写 1 章。自定义剧场会先锁定，兑换后点亮。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("小剧场碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("1 个小剧场碎片可生成或续写 1 章。自定义剧场会先锁定，兑换后点亮。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onAdd) { Text("添加") }
         }
@@ -515,7 +506,7 @@ private fun SpecialStoryWalletCard(
             }
             Column(Modifier.weight(1f)) {
                 Text("特殊剧情碎片 $fragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("2 个特殊剧情碎片兑换 1 章。这里放更贴 XP、更有奖励感的专属剧情。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("1 个特殊剧情碎片兑换 1 章。这里放更贴 XP、更有奖励感的专属剧情。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onAdd) { Text("添加") }
         }
@@ -726,12 +717,12 @@ private fun VideoRewardCard(
                 }
                 Column(Modifier.weight(1f)) {
                     Text("视频奖励", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("视频碎片 $epicFragments/2 · 已兑换 $redeemed 次", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("视频碎片 $epicFragments 枚 · 已兑换 $redeemed 次", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                 Text(
-                    "$videoModelStatus\n2 个视频碎片可兑换 1 次视频生成机会。这里先留视频生成入口，具体生成参数可以继续接你的视频模型 API。",
+                    "$videoModelStatus\n1 个视频碎片可兑换 1 次视频生成机会。这里先留视频生成入口，具体生成参数可以继续接你的视频模型 API。",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWishColors.inkBlue,
@@ -740,7 +731,7 @@ private fun VideoRewardCard(
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                 Button(
                     onClick = onRedeem,
-                    enabled = epicFragments >= 2,
+                    enabled = epicFragments >= 1,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text("兑换视频机会")
@@ -757,62 +748,6 @@ private fun VideoRewardCard(
 }
 
 @Composable
-private fun McDonaldsMcpCard(
-    mcpCode: String,
-    mcpDiagnostic: String,
-    onSave: (String) -> Unit,
-    onInstallMcp: (String) -> Unit,
-) {
-    var code by remember(mcpCode) { mutableStateOf(mcpCode) }
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                Surface(shape = CircleShape, color = Color(0xFFFFE7A8), modifier = Modifier.size(44.dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text("M", color = Color(0xFF9B6B10), fontWeight = FontWeight.Black)
-                    }
-                }
-                Column(Modifier.weight(1f)) {
-                    Text("麦当劳 MCP 接口", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("普通工具连接，不再作为抽卡奖励", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-            }
-            OutlinedTextField(
-                value = code,
-                onValueChange = {
-                    code = it
-                    onSave(it)
-                },
-                label = { Text("麦当劳 MCP Token") },
-                supportingText = { Text("可直接粘贴 token；保存时会自动写成 Authorization: Bearer <token>") },
-                placeholder = { Text("把你的 MCP 码粘到这里") },
-                minLines = 2,
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = { onInstallMcp(code.trim()) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("保存并接通")
-                }
-            }
-            Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
-                Text(
-                    "服务地址和鉴权头会自动配置好，你只需要填 MCP 码。$mcpDiagnostic",
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = StarWishColors.inkBlue,
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun TheaterDetailContent(
     theater: StarWishTheaterSeed,
     credits: Int,
@@ -822,7 +757,7 @@ private fun TheaterDetailContent(
     error: String?,
     modifier: Modifier = Modifier,
     costPerChapter: Int = StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
-    fragmentLabel: String = "稀有碎片",
+    fragmentLabel: String = "小剧场碎片",
     onCreateChapter: (String) -> Unit,
     onDeleteChapter: (String) -> Unit,
 ) {
@@ -990,7 +925,7 @@ private fun AddTheaterDialog(
         title = { Text("添加小剧场") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("添加后会出现在小剧场列表里；未花稀有碎片生成章节前，它仍然只是候选。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("添加后会出现在小剧场列表里；未花小剧场碎片生成章节前，它仍然只是候选。", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },

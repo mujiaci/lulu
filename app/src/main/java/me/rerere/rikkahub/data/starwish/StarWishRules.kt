@@ -5,8 +5,8 @@ import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyState
 
 object StarWishRules {
-    const val RARE_FRAGMENTS_PER_CHAPTER = 10
-    const val SPECIAL_FRAGMENTS_PER_CHAPTER = 2
+    const val RARE_FRAGMENTS_PER_CHAPTER = 1
+    const val SPECIAL_FRAGMENTS_PER_CHAPTER = 1
 
     val scrolls: List<StarWishScroll> = listOf(
         StarWishScroll(

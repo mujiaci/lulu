@@ -99,7 +99,7 @@ class StudyVM(
     fun redeemVideo() = reduce {
         val result = StudyRules.redeemVideo(it)
         if (result.reward.title.isBlank()) {
-            _effects.tryEmit(StudyEffect.Message("还需要 2 个视频碎片"))
+            _effects.tryEmit(StudyEffect.Message("还需要 1 个视频碎片"))
         } else {
             _effects.tryEmit(StudyEffect.VideoRedeemed)
         }

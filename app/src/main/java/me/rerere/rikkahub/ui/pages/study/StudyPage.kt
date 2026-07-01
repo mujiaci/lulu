@@ -703,7 +703,7 @@ private fun TodayProgressCard(
         if (state.superMomentAvailable) {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(onClick = onClaimNormal, modifier = Modifier.weight(1f)) { Text("普通 x5") }
-                OutlinedButton(onClick = onClaimRare, modifier = Modifier.weight(1f)) { Text("稀有 x1") }
+                OutlinedButton(onClick = onClaimRare, modifier = Modifier.weight(1f)) { Text("小剧场 x1") }
             }
         }
         LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
@@ -944,7 +944,7 @@ private fun SuperMomentCelebration(
                     Text("选择普通碎片 x5")
                 }
                 OutlinedButton(onClick = onClaimRare, modifier = Modifier.fillMaxWidth()) {
-                    Text("选择稀有碎片 x1")
+                    Text("选择小剧场碎片 x1")
                 }
                 TextButton(onClick = onDismissRequest, modifier = Modifier.fillMaxWidth()) {
                     Text("先等等", color = Color.White)
@@ -966,12 +966,12 @@ private fun DrawResultCelebration(
     val pulse by transition.animateFloat(
         initialValue = 0.96f,
         targetValue = 1.04f,
-        animationSpec = infiniteRepeatable(tween(if (best == StudyRarity.Epic) 520 else 780), RepeatMode.Reverse),
+        animationSpec = infiniteRepeatable(tween(if (best == StudyRarity.Epic || best == StudyRarity.Rainbow) 520 else 780), RepeatMode.Reverse),
         label = "draw-pulse",
     )
     val glow by transition.animateFloat(
         initialValue = 0.18f,
-        targetValue = if (best == StudyRarity.Epic) 0.72f else 0.38f,
+        targetValue = if (best == StudyRarity.Epic || best == StudyRarity.Rainbow) 0.72f else 0.38f,
         animationSpec = infiniteRepeatable(tween(900), RepeatMode.Reverse),
         label = "draw-glow",
     )
@@ -984,7 +984,7 @@ private fun DrawResultCelebration(
         delay(520)
         results.forEachIndexed { index, _ ->
             currentIndex = index
-            delay(if (results[index].rarity == StudyRarity.Epic) 1180 else 720)
+            delay(if (results[index].rarity == StudyRarity.Epic || results[index].rarity == StudyRarity.Rainbow) 1180 else 720)
         }
     }
     Dialog(
@@ -1088,7 +1088,11 @@ private fun DrawRevealCard(result: StudyDrawResult, pulse: Float) {
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Text(
-                        if (result.rarity == StudyRarity.Epic) "金" else result.rarity.label.take(1),
+                        when (result.rarity) {
+                            StudyRarity.Epic -> "金"
+                            StudyRarity.Rainbow -> "彩"
+                            else -> result.rarity.label.take(1)
+                        },
                         color = rarityColor(result.rarity),
                         fontWeight = FontWeight.Black,
                     )
@@ -1141,6 +1145,9 @@ private fun drawFullscreenBrush(rarity: StudyRarity): Brush = when (rarity) {
     StudyRarity.Normal -> Brush.verticalGradient(listOf(Color(0xFF1F3D54), Color(0xFF5A8296), Color(0xFF0F1B2B)))
     StudyRarity.Rare -> Brush.verticalGradient(listOf(Color(0xFF251D52), Color(0xFF8067B7), Color(0xFF120D2C)))
     StudyRarity.Epic -> Brush.verticalGradient(listOf(Color(0xFF3A2400), Color(0xFFFFB938), Color(0xFF6F2E00)))
+    StudyRarity.Rainbow -> Brush.verticalGradient(
+        listOf(Color(0xFF123C69), Color(0xFFFF6B9A), Color(0xFFFFD166), Color(0xFF5DE0E6), Color(0xFF3A176A)),
+    )
 }
 
 @Composable
@@ -1218,7 +1225,7 @@ private fun VideoRewardCelebration(onDismissRequest: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(drawBrush(StudyRarity.Epic), RoundedCornerShape(18.dp))
+                    .background(drawBrush(StudyRarity.Rainbow), RoundedCornerShape(18.dp))
                     .padding(18.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -1230,7 +1237,7 @@ private fun VideoRewardCelebration(onDismissRequest: () -> Unit) {
                 }
                 Text("角色为你点亮了一次视频生成机会。", color = Color.White, fontWeight = FontWeight.SemiBold)
                 Text(
-                    "已消耗 2 个视频碎片。去星愿馆的视频板块，把想要的镜头感、剧情感和角色互动写进去。",
+                    "已消耗 1 个视频碎片。去星愿馆的视频板块，把想要的镜头感、剧情感和角色互动写进去。",
                     color = Color.White.copy(alpha = 0.9f),
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -1258,13 +1265,14 @@ private fun GachaCard(
                     Icon(HugeIcons.AiMagic, null, tint = Color.White)
                     Column {
                         Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("画卷碎片 85% · 小剧场 12% · 视频 3%", color = Color.White.copy(alpha = 0.84f))
+                        Text("普通碎片 92% · 小剧场 5% · 特殊剧情 2% · 视频 1%", color = Color.White.copy(alpha = 0.84f))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DrawPoolChip("画卷", "85%", StudyColors.blue)
-                    DrawPoolChip("剧场", "12%", StudyColors.purple)
-                    DrawPoolChip("视频", "3%", StudyColors.goldText)
+                    DrawPoolChip("普通", "92%", StudyColors.blue)
+                    DrawPoolChip("剧场", "5%", StudyColors.purple)
+                    DrawPoolChip("特殊", "2%", StudyColors.goldText)
+                    DrawPoolChip("视频", "1%", Color(0xFF41D6C3))
                 }
             }
         }
@@ -1411,9 +1419,9 @@ private fun CollectionProgressList(
         }
         CollectionSection.Theaters -> {
             Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("稀有碎片不再区分剧情。去星愿馆选择任意小剧场，花 10 个稀有碎片生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("小剧场碎片不再区分剧情。去星愿馆选择任意小剧场，花 1 个小剧场碎片生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             CollectionProgressRow(
-                title = "当前稀有碎片",
+                title = "当前小剧场碎片",
                 detail = "${inventory.universalRareFragments}/10",
                 progress = (inventory.universalRareFragments.coerceAtMost(10)) / 10f,
                 unlocked = inventory.universalRareFragments >= 10,
@@ -1686,9 +1694,9 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "画卷碎片 85%，小剧场 12%，视频碎片 3%。",
+                "普通碎片 92%，小剧场碎片 5%，特殊剧情碎片 2%，视频碎片 1%。",
                 "每套画卷需要 10 个专属碎片；通用普通碎片可以补任意未满画卷。",
-                "稀有碎片不区分剧情，10 个稀有碎片可在星愿馆兑换或续写 1 章小剧场。",
+                "小剧场碎片不区分剧情，1 个小剧场碎片可在星愿馆兑换或续写 1 章小剧场。",
             ),
         )
         GuideBlock(
@@ -1721,7 +1729,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
                 "收藏已按 20 套画卷、每套 10 个专属碎片展示。",
-                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；稀有碎片用于星愿馆章节兑换。",
+                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；小剧场碎片用于星愿馆章节兑换。",
                 "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
                 "更深的角色主动督学、画卷提示词自动带入、视频生成接口可以作为后续增强。",
@@ -1917,6 +1925,7 @@ private fun rarityColor(rarity: StudyRarity): Color = when (rarity) {
     StudyRarity.Normal -> StudyColors.blue
     StudyRarity.Rare -> StudyColors.purple
     StudyRarity.Epic -> StudyColors.goldText
+    StudyRarity.Rainbow -> Color(0xFF23C8B8)
 }
 
 private val StudyRarity.weight: Int
@@ -1924,12 +1933,14 @@ private val StudyRarity.weight: Int
         StudyRarity.Normal -> 1
         StudyRarity.Rare -> 2
         StudyRarity.Epic -> 3
+        StudyRarity.Rainbow -> 4
     }
 
 private fun drawResultTitle(best: StudyRarity, count: Int): String {
     return when (best) {
+        StudyRarity.Rainbow -> "彩色光芒亮起来了"
         StudyRarity.Epic -> "金光炸开了"
-        StudyRarity.Rare -> if (count >= 10) "十连有好东西" else "稀有碎片出现"
+        StudyRarity.Rare -> if (count >= 10) "十连有好东西" else "小剧场碎片出现"
         StudyRarity.Normal -> if (count >= 10) "十连结果" else "抽卡结果"
     }
 }
@@ -1946,6 +1957,9 @@ private fun drawBrush(rarity: StudyRarity): Brush = when (rarity) {
     StudyRarity.Normal -> Brush.linearGradient(listOf(Color(0xFF8CC7D8), Color(0xFF6F8FA6)))
     StudyRarity.Rare -> Brush.linearGradient(listOf(Color(0xFF8067B7), Color(0xFFB88BCE)))
     StudyRarity.Epic -> Brush.linearGradient(listOf(Color(0xFFFFC857), Color(0xFFFF8F5A), Color(0xFFFFF2B3)))
+    StudyRarity.Rainbow -> Brush.linearGradient(
+        listOf(Color(0xFF5DE0E6), Color(0xFFFF6B9A), Color(0xFFFFD166), Color(0xFF9B5DE5)),
+    )
 }
 
 private fun mysteryBoxText(kudos: Int): String = when (kudos) {

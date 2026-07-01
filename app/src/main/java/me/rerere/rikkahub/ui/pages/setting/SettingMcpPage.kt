@@ -104,6 +104,50 @@ import me.rerere.rikkahub.ui.theme.extendColors
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
 
+private const val MCDONALDS_MCP_NAME = "麦当劳 MCP"
+private const val MCDONALDS_MCP_URL = "https://mcp.mcd.cn"
+
+private fun normalizeMcdonaldsMcpAuthValue(token: String): String {
+    val value = token.trim()
+    return if (value.startsWith("Bearer ", ignoreCase = true)) value else "Bearer $value"
+}
+
+private fun McpServerConfig.isMcdonaldsMcp(): Boolean =
+    commonOptions.name == MCDONALDS_MCP_NAME ||
+        (this is McpServerConfig.StreamableHTTPServer && url == MCDONALDS_MCP_URL)
+
+private fun upsertMcdonaldsMcpServer(
+    servers: List<McpServerConfig>,
+    token: String,
+): List<McpServerConfig> {
+    val existing = servers.firstOrNull { it.isMcdonaldsMcp() }
+    val commonOptions = (existing?.commonOptions ?: McpCommonOptions()).copy(
+        enable = true,
+        name = MCDONALDS_MCP_NAME,
+        headers = listOf("Authorization" to normalizeMcdonaldsMcpAuthValue(token)),
+    )
+    val config = when (existing) {
+        is McpServerConfig.StreamableHTTPServer -> existing.copy(
+            commonOptions = commonOptions,
+            url = MCDONALDS_MCP_URL,
+        )
+        null -> McpServerConfig.StreamableHTTPServer(
+            commonOptions = commonOptions,
+            url = MCDONALDS_MCP_URL,
+        )
+        else -> McpServerConfig.StreamableHTTPServer(
+            id = existing.id,
+            commonOptions = commonOptions,
+            url = MCDONALDS_MCP_URL,
+        )
+    }
+    return if (existing == null) {
+        servers + config
+    } else {
+        servers.map { server -> if (server.id == existing.id) config else server }
+    }
+}
+
 @Composable
 fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -182,6 +226,28 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(16.dp)
             ) {
+                item {
+                    McDonaldsMcpShortcutCard(
+                        configs = mcpConfigs,
+                        onSave = { token ->
+                            vm.updateSettingsAndSyncMcp(
+                                settings.copy(
+                                    mcpServers = upsertMcdonaldsMcpServer(mcpConfigs, token)
+                                )
+                            )
+                        },
+                        onDelete = { config ->
+                            vm.updateSettings(
+                                settings.copy(
+                                    mcpServers = mcpConfigs.filter { it.id != config.id },
+                                    assistants = settings.assistants.map { assistant ->
+                                        assistant.copy(mcpServers = assistant.mcpServers - config.id)
+                                    },
+                                )
+                            )
+                        },
+                    )
+                }
                 items(mcpConfigs, key = { it.id }) { mcpConfig ->
                     McpServerItem(
                         item = mcpConfig,
@@ -227,6 +293,87 @@ fun SettingMcpPage(vm: SettingVM = koinViewModel()) {
                 showImportDialog = false
             }
         )
+    }
+}
+
+@Composable
+private fun McDonaldsMcpShortcutCard(
+    configs: List<McpServerConfig>,
+    onSave: (String) -> Unit,
+    onDelete: (McpServerConfig) -> Unit,
+) {
+    val config = configs.firstOrNull { it.isMcdonaldsMcp() }
+    val savedToken = config?.commonOptions?.headers
+        ?.firstOrNull { it.first.equals("Authorization", ignoreCase = true) }
+        ?.second
+        ?.removePrefix("Bearer")
+        ?.trim()
+        .orEmpty()
+    var token by remember(savedToken) { mutableStateOf(savedToken) }
+    val tokenReady = token.isNotBlank()
+    val enabledTools = config?.commonOptions?.tools?.count { it.enable } ?: 0
+    val totalTools = config?.commonOptions?.tools?.size ?: 0
+    Card(
+        colors = CardDefaults.cardColors(containerColor = CustomColors.listItemColors.containerColor),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Icon(HugeIcons.McpServer, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Column(Modifier.weight(1f)) {
+                    Text("麦当劳 MCP 快捷接入", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "普通 MCP 工具，不再出现在考研 App 或星愿馆奖励区。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                if (config != null) {
+                    IconButton(onClick = { onDelete(config) }) {
+                        Icon(HugeIcons.Delete01, contentDescription = "删除麦当劳 MCP")
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = token,
+                onValueChange = { token = it },
+                label = { Text("MCP Token") },
+                placeholder = { Text("留空给你自己填；保存后自动写入 Authorization") },
+                supportingText = { Text("服务地址固定为 $MCDONALDS_MCP_URL，请求头为 Authorization: Bearer <token>。") },
+                minLines = 1,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = when {
+                        config == null -> "未安装"
+                        !tokenReady -> "已安装，还差 token"
+                        totalTools == 0 -> "已保存，等待同步工具"
+                        else -> "已同步 $totalTools 个工具，启用 $enabledTools 个"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f),
+                )
+                Button(
+                    onClick = { onSave(token) },
+                    enabled = token.isNotBlank(),
+                ) {
+                    Text("保存并接通")
+                }
+            }
+        }
     }
 }
 

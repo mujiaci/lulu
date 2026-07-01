@@ -11,7 +11,6 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.ModelType
@@ -33,20 +32,6 @@ import me.rerere.rikkahub.data.starwish.StarWishTheaterChapter
 import me.rerere.rikkahub.data.starwish.StarWishTheaterSeed
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyStore
-import me.rerere.rikkahub.data.ai.mcp.McpCommonOptions
-import me.rerere.rikkahub.data.ai.mcp.McpServerConfig
-
-private const val MCDONALDS_MCP_NAME = "麦当劳 MCP"
-private const val MCDONALDS_MCP_URL = "https://mcp.mcd.cn"
-
-private fun normalizeMcdonaldsMcpAuthValue(token: String): String {
-    val value = token.trim()
-    return if (value.startsWith("Bearer ", ignoreCase = true)) {
-        value
-    } else {
-        "Bearer $value"
-    }
-}
 
 class StarWishVM(
     private val store: StarWishStore,
@@ -58,9 +43,6 @@ class StarWishVM(
 ) : ViewModel() {
     val state: StateFlow<StarWishState> = store.state
     val studyState = studyStore.state
-    val mcpDiagnostic = settingsStore.settingsFlow
-        .map { settings -> buildMcdonaldsMcpDiagnostic(settings.mcpServers) }
-        .stateIn(viewModelScope, SharingStarted.Lazily, "正在读取 MCP 配置...")
     val videoModelStatus = settingsStore.settingsFlow
         .map { settings ->
             settings.findModelById(settings.videoGenerationModelId)
@@ -119,64 +101,6 @@ class StarWishVM(
                     filePath = File(imagesDir, entity.path.removePrefix("images/")).absolutePath,
                     prompt = entity.prompt,
                     createdAt = entity.createAt,
-                )
-            }
-        }
-    }
-
-    fun saveMcdonaldsMcpCode(code: String) {
-        viewModelScope.launch {
-            store.update { it.copy(mcdonaldsMcpCode = code) }
-        }
-    }
-
-    fun installMcdonaldsMcp(code: String) {
-        viewModelScope.launch {
-            val token = code.trim()
-            store.update { it.copy(mcdonaldsMcpCode = token) }
-            settingsStore.update { settings ->
-                val existing = settings.mcpServers.firstOrNull { server ->
-                    server.commonOptions.name == MCDONALDS_MCP_NAME ||
-                        (server is McpServerConfig.StreamableHTTPServer && server.url == MCDONALDS_MCP_URL)
-                }
-                val headers = listOf("Authorization" to normalizeMcdonaldsMcpAuthValue(token))
-                val commonOptions = (existing?.commonOptions ?: McpCommonOptions())
-                    .copy(
-                        enable = true,
-                        name = MCDONALDS_MCP_NAME,
-                        headers = headers,
-                    )
-                val config = when (existing) {
-                    is McpServerConfig.StreamableHTTPServer -> existing.copy(
-                        commonOptions = commonOptions,
-                        url = MCDONALDS_MCP_URL,
-                    )
-                    null -> McpServerConfig.StreamableHTTPServer(
-                        commonOptions = commonOptions,
-                        url = MCDONALDS_MCP_URL,
-                    )
-                    else -> McpServerConfig.StreamableHTTPServer(
-                        id = existing.id,
-                        commonOptions = commonOptions,
-                        url = MCDONALDS_MCP_URL,
-                    )
-                }
-                val nextServers = if (existing == null) {
-                    settings.mcpServers + config
-                } else {
-                    settings.mcpServers.map { server ->
-                        if (server.id == existing.id) config else server
-                    }
-                }
-                settings.copy(
-                    mcpServers = nextServers,
-                    assistants = settings.assistants.map { assistant ->
-                        if (assistant.id == settings.assistantId) {
-                            assistant.copy(mcpServers = assistant.mcpServers + config.id)
-                        } else {
-                            assistant
-                        }
-                    },
                 )
             }
         }
@@ -360,41 +284,6 @@ class StarWishVM(
             store.update { current ->
                 current.copy(customSpecialStories = current.customSpecialStories + seed)
             }
-        }
-    }
-}
-
-private fun buildMcdonaldsMcpDiagnostic(servers: List<McpServerConfig>): String {
-    val mcdServer = servers.firstOrNull { server ->
-        server.commonOptions.name == MCDONALDS_MCP_NAME ||
-            (server is McpServerConfig.StreamableHTTPServer && server.url == MCDONALDS_MCP_URL)
-    }
-    if (mcdServer == null) {
-        return "还没有安装麦当劳 MCP。粘贴 MCP 码后点“保存并接通”，我会自动填好服务地址和请求头。"
-    }
-    val tokenReady = mcdServer.commonOptions.headers.any { (key, value) ->
-        key.equals("Authorization", ignoreCase = true) &&
-            value.removePrefix("Bearer").trim().isNotBlank()
-    }
-    val enabled = servers.filter { it.commonOptions.enable }
-    val allTools = enabled.flatMap { server ->
-        server.commonOptions.tools.map { tool -> server.commonOptions.name to tool.name }
-    }
-    val orderTools = allTools.filter { (_, tool) ->
-        val name = tool.lowercase()
-        listOf("mcdonald", "麦当劳", "order", "cart", "menu", "点单", "下单").any { key -> name.contains(key) }
-    }
-    return buildString {
-        append("麦当劳 MCP 已安装，")
-        append(if (tokenReady) "MCP 码已填写。" else "还差 MCP 码。")
-        append("已启用 ${if (mcdServer.commonOptions.enable) "是" else "否"}。")
-        append("已同步工具 ${allTools.size} 个。")
-        if (orderTools.isEmpty()) {
-            append("如果刚保存，稍等同步工具；若一直为 0，多半是 MCP 码没填或填错。")
-        } else {
-            append("疑似点单工具：")
-            append(orderTools.take(5).joinToString("、") { "${it.first}/${it.second}" })
-            append("。真实下单仍需要工具参数确认和支付确认。")
         }
     }
 }

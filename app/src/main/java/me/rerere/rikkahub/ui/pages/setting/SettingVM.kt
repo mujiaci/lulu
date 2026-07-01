@@ -23,4 +23,11 @@ class SettingVM(
             settingsStore.update(settings)
         }
     }
+
+    fun updateSettingsAndSyncMcp(settings: Settings) {
+        viewModelScope.launch {
+            settingsStore.update(settings)
+            mcpManager.syncAll()
+        }
+    }
 }

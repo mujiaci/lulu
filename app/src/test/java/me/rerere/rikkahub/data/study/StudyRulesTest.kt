@@ -113,7 +113,7 @@ class StudyRulesTest {
                 totalStudyMinutes = 3_000,
                 unlockedOutfitSets = 3,
                 unlockedTheaters = 1,
-                mcdonaldsRedeemed = 1,
+                videoRewardsRedeemed = 1,
             ),
             longestPerfectStreak = 7,
         )
@@ -245,5 +245,41 @@ class StudyRulesTest {
         assertEquals(1, drawn.results.size)
         assertEquals(result.fragmentKey, drawn.results.first().fragmentKey)
         assertEquals(1, drawn.state.wallet.singleDrawTickets)
+    }
+
+    @Test
+    fun `draw pool has small theater special story and rainbow video fragments`() {
+        val state = StudyState(wallet = StudyWallet(singleDrawTickets = 3))
+        val rare = StudyRules.draw(state, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.95))).state
+        val special = StudyRules.draw(rare, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.98))).state
+        val video = StudyRules.draw(special, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.995))).state
+
+        assertEquals(1, rare.inventory.universalRareFragments)
+        assertEquals(1, special.inventory.specialStoryFragments)
+        assertEquals(1, video.inventory.epicFragments)
+    }
+
+    @Test
+    fun `video and story chapters cost one fragment each`() {
+        val state = StudyState(
+            inventory = StudyInventory(epicFragments = 1, specialStoryFragments = 1),
+        )
+
+        val video = StudyRules.redeemVideo(state)
+        val story = StudyRules.redeemSpecialStory(video.state)
+
+        assertEquals(0, video.state.inventory.epicFragments)
+        assertEquals(1, video.state.stats.videoRewardsRedeemed)
+        assertEquals(0, story.state.inventory.specialStoryFragments)
+        assertEquals("特殊剧情章节 x1", story.reward.title)
+    }
+
+    private class FixedDrawRandom(
+        private val doubles: MutableList<Double> = mutableListOf(),
+        private val ints: MutableList<Int> = mutableListOf(),
+    ) : Random() {
+        override fun nextBits(bitCount: Int): Int = 0
+        override fun nextDouble(): Double = doubles.removeAt(0)
+        override fun nextInt(until: Int): Int = (ints.removeAt(0).takeIf { it >= 0 } ?: 0) % until
     }
 }

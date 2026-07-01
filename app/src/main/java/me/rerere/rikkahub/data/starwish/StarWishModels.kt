@@ -10,7 +10,6 @@ data class StarWishState(
     val specialStoryChapters: Map<String, List<StarWishTheaterChapter>> = emptyMap(),
     val customTheaters: List<StarWishTheaterSeed> = emptyList(),
     val customSpecialStories: List<StarWishTheaterSeed> = emptyList(),
-    val mcdonaldsMcpCode: String = "",
 )
 
 @Serializable

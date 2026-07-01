@@ -146,6 +146,7 @@ enum class StudyRarity(val label: String) {
     Normal("普通"),
     Rare("稀有"),
     Epic("史诗"),
+    Rainbow("彩色"),
 }
 
 @Serializable

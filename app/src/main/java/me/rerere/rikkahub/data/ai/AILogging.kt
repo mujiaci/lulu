@@ -14,6 +14,8 @@ sealed class AILogging {
         val id: Uuid = Uuid.random(),
         val params: TextGenerationParams,
         val messages: List<UIMessage>,
+        val sentMessages: List<UIMessage> = messages,
+        val breakdown: GenerationTokenBreakdown? = null,
         val providerSetting: ProviderSetting,
         val stream: Boolean,
         val createdAtMillis: Long = System.currentTimeMillis(),
@@ -22,6 +24,20 @@ sealed class AILogging {
         val error: String? = null,
     ) : AILogging()
 }
+
+data class GenerationTokenBreakdown(
+    val sections: List<GenerationTokenSection>,
+    val toolNames: List<String>,
+) {
+    val estimatedTokens: Int = sections.sumOf { it.estimatedTokens }
+}
+
+data class GenerationTokenSection(
+    val label: String,
+    val estimatedTokens: Int,
+    val messageCount: Int = 0,
+    val charCount: Int = 0,
+)
 
 private const val MAX_LOGS = 32
 

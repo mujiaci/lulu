@@ -334,57 +334,80 @@ class GenerationHandler(
         processingStatus: MutableStateFlow<String?> = MutableStateFlow(null),
         conversationSystemPrompt: String? = null,
     ) {
-        val internalMessages = buildList {
-            val system = buildString {
-                val effectiveSystemPrompt =
-                    if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
-                        conversationSystemPrompt
-                    } else {
-                        assistant.systemPrompt
-                    }
-                if (effectiveSystemPrompt.isNotBlank()) {
-                    append(effectiveSystemPrompt)
-                }
-
-                // Recent chat reference is optional. Vector memory is injected before this handler.
-                if (assistant.enableRecentChatsReference) {
-                    appendLine()
-                    append(buildRecentChatsPrompt(assistant, conversationRepo))
-                }
-
-                // Tool prompts
-                tools.forEach { tool ->
-                    appendLine()
-                    append(tool.systemPrompt(model, messages))
-                }
-
-                // Plugin prompt injections
-                if (pluginPromptInjections.isNotEmpty()) {
-                    pluginPromptInjections.forEach { injection ->
-                        appendLine()
-                        appendLine()
-                        append(injection)
-                    }
-                }
-
-                // Allow skip reply
-                if (assistant.allowSkipReply) {
-                    appendLine()
-                    appendLine()
-                    appendLine("## Skip Reply")
-                    appendLine("If you determine that no reply is needed (e.g., the user's message doesn't require a response, or you have nothing meaningful to add), you may reply with exactly `[SKIP]` (without any other text). This message will be hidden from the user. Use this sparingly and only when truly appropriate.")
-                }
-
+        val effectiveSystemPrompt =
+            if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
+                conversationSystemPrompt
+            } else {
+                assistant.systemPrompt
             }
+        val recentChatsPrompt = if (assistant.enableRecentChatsReference) {
+            buildRecentChatsPrompt(assistant, conversationRepo)
+        } else {
+            ""
+        }
+        val toolSystemPrompts = tools.map { tool -> tool.name to tool.systemPrompt(model, messages) }
+        val skipReplyPrompt = if (assistant.allowSkipReply) {
+            "## Skip Reply\n" +
+                "If you determine that no reply is needed (e.g., the user's message doesn't require a response, or you have nothing meaningful to add), you may reply with exactly `[SKIP]` (without any other text). This message will be hidden from the user. Use this sparingly and only when truly appropriate."
+        } else {
+            ""
+        }
+        val system = buildString {
+            if (effectiveSystemPrompt.isNotBlank()) {
+                append(effectiveSystemPrompt)
+            }
+
+            // Recent chat reference is optional. Vector memory is injected before this handler.
+            if (recentChatsPrompt.isNotBlank()) {
+                appendLine()
+                append(recentChatsPrompt)
+            }
+
+            // Tool prompts
+            toolSystemPrompts.forEach { (_, prompt) ->
+                appendLine()
+                append(prompt)
+            }
+
+            // Plugin prompt injections
+            if (pluginPromptInjections.isNotEmpty()) {
+                pluginPromptInjections.forEach { injection ->
+                    appendLine()
+                    appendLine()
+                    append(injection)
+                }
+            }
+
+            // Allow skip reply
+            if (skipReplyPrompt.isNotBlank()) {
+                appendLine()
+                appendLine()
+                appendLine(skipReplyPrompt)
+            }
+        }
+        val limitedMessages = messages.limitContext(assistant.contextMessageSize)
+        val preTransformMessages = buildList {
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
-            addAll(messages.limitContext(assistant.contextMessageSize))
-        }.transforms(
+            addAll(limitedMessages)
+        }
+        val internalMessages = preTransformMessages.transforms(
             transformers = transformers,
             context = context,
             model = model,
             assistant = assistant,
             settings = settings,
             processingStatus = processingStatus,
+        )
+        val breakdown = buildGenerationTokenBreakdown(
+            effectiveSystemPrompt = effectiveSystemPrompt,
+            recentChatsPrompt = recentChatsPrompt,
+            toolSystemPrompts = toolSystemPrompts,
+            pluginPromptInjections = pluginPromptInjections,
+            skipReplyPrompt = skipReplyPrompt,
+            tools = tools,
+            limitedMessages = limitedMessages,
+            preTransformMessages = preTransformMessages,
+            internalMessages = internalMessages,
         )
 
         var messages: List<UIMessage> = messages
@@ -408,6 +431,8 @@ class GenerationHandler(
             val apiLog = AILogging.Generation(
                 params = params,
                 messages = messages,
+                sentMessages = internalMessages,
+                breakdown = breakdown,
                 providerSetting = provider,
                 stream = true
             )
@@ -440,6 +465,8 @@ class GenerationHandler(
             val apiLog = AILogging.Generation(
                 params = params,
                 messages = messages,
+                sentMessages = internalMessages,
+                breakdown = breakdown,
                 providerSetting = provider,
                 stream = false
             )
@@ -470,6 +497,144 @@ class GenerationHandler(
                 throw e
             }
         }
+    }
+
+    private fun buildGenerationTokenBreakdown(
+        effectiveSystemPrompt: String,
+        recentChatsPrompt: String,
+        toolSystemPrompts: List<Pair<String, String>>,
+        pluginPromptInjections: List<String>,
+        skipReplyPrompt: String,
+        tools: List<Tool>,
+        limitedMessages: List<UIMessage>,
+        preTransformMessages: List<UIMessage>,
+        internalMessages: List<UIMessage>,
+    ): GenerationTokenBreakdown {
+        val preTransformText = preTransformMessages.joinToTokenEstimateText()
+        val internalText = internalMessages.joinToTokenEstimateText()
+        val toolDefinitionsText = tools.joinToString("\n\n") { tool ->
+            buildString {
+                appendLine("name: ${tool.name}")
+                appendLine("description: ${tool.description}")
+                tool.parameters()?.let { appendLine("parameters: $it") }
+            }
+        }
+        val toolSystemPromptText = toolSystemPrompts.joinToString("\n\n") { (name, prompt) ->
+            if (prompt.isBlank()) "" else "systemPrompt[$name]:\n$prompt"
+        }
+        val toolText = listOf(toolDefinitionsText, toolSystemPromptText)
+            .filter { it.isNotBlank() }
+            .joinToString("\n\n")
+        val sections = listOf(
+            GenerationTokenSection(
+                label = "人设/基础系统提示词",
+                estimatedTokens = estimateTokens(effectiveSystemPrompt),
+                messageCount = if (effectiveSystemPrompt.isBlank()) 0 else 1,
+                charCount = effectiveSystemPrompt.length,
+            ),
+            GenerationTokenSection(
+                label = "近期会话引用",
+                estimatedTokens = estimateTokens(recentChatsPrompt),
+                messageCount = if (recentChatsPrompt.isBlank()) 0 else 1,
+                charCount = recentChatsPrompt.length,
+            ),
+            GenerationTokenSection(
+                label = "工具定义与工具提示词",
+                estimatedTokens = estimateTokens(toolText),
+                messageCount = tools.size,
+                charCount = toolText.length,
+            ),
+            GenerationTokenSection(
+                label = "插件提示词注入",
+                estimatedTokens = estimateTokens(pluginPromptInjections.joinToString("\n\n")),
+                messageCount = pluginPromptInjections.size,
+                charCount = pluginPromptInjections.sumOf { it.length },
+            ),
+            GenerationTokenSection(
+                label = "跳过回复规则",
+                estimatedTokens = estimateTokens(skipReplyPrompt),
+                messageCount = if (skipReplyPrompt.isBlank()) 0 else 1,
+                charCount = skipReplyPrompt.length,
+            ),
+            GenerationTokenSection(
+                label = "记忆/主动提醒等额外系统上下文",
+                estimatedTokens = estimateTokens(limitedMessages.filter { it.role == MessageRole.SYSTEM }.joinToTokenEstimateText()),
+                messageCount = limitedMessages.count { it.role == MessageRole.SYSTEM },
+                charCount = limitedMessages.filter { it.role == MessageRole.SYSTEM }.sumOf { it.estimateTextLength() },
+            ),
+            GenerationTokenSection(
+                label = "历史对话上下文",
+                estimatedTokens = estimateTokens(limitedMessages.filter { it.role != MessageRole.SYSTEM }.joinToTokenEstimateText()),
+                messageCount = limitedMessages.count { it.role != MessageRole.SYSTEM },
+                charCount = limitedMessages.filter { it.role != MessageRole.SYSTEM }.sumOf { it.estimateTextLength() },
+            ),
+            GenerationTokenSection(
+                label = "状态栏/学习状态/模板等变换器增量",
+                estimatedTokens = estimateTokensFromCharCount((internalText.length - preTransformText.length).coerceAtLeast(0)),
+                messageCount = (internalMessages.size - preTransformMessages.size).coerceAtLeast(0),
+                charCount = (internalText.length - preTransformText.length).coerceAtLeast(0),
+            ),
+        ).filter { it.estimatedTokens > 0 || it.messageCount > 0 || it.charCount > 0 }
+        return GenerationTokenBreakdown(
+            sections = sections,
+            toolNames = tools.map { it.name },
+        )
+    }
+
+    private fun List<UIMessage>.joinToTokenEstimateText(): String = joinToString("\n\n") { message ->
+        buildString {
+            appendLine(message.role.name)
+            message.parts.forEach { part ->
+                appendLine(
+                    when (part) {
+                        is UIMessagePart.Text -> part.text
+                        is UIMessagePart.Reasoning -> part.reasoning
+                        is UIMessagePart.Tool -> buildString {
+                            appendLine("tool: ${part.toolName}")
+                            appendLine("input: ${part.input}")
+                            if (part.output.isNotEmpty()) {
+                                appendLine("output:")
+                                part.output.forEach { output ->
+                                    appendLine(
+                                        when (output) {
+                                            is UIMessagePart.Text -> output.text
+                                            else -> output.toString()
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                        else -> part.toString()
+                    }
+                )
+            }
+        }
+    }
+
+    private fun UIMessage.estimateTextLength(): Int = parts.sumOf { part ->
+        when (part) {
+            is UIMessagePart.Text -> part.text.length
+            is UIMessagePart.Reasoning -> part.reasoning.length
+            is UIMessagePart.Tool -> part.toolName.length + part.input.length + part.output.sumOf { output ->
+                when (output) {
+                    is UIMessagePart.Text -> output.text.length
+                    else -> output.toString().length
+                }
+            }
+            else -> part.toString().length
+        }
+    }
+
+    private fun estimateTokens(text: String): Int {
+        if (text.isBlank()) return 0
+        val cjkChars = text.count { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.HAN }
+        val otherChars = text.length - cjkChars
+        return kotlin.math.ceil(cjkChars / 1.6 + otherChars / 4.0).toInt().coerceAtLeast(1)
+    }
+
+    private fun estimateTokensFromCharCount(charCount: Int): Int {
+        if (charCount <= 0) return 0
+        return kotlin.math.ceil(charCount / 3.0).toInt().coerceAtLeast(1)
     }
 
     fun translateText(

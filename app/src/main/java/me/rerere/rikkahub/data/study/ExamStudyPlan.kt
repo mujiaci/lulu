@@ -7,10 +7,30 @@ object ExamStudyPlan {
     val examDate: LocalDate = LocalDate.of(2026, 12, 21)
 
     val monthlyPlans = listOf(
-        MonthlyStudyPlan("2026-07", "启动节奏与专业课一轮重启", listOf("法理复活", "刑法与民法入门", "英语单词复习", "长难句起步")),
-        MonthlyStudyPlan("2026-08", "专业课一轮主体推进", listOf("刑法、民法完成一轮", "宪法、法制史开始一轮", "配套题跟进", "英语阅读真题入门")),
-        MonthlyStudyPlan("2026-09", "专业课二轮与政治轻启动", listOf("五科框架二轮", "错题回炉", "政治每天轻量启动", "英语阅读稳定训练")),
-        MonthlyStudyPlan("2026-10", "背诵强化与真题训练", listOf("专业课主观题表达", "历年真题分科训练", "英语作文模板搭建", "政治选择题")),
+        MonthlyStudyPlan(
+            "2026-07",
+            "专业课一轮细化启动：看课、做题、背诵、框架图一起走",
+            listOf(
+                "确认五科章节账本：法理学 13 章、刑法学 25 章、民法 21 章、宪法学 7 章、法制史 7 章",
+                "完成法理学第 1-13 章一轮看课与第一轮背诵",
+                "推进刑法学第 1-13 章、民法第 1-12 章的一轮看课和配套题",
+                "启动宪法学第 1-3 章、法制史第 1-3 章",
+                "每学完一章补一张思维导图/知识框架，周末统一回看",
+                "按我的习惯执行：任务要具体可勾选，累了做保底，恢复后补最小的一块",
+            ),
+        ),
+        MonthlyStudyPlan(
+            "2026-08",
+            "专业课一轮收尾与二轮背诵启动",
+            listOf(
+                "完成刑法学第 14-25 章、民法第 13-21 章一轮",
+                "完成宪法学第 4-7 章、法制史第 4-7 章一轮",
+                "五科开始第二轮背诵：先背框架，再背关键词，再背完整表述",
+                "配套题按章节回炉，错题进入错题本",
+            ),
+        ),
+        MonthlyStudyPlan("2026-09", "专业课二轮主体与政治轻启动", listOf("五科二轮背诵", "错题回炉", "政治每天轻量启动", "英语阅读稳定训练")),
+        MonthlyStudyPlan("2026-10", "三轮背诵与真题训练", listOf("专业课主观题表达", "历年真题分科训练", "英语作文模板搭建", "政治选择题")),
         MonthlyStudyPlan("2026-11", "冲刺背诵与套卷节奏", listOf("专业课反复背诵", "英语作文定稿", "政治高频题", "每周模拟")),
         MonthlyStudyPlan("2026-12", "保温、模拟与作息校准", listOf("不再开新坑", "错题和高频点保温", "考前模拟", "睡眠节律稳定")),
     )
@@ -21,153 +41,120 @@ object ExamStudyPlan {
             title = "第1周：轻启动，先把系统跑起来",
             dateRange = "2026-07-01 至 2026-07-07",
             tasks = listOf(
-                "完成 6 天单词复习，每天 80-100 个",
-                "法理学做一次目录唤醒和核心概念复盘",
-                "刑法听课 2 个小节并做配套题",
-                "民法听课 2 个小节并做配套题",
-                "周末做一次错题与口头复述",
-                "至少散步 4 次，每次 15 分钟以上",
+                "从 7 月 1 日正式进入章节制，不再只做热身",
+                "法理学第 1-4 章：看课、章节题、第一轮背诵、框架图",
+                "刑法学第 1-2 章、民法第 1-2 章：建立入口框架",
+                "每天保底单词 60-100 个，状态好再加长难句",
+                "计划必须允许容错：累了就做保底，恢复后再补最小的一块",
             ),
         ),
         WeeklyStudyPlan(
             id = "2026-07-w2",
-            title = "第2周：刑法建立框架，民法保持手感",
+            title = "第2周：法理起势，刑民打底",
             dateRange = "2026-07-08 至 2026-07-14",
             tasks = listOf(
-                "刑法推进犯罪构成、故意过失、违法阻却",
-                "民法推进民事法律关系与民事主体",
-                "法理学隔日轻复习",
-                "英语长难句开始每天 1-2 句",
-                "完成本周错题回看",
+                "法理学第 5-7 章：看课、做题、第一轮背诵、框架图",
+                "刑法学第 3-5 章：犯罪论总框架继续推进",
+                "民法第 3-5 章：民事法律行为、代理等基础推进",
+                "每天英语单词 80-100 个，长难句 1 句",
+                "周末把法理 1-7 章画成一张总图",
             ),
         ),
         WeeklyStudyPlan(
             id = "2026-07-w3",
-            title = "第3周：刑民继续推进，加入英语阅读",
+            title = "第3周：刑民继续推进，宪法法制史入场",
             dateRange = "2026-07-15 至 2026-07-21",
             tasks = listOf(
-                "刑法推进未完成形态与共同犯罪",
-                "民法推进民事法律行为与代理",
-                "英语阅读真题精读 2 篇，不追速度",
-                "法理学完成第一轮回看",
+                "法理学第 8-9 章并回背第 1-7 章",
+                "刑法学第 6-8 章：犯罪形态、共同犯罪等",
+                "民法第 6-8 章：诉讼时效、物权入口等",
+                "宪法学第 1 章、法制史第 1 章入门",
                 "整理本周最常错 10 个点",
             ),
         ),
         WeeklyStudyPlan(
             id = "2026-07-w4",
-            title = "第4周：宪法入门，刑民做小结",
+            title = "第4周：五科同时成网",
             dateRange = "2026-07-22 至 2026-07-28",
             tasks = listOf(
-                "宪法听课入门并建立章节框架",
-                "刑法做阶段小结",
-                "民法做阶段小结",
-                "英语阅读真题精读 2-3 篇",
-                "周末做一次 7 月复盘",
+                "法理学第 10-12 章并二次回看第 1-9 章",
+                "刑法学第 9-12 章、民法第 9-12 章",
+                "宪法学第 2 章、法制史第 2 章",
+                "每科至少补一张知识框架图",
+                "周末做 7 月阶段复盘",
             ),
         ),
         WeeklyStudyPlan(
             id = "2026-07-w5",
-            title = "第5周：7月收尾与8月衔接",
+            title = "第5周：7月收尾，给8月铺路",
             dateRange = "2026-07-29 至 2026-07-31",
             tasks = listOf(
-                "补齐 7 月落下的刑民小节",
-                "整理 7 月错题清单",
-                "确认 8 月教材与课程安排",
+                "法理学第 13 章收尾，完成一轮闭环",
+                "刑法学推进到第 13 章，民法推进到第 12 章",
+                "宪法学第 3 章、法制史第 3 章",
+                "整理 7 月背诵清单、错题清单、框架图清单",
             ),
         ),
     )
 
     val dailyPlans: Map<LocalDate, DailyStudyPlan> = listOf(
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 6, 30),
-            title = "启动准备日",
-            tasks = listOf(
-                planTask("确认 7 月备考资料：文运/众合题册、考试分析、网课目录", StudyPlanTaskKind.Foundation),
-                planTask("不背单词复习 50 个，只做热身", StudyPlanTaskKind.English),
-                planTask("散步 15 分钟，给大脑换气", StudyPlanTaskKind.Health),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 1),
-            title = "法理复活日",
-            tasks = listOf(
-                planTask("不背单词复习 80 个", StudyPlanTaskKind.English),
-                planTask("法理学：翻目录，标出已经学过但陌生的 5 个章节", StudyPlanTaskKind.Law),
-                planTask("法理学：做配套题 10 题，错题只标记不深究", StudyPlanTaskKind.Law),
-                planTask("用自己的话复述：法的本质/法的作用各 2 句话", StudyPlanTaskKind.Review),
-                planTask("散步 15 分钟", StudyPlanTaskKind.Health),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 2),
-            title = "刑法轻启动",
-            tasks = listOf(
-                planTask("不背单词复习 80-100 个", StudyPlanTaskKind.English),
-                planTask("刑法：听课 1 小节，重点抓犯罪构成四要件", StudyPlanTaskKind.Law),
-                planTask("刑法：做对应配套题 10-15 题", StudyPlanTaskKind.Law),
-                planTask("回看昨天法理错题", StudyPlanTaskKind.Review),
-                planTask("睡前写下今天最不懂的 1 个点", StudyPlanTaskKind.Review),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 3),
-            title = "刑法第二步",
-            tasks = listOf(
-                planTask("不背单词复习 80-100 个", StudyPlanTaskKind.English),
-                planTask("刑法：听课 1 小节，继续犯罪构成/故意过失", StudyPlanTaskKind.Law),
-                planTask("刑法：做对应配套题 10-15 题", StudyPlanTaskKind.Law),
-                planTask("复述昨天刑法内容 3 句话，不要求背原文", StudyPlanTaskKind.Review),
-                planTask("散步 15 分钟", StudyPlanTaskKind.Health),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 4),
-            title = "民法轻启动",
-            tasks = listOf(
-                planTask("不背单词复习 80 个", StudyPlanTaskKind.English),
-                planTask("民法：听课 1 小节，抓民事法律关系/民事主体", StudyPlanTaskKind.Law),
-                planTask("民法：做对应配套题 10 题", StudyPlanTaskKind.Law),
-                planTask("回看刑法错题", StudyPlanTaskKind.Review),
-                planTask("整理今天 1 个能讲给别人听的概念", StudyPlanTaskKind.Review),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 5),
-            title = "民法第二步",
-            tasks = listOf(
-                planTask("不背单词复习 80-100 个", StudyPlanTaskKind.English),
-                planTask("民法：听课 1 小节，继续主体/权利能力/行为能力", StudyPlanTaskKind.Law),
-                planTask("民法：做对应配套题 10-15 题", StudyPlanTaskKind.Law),
-                planTask("复述昨天民法内容 3 句话", StudyPlanTaskKind.Review),
-                planTask("散步 15 分钟", StudyPlanTaskKind.Health),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 6),
-            title = "周复盘",
-            tasks = listOf(
-                planTask("不背单词复习 60-80 个", StudyPlanTaskKind.English),
-                planTask("本周法理/刑法/民法错题各挑 3 题回看", StudyPlanTaskKind.Review),
-                planTask("用一页纸写本周专业课小结：我听懂了什么、还怕什么", StudyPlanTaskKind.Review),
-                planTask("补一个本周漏掉的小任务，只补最小的一块", StudyPlanTaskKind.Foundation),
-                planTask("散步或拉伸 20 分钟", StudyPlanTaskKind.Health),
-            ),
-        ),
-        DailyStudyPlan(
-            date = LocalDate.of(2026, 7, 7),
-            title = "休息容错日",
-            tasks = listOf(
-                planTask("保底：不背单词复习 50 个", StudyPlanTaskKind.English),
-                planTask("如果状态好：回看本周最陌生的 1 个知识点", StudyPlanTaskKind.Review),
-                planTask("好好吃一顿饭，散步 20 分钟", StudyPlanTaskKind.Health),
-            ),
-        ),
+        daily("2026-06-30", "启动准备日", "确认 7 月备考资料：文运/众合题册、考试分析、网课目录", "不背单词复习 50 个，只做热身", "散步 15 分钟，给大脑换气"),
+        daily("2026-07-01", "7月正式开局：法理1", "确认五科章节账本：法理 13、刑法 25、民法 21、宪法 7、法制史 7", "法理学第 1 章：看课并做 10-15 题", "法理学第 1 章：第一轮背诵关键词", "画法理第 1 章思维导图", "英语单词 80 个"),
+        daily("2026-07-02", "法理2 + 刑法1", "法理学第 2 章：看课、做题、第一轮背诵", "刑法学第 1 章：听课抓犯罪论总入口", "刑法学第 1 章：做 10-15 题并标错因", "背诵：回背法理第 1 章 10 分钟", "英语长难句 1 句"),
+        daily("2026-07-03", "法理3 + 民法1", "法理学第 3 章：看课并做题", "民法第 1 章：看课并做 10 题", "背诵：法理第 1-2 章第一轮滚动", "画民法第 1 章主体框架", "散步 15 分钟"),
+        daily("2026-07-04", "刑法2 + 民法2", "刑法学第 2 章：看课并做题", "民法第 2 章：看课并做 10 题", "背诵：刑法第 1 章关键词", "画刑法犯罪论入口图", "英语单词 80 个"),
+        daily("2026-07-05", "法理4 + 民法框架", "法理学第 4 章：看课并做题", "民法第 1-2 章：回看错题", "背诵：民法第 1-2 章关键词", "画民法第 1-2 章总框架", "散步 15 分钟"),
+        daily("2026-07-06", "刑法2补强 + 法理回背", "刑法学第 2 章：补 10 题并整理错因", "法理第 1-4 章：目录式回背", "背诵：法理第 3-4 章第一轮", "用一页纸写本周专业课小结", "散步或拉伸 20 分钟"),
+        daily("2026-07-07", "第一周复盘与容错", "保底：英语单词 50-80 个", "回看法理第 1-4 章错题", "回看刑法/民法第 1-2 章错题", "补一个本周漏掉的小任务，只补最小一块", "好好吃一顿饭，散步 20 分钟"),
+        daily("2026-07-08", "法理5 + 刑法3", "法理学第 5 章：看课、做题、第一轮背诵", "刑法学第 3 章：看课并做 10 题", "背诵：法理第 1-4 章滚动 15 分钟", "画法理第 1-5 章小总图", "英语单词 80 个"),
+        daily("2026-07-09", "法理6 + 民法3", "法理学第 6 章：看课、做题、第一轮背诵", "民法第 3 章：看课并做 10 题", "背诵：刑法第 1-3 章关键词", "画民法第 1-3 章框架", "英语长难句 1 句"),
+        daily("2026-07-10", "法理7 + 刑法4", "法理学第 7 章：看课并做题", "刑法学第 4 章：看课并做题", "背诵：法理第 5-6 章第一轮", "整理刑法第 1-4 章犯罪论框架"),
+        daily("2026-07-11", "民法4 + 刑法5", "民法第 4 章：看课并做题", "刑法学第 5 章：听课抓重点", "背诵：民法第 1-3 章关键词", "画民法法律行为框架", "英语单词 80-100 个"),
+        daily("2026-07-12", "法理1-7闭环", "回看法理第 1-7 章错题", "口头背诵法理第 1-7 章标题和关键词", "画法理第 1-7 章总框架", "整理一页本周不会背清单"),
+        daily("2026-07-13", "刑民补题日", "刑法第 1-5 章：错题回看 10 题", "民法第 1-4 章：错题回看 10 题", "背诵：刑法/民法各 15 分钟", "补本周漏掉的框架图"),
+        daily("2026-07-14", "轻量缓冲日", "英语单词 60-80 个", "法理第 1-7 章二次回背 20 分钟", "刑法第 1-5 章错题回看", "散步 20 分钟"),
+        daily("2026-07-15", "刑法6 + 民法5", "刑法学第 6 章：看课并做题", "民法第 5 章：听课抓关键词", "背诵：刑法第 4-5 章第一轮", "画刑法第 4-6 章框架图"),
+        daily("2026-07-16", "民法6 + 宪法1", "民法第 6 章：看课并做题", "宪法学第 1 章：看课并做题", "背诵：民法第 4-5 章第一轮", "画宪法第 1 章框架"),
+        daily("2026-07-17", "法理8 + 法制史1", "法理学第 8 章：看课并做题", "法制史第 1 章：看课并做题", "背诵：法理第 1-7 章第二次滚动", "整理法制史时间线入口图"),
+        daily("2026-07-18", "刑法7 + 民法7", "刑法学第 7 章：看课并做题", "民法第 7 章：听课抓重点", "背诵：刑法第 6 章第一轮", "错题：刑法本周错题回看"),
+        daily("2026-07-19", "刑法8 + 民法8", "刑法学第 8 章：看课并做题", "民法第 8 章：看课并做题", "背诵：民法第 6-7 章第一轮", "画民法第 5-8 章小框架"),
+        daily("2026-07-20", "法理9 + 宪法法制史回背", "法理学第 9 章：看课并做题", "宪法第 1 章：关键词回背", "法制史第 1 章：时间线回背", "整理宪法/法制史入门框架"),
+        daily("2026-07-21", "周复盘：五科第一次同屏", "回看刑法第 6-8 章错题", "回看民法第 5-8 章错题", "法理第 1-9 章口头背目录", "整理本周最常错 10 个点"),
+        daily("2026-07-22", "法理10 + 刑法9", "法理学第 10 章：看课并做题", "刑法学第 9 章：看课并做题", "背诵：法理第 8-9 章第一轮", "画法理第 8-10 章思维导图"),
+        daily("2026-07-23", "刑法10 + 民法9", "刑法学第 10 章：看课并做题", "民法第 9 章：听课抓重点", "背诵：刑法第 7-8 章第一轮", "画刑法第 9-10 章框架"),
+        daily("2026-07-24", "民法10 + 法理11", "民法第 10 章：看课并做题", "法理学第 11 章：听课抓框架", "背诵：民法第 8-9 章第一轮", "整理民法第 1-10 章目录图"),
+        daily("2026-07-25", "宪法2 + 法制史2", "宪法学第 2 章：看课并做题", "法制史第 2 章：看课并做题", "背诵：宪法/法制史第 1 章回背", "画两科第 1-2 章框架"),
+        daily("2026-07-26", "刑法11 + 民法11", "刑法学第 11 章：看课并做题", "民法第 11 章：听课抓重点", "背诵：刑法第 9-10 章第一轮", "错题：刑法第 1-11 章挑 10 题"),
+        daily("2026-07-27", "刑法12 + 民法12", "刑法学第 12 章：看课并做题", "民法第 12 章：听课抓重点", "背诵：民法第 10-11 章第一轮", "画民法第 9-12 章框架"),
+        daily("2026-07-28", "阶段复盘日", "法理第 1-12 章目录背诵", "刑法第 1-12 章框架回看", "民法第 1-12 章框架回看", "整理 7 月错题清单和背诵清单"),
+        daily("2026-07-29", "法理13收尾", "法理学第 13 章：看课并做题", "法理学第 11-13 章：第一轮背诵关键词", "背诵：法理第 8-10 章滚动", "画法理 13 章总框架"),
+        daily("2026-07-30", "刑法13 + 宪法3", "刑法学第 13 章：看课并做题", "宪法学第 3 章：看课并做题", "背诵：刑法第 11-12 章第一轮", "画宪法第 1-3 章框架"),
+        daily("2026-07-31", "法制史3 + 7月收口", "法制史第 3 章：看课并做题", "背诵：法理第 11-13 章第一轮", "检查 7 月框架图是否补齐", "整理 8 月续接清单：刑法 14-25、民法 13-21、宪法 4-7、法制史 4-7"),
     ).associateBy { it.date }
 
     fun todayPlan(date: LocalDate = LocalDate.now()): DailyStudyPlan? = dailyPlans[date]
 
     fun daysLeft(date: LocalDate = LocalDate.now()): Long =
         ChronoUnit.DAYS.between(date, examDate).coerceAtLeast(0)
+
+    private fun daily(date: String, title: String, vararg tasks: String): DailyStudyPlan =
+        DailyStudyPlan(
+            date = LocalDate.parse(date),
+            title = title,
+            tasks = tasks.map { task ->
+                planTask(
+                    title = task,
+                    kind = when {
+                        task.contains("英语") || task.contains("单词") || task.contains("长难句") -> StudyPlanTaskKind.English
+                        task.contains("散步") || task.contains("吃") || task.contains("拉伸") -> StudyPlanTaskKind.Health
+                        task.contains("回看") || task.contains("复述") || task.contains("背诵") ||
+                            task.contains("框架") || task.contains("思维导图") || task.contains("整理") -> StudyPlanTaskKind.Review
+                        task.contains("确认") || task.contains("补一个") -> StudyPlanTaskKind.Foundation
+                        else -> StudyPlanTaskKind.Law
+                    }
+                )
+            },
+        )
 
     private fun planTask(title: String, kind: StudyPlanTaskKind): StudyPlanTask =
         StudyPlanTask(title = title, kind = kind)
