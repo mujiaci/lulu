@@ -4,6 +4,8 @@ import android.app.Application
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.net.toUri
@@ -384,6 +386,7 @@ class ChatService(
     // 前台状态管理
     private val _isForeground = MutableStateFlow(false)
     val isForeground: StateFlow<Boolean> = _isForeground.asStateFlow()
+    private val mainHandler = Handler(Looper.getMainLooper())
 
     private val lifecycleObserver = LifecycleEventObserver { _, event ->
         when (event) {
@@ -395,16 +398,28 @@ class ChatService(
 
     init {
         // 添加生命周期观察者
-        ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
+        runOnMainThread {
+            ProcessLifecycleOwner.get().lifecycle.addObserver(lifecycleObserver)
+        }
     }
 
     fun cleanup() = runCatching {
-        ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
+        runOnMainThread {
+            ProcessLifecycleOwner.get().lifecycle.removeObserver(lifecycleObserver)
+        }
         sessions.values.forEach { it.cleanup() }
         sessions.clear()
     }
 
     // ---- Session 管理 ----
+
+    private fun runOnMainThread(action: () -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            action()
+        } else {
+            mainHandler.post(action)
+        }
+    }
 
     private fun getOrCreateSession(conversationId: Uuid): ConversationSession {
         return sessions.computeIfAbsent(conversationId) { id ->
