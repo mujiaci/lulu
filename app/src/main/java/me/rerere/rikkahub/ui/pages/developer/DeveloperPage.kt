@@ -215,6 +215,21 @@ private fun GenerationLogCard(log: AILogging.Generation) {
                             }
                         )
                     }
+                    if (breakdown.details.isNotEmpty()) {
+                        Text(
+                            text = "Top token 刺客",
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        breakdown.details.forEach { detail ->
+                            val scaledTokens = realPromptTokens?.let {
+                                (detail.estimatedTokens.toDouble() / estimatedTotal * it).toInt()
+                            } ?: detail.estimatedTokens
+                            DetailLine(
+                                detail.category,
+                                "${detail.label} · 约 ${scaledTokens.formatNumber()} token · ${detail.charCount.formatNumber()} 字符"
+                            )
+                        }
+                    }
                 }
             }
 

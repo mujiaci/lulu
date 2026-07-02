@@ -386,6 +386,7 @@ class GenerationHandler(
             }
         }
         val limitedMessages = messages.limitContext(assistant.contextMessageSize)
+            .compactOldToolOutputsForPrompt()
         val preTransformMessages = buildList {
             if (system.isNotBlank()) add(UIMessage.system(prompt = system))
             addAll(limitedMessages)
@@ -512,19 +513,54 @@ class GenerationHandler(
     ): GenerationTokenBreakdown {
         val preTransformText = preTransformMessages.joinToTokenEstimateText()
         val internalText = internalMessages.joinToTokenEstimateText()
-        val toolDefinitionsText = tools.joinToString("\n\n") { tool ->
+        val toolDefinitionDetails = tools.map { tool ->
             buildString {
                 appendLine("name: ${tool.name}")
                 appendLine("description: ${tool.description}")
                 tool.parameters()?.let { appendLine("parameters: $it") }
+            }.let { text ->
+                GenerationTokenDetail(
+                    label = tool.name,
+                    category = "工具定义",
+                    estimatedTokens = estimateTokens(text),
+                    charCount = text.length,
+                ) to text
             }
         }
-        val toolSystemPromptText = toolSystemPrompts.joinToString("\n\n") { (name, prompt) ->
-            if (prompt.isBlank()) "" else "systemPrompt[$name]:\n$prompt"
+        val toolDefinitionsText = toolDefinitionDetails.joinToString("\n\n") { it.second }
+        val toolPromptDetails = toolSystemPrompts.mapNotNull { (name, prompt) ->
+            if (prompt.isBlank()) {
+                null
+            } else {
+                val text = "systemPrompt[$name]:\n$prompt"
+                GenerationTokenDetail(
+                    label = name,
+                    category = "工具提示词",
+                    estimatedTokens = estimateTokens(text),
+                    charCount = text.length,
+                ) to text
+            }
         }
-        val toolText = listOf(toolDefinitionsText, toolSystemPromptText)
-            .filter { it.isNotBlank() }
-            .joinToString("\n\n")
+        val toolSystemPromptText = toolPromptDetails.joinToString("\n\n") { it.second }
+        val historyMessages = limitedMessages.filter { it.role != MessageRole.SYSTEM }
+        val systemContextMessages = limitedMessages.filter { it.role == MessageRole.SYSTEM }
+        val historyText = historyMessages.joinToTokenEstimateText()
+        val systemContextText = systemContextMessages.joinToTokenEstimateText()
+        val details = buildList {
+            addAll(toolDefinitionDetails.map { it.first })
+            addAll(toolPromptDetails.map { it.first })
+            addAll(
+                historyMessages.mapIndexed { index, message ->
+                    val text = listOf(message).joinToTokenEstimateText()
+                    GenerationTokenDetail(
+                        label = "${index + 1}. ${message.role.name}",
+                        category = "历史消息",
+                        estimatedTokens = estimateTokens(text),
+                        charCount = message.estimateTextLength(),
+                    )
+                }
+            )
+        }
         val sections = listOf(
             GenerationTokenSection(
                 label = "人设/基础系统提示词",
@@ -539,10 +575,16 @@ class GenerationHandler(
                 charCount = recentChatsPrompt.length,
             ),
             GenerationTokenSection(
-                label = "工具定义与工具提示词",
-                estimatedTokens = estimateTokens(toolText),
+                label = "工具定义/schema",
+                estimatedTokens = estimateTokens(toolDefinitionsText),
                 messageCount = tools.size,
-                charCount = toolText.length,
+                charCount = toolDefinitionsText.length,
+            ),
+            GenerationTokenSection(
+                label = "工具额外提示词",
+                estimatedTokens = estimateTokens(toolSystemPromptText),
+                messageCount = toolPromptDetails.size,
+                charCount = toolSystemPromptText.length,
             ),
             GenerationTokenSection(
                 label = "插件提示词注入",
@@ -558,15 +600,15 @@ class GenerationHandler(
             ),
             GenerationTokenSection(
                 label = "记忆/主动提醒等额外系统上下文",
-                estimatedTokens = estimateTokens(limitedMessages.filter { it.role == MessageRole.SYSTEM }.joinToTokenEstimateText()),
-                messageCount = limitedMessages.count { it.role == MessageRole.SYSTEM },
-                charCount = limitedMessages.filter { it.role == MessageRole.SYSTEM }.sumOf { it.estimateTextLength() },
+                estimatedTokens = estimateTokens(systemContextText),
+                messageCount = systemContextMessages.size,
+                charCount = systemContextMessages.sumOf { it.estimateTextLength() },
             ),
             GenerationTokenSection(
                 label = "历史对话上下文",
-                estimatedTokens = estimateTokens(limitedMessages.filter { it.role != MessageRole.SYSTEM }.joinToTokenEstimateText()),
-                messageCount = limitedMessages.count { it.role != MessageRole.SYSTEM },
-                charCount = limitedMessages.filter { it.role != MessageRole.SYSTEM }.sumOf { it.estimateTextLength() },
+                estimatedTokens = estimateTokens(historyText),
+                messageCount = historyMessages.size,
+                charCount = historyMessages.sumOf { it.estimateTextLength() },
             ),
             GenerationTokenSection(
                 label = "状态栏/学习状态/模板等变换器增量",
@@ -578,7 +620,44 @@ class GenerationHandler(
         return GenerationTokenBreakdown(
             sections = sections,
             toolNames = tools.map { it.name },
+            details = details.sortedByDescending { it.estimatedTokens }.take(12),
         )
+    }
+
+    private fun List<UIMessage>.compactOldToolOutputsForPrompt(
+        keepRecentMessages: Int = 8,
+        maxToolOutputChars: Int = 1200,
+    ): List<UIMessage> {
+        if (isEmpty()) return this
+        val keepFromIndex = (size - keepRecentMessages).coerceAtLeast(0)
+        return mapIndexed { index, message ->
+            if (index >= keepFromIndex || message.getTools().none { it.isExecuted }) {
+                message
+            } else {
+                message.copy(
+                    parts = message.parts.map { part ->
+                        if (part is UIMessagePart.Tool && part.isExecuted) {
+                            part.copy(output = part.output.compactToolOutputParts(maxToolOutputChars))
+                        } else {
+                            part
+                        }
+                    }
+                )
+            }
+        }
+    }
+
+    private fun List<UIMessagePart>.compactToolOutputParts(maxChars: Int): List<UIMessagePart> {
+        val text = joinToString("\n") { part ->
+            when (part) {
+                is UIMessagePart.Text -> part.text
+                else -> part.toString()
+            }
+        }
+        if (text.length <= maxChars) return this
+        val summary = text.take(maxChars).trimEnd() +
+            "\n\n[旧工具结果已压缩：原始输出约 ${text.length} 字符，继续对话时仅保留前 ${maxChars} 字符。]"
+        return listOf(UIMessagePart.Text(summary))
     }
 
     private fun List<UIMessage>.joinToTokenEstimateText(): String = joinToString("\n\n") { message ->

@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
+import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.loader.PluginLoader
@@ -685,6 +686,7 @@ class ChatService(
         )
         val availableTools = buildAvailableTools(settings, assistant)
             .deduplicateByToolName()
+            .selectRelevantToolsForPrompt(hiddenMessages)
             .withHumanLikeToolPrompts()
             .withProactiveCooldown()
         val latestUserText = hiddenMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
@@ -920,6 +922,7 @@ class ChatService(
             val conversation = getConversationFlow(conversationId).value
             val availableTools = buildAvailableTools(settings, assistant)
                 .deduplicateByToolName()
+                .selectRelevantToolsForPrompt(conversation.currentMessages)
                 .withHumanLikeToolPrompts()
                 .withProactiveCooldown()
             val latestUserText = conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }

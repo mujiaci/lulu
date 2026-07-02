@@ -27,17 +27,10 @@ fun createSkillTools(
             """.trimIndent(),
             systemPrompt = { _, _ ->
                 buildString {
-                    appendLine("**Skills**")
-                    appendLine("You have access to the following skills. Use the `use_skill` tool to load a skill's instructions when the user's request matches.")
-                    appendLine("<available_skills>")
+                    appendLine("Skills available via `use_skill` when the request clearly matches:")
                     available.forEach { skill ->
-                        appendLine("  <skill>")
-                        appendLine("    <name>${skill.name}</name>")
-                        appendLine("    <description>${skill.description}</description>")
-                        appendLine("  </skill>")
+                        appendLine("- ${skill.name}: ${skill.description.take(160)}")
                     }
-                    append("</available_skills>")
-                    appendLine()
                 }
             },
             parameters = {
@@ -51,7 +44,7 @@ fun createSkillTools(
                             put("type", "string")
                             put(
                                 "description",
-                                "Optional relative path to a file inside the skill directory. Omit to read the default SKILL.md instructions. Only use paths extracted from Markdown links in the SKILL.md content. Do NOT guess or infer paths."
+                                "Optional file path inside the skill directory; omit for SKILL.md. Only use paths found in loaded skill instructions."
                             )
                         })
                     },

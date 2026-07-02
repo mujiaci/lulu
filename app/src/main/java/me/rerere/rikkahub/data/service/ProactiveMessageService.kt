@@ -52,6 +52,7 @@ import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
+import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.files.SkillManager
@@ -862,7 +863,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     ?.let { ((System.currentTimeMillis() - it) / 60_000L).coerceAtLeast(0L) }
 
                 // 构建工具列表（与 ChatService 保持一致）
-                val tools = buildTools(settings, assistant, model)
+                val tools = buildTools(settings, assistant, model, historyMessages)
 
                 val autonomousPlan = if (isTargetedTrigger) {
                     null
@@ -1181,7 +1182,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     /**
      * 构建工具列表（与 ChatService 保持一致）
      */
-    private fun buildTools(settings: Settings, assistant: Assistant, model: Model): List<Tool> {
+    private fun buildTools(
+        settings: Settings,
+        assistant: Assistant,
+        model: Model,
+        messages: List<UIMessage>,
+    ): List<Tool> {
         return buildList {
             // 搜索工具
             if (settings.enableWebSearch) {
@@ -1228,6 +1234,7 @@ addAll(localTools.getTools(assistant.localTools))
             addAll(pluginToolProvider.getTools())
         }
             .deduplicateByToolName()
+            .selectRelevantToolsForPrompt(messages)
             .withHumanLikeToolPrompts()
     }
 

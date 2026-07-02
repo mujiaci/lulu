@@ -28,6 +28,7 @@ sealed class AILogging {
 data class GenerationTokenBreakdown(
     val sections: List<GenerationTokenSection>,
     val toolNames: List<String>,
+    val details: List<GenerationTokenDetail> = emptyList(),
 ) {
     val estimatedTokens: Int = sections.sumOf { it.estimatedTokens }
 }
@@ -36,6 +37,13 @@ data class GenerationTokenSection(
     val label: String,
     val estimatedTokens: Int,
     val messageCount: Int = 0,
+    val charCount: Int = 0,
+)
+
+data class GenerationTokenDetail(
+    val label: String,
+    val category: String,
+    val estimatedTokens: Int,
     val charCount: Int = 0,
 )
 

@@ -1,8 +1,87 @@
 package me.rerere.rikkahub.data.ai.tools
 
+import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.UIMessage
 
 fun List<Tool>.deduplicateByToolName(): List<Tool> = distinctBy { it.name }
+
+fun List<Tool>.selectRelevantToolsForPrompt(messages: List<UIMessage>): List<Tool> {
+    if (size <= 8) return this
+
+    val recentText = messages
+        .asReversed()
+        .filter { it.role == MessageRole.USER }
+        .take(3)
+        .joinToString("\n") { it.toText() }
+        .lowercase()
+    if (recentText.isBlank()) return keepDefaultPromptTools()
+
+    val selected = filter { tool ->
+        val name = tool.name.removePrefix("mcp__").lowercase()
+        val description = tool.description.lowercase()
+        name in defaultPromptToolNames ||
+            recentText.contains(name) ||
+            recentText.contains(name.replace('_', ' ')) ||
+            description.split(' ', ',', '.', ';', ':', '/', '-', '_')
+                .filter { it.length >= 4 }
+                .take(16)
+                .any { recentText.contains(it) } ||
+            matchesToolIntent(name, recentText)
+    }
+
+    return selected.ifEmpty { keepDefaultPromptTools() }
+}
+
+private val defaultPromptToolNames = setOf(
+    "get_time_info",
+    "set_lulu_expression_state",
+)
+
+private fun List<Tool>.keepDefaultPromptTools(): List<Tool> {
+    val defaults = filter { it.name.removePrefix("mcp__").lowercase() in defaultPromptToolNames }
+    return defaults.ifEmpty { take(4) }
+}
+
+private fun matchesToolIntent(name: String, text: String): Boolean = when {
+    name.contains("search") || name.contains("scrape") || name.contains("web") ->
+        text.hasAny("搜", "查", "最新", "新闻", "网页", "网址", "链接", "浏览", "资料", "小红书", "google", "http")
+    name.contains("weather") ->
+        text.hasAny("天气", "温度", "下雨", "下雪", "冷", "热", "带伞", "风", "湿度")
+    name.contains("location") || name.contains("nearby") ->
+        text.hasAny("位置", "在哪", "哪里", "附近", "周边", "路线", "导航", "地址", "到这", "离我")
+    name.contains("calendar") || name.contains("time") ->
+        text.hasAny("时间", "几点", "今天", "明天", "昨天", "日期", "日程", "安排", "会议", "课表", "提醒")
+    name.contains("alarm") ->
+        text.hasAny("闹钟", "叫我", "提醒我", "定个", "起床")
+    name.contains("battery") ->
+        text.hasAny("电量", "充电", "没电", "耗电", "电池")
+    name.contains("usage") || name.contains("app") ->
+        text.hasAny("分心", "刷", "用了多久", "使用情况", "应用", "app", "学习状态")
+    name.contains("notification") ->
+        text.hasAny("通知", "消息", "谁找我", "未读")
+    name.contains("camera") ->
+        text.hasAny("拍", "看一下", "看看", "摄像头", "相机", "眼前", "桌面")
+    name.contains("clipboard") ->
+        text.hasAny("剪贴板", "复制", "粘贴", "刚复制")
+    name.contains("sms") ->
+        text.hasAny("短信", "验证码", "发消息", "发给")
+    name.contains("music") ->
+        text.hasAny("音乐", "播放", "暂停", "歌曲", "歌单")
+    name.contains("tts") || name.contains("speech") ->
+        text.hasAny("朗读", "念给我", "语音", "说出来")
+    name.contains("journal") || name.contains("memory") ->
+        text.hasAny("记住", "记录", "日记", "回忆", "记忆")
+    name.contains("skill") ->
+        text.hasAny("技能", "skill", "专项", "按照", "规则", "文档")
+    name.contains("javascript") ->
+        text.hasAny("计算", "运行", "脚本", "javascript", "js", "代码")
+    name.contains("write") || name.contains("zip") || name.contains("file") ->
+        text.hasAny("写文件", "生成文件", "压缩包", "zip", "下载", "导出")
+    else -> false
+}
+
+private fun String.hasAny(vararg needles: String): Boolean = needles.any { contains(it) }
 
 fun Tool.withHumanLikeToolPrompt(): Tool {
     val guidance = humanLikeToolGuidance(name)
@@ -24,33 +103,33 @@ internal fun humanLikeToolGuidance(toolName: String): String {
     val name = toolName.removePrefix("mcp__").lowercase()
     return when {
         name == "set_lulu_expression_state" ->
-            "需要让本轮回复更有身体感时，可以记录一小段自然状态描述，把当前状态、行为、动作、姿势和标签合在一起；这段用于聊天下方状态栏，正文不要再用括号塞动作，也不要告诉用户工具名。"
+            "需要更新露露状态栏时使用；正文自然聊天，不要提工具名。"
 
         name == "get_weather" || name.contains("weather") ->
-            "用户问天气、温度、下雨、冷不冷、热不热或要不要带伞时优先使用；自然告诉用户结果，不要说调用工具。"
+            "问天气/温度/雨雪/带伞时使用；自然回答，不提工具名。"
         name in setOf("get_location", "explore_nearby") || name.contains("location") || name.contains("nearby") ->
-            "位置/周边会影响关心方式时可自然使用；把结果当感知，不要说调用工具。"
+            "问位置/路线/附近时使用；把结果当感知，不提工具名。"
 
         name.contains("battery") ->
-            "电量可能影响陪伴、出门、失联或熬夜时可自然使用；不要说调用工具。"
+            "问电量/充电/耗电时使用；不提工具名。"
 
         name.contains("usage") || name.contains("app") ->
-            "需要判断用户正在做什么、是否分心或疲惫时可自然查看；只用于语气判断。"
+            "判断分心、疲惫或应用使用情况时使用。"
 
         name.contains("health") || name.contains("sleep") || name.contains("heart") || name.contains("gadgetbridge") ->
-            "困、累、生病、运动、晚安或作息相关时可自然查看健康线索；像关心本人一样表达。"
+            "健康、睡眠、心率、运动、作息相关时使用。"
 
         name.contains("notification") ->
-            "忙、被打扰、等消息等场景可查看通知线索；只提有帮助的部分。"
+            "问通知、未读、消息打扰时使用。"
 
         name.contains("time") || name.contains("calendar") ->
-            "时间、课程、会议、计划会影响回复时可查看；融入语气，不要播报数据。"
+            "问时间、日期、日程、计划时使用；融入语气。"
 
         name.contains("camera") ->
-            "仅在用户允许或上下文明显需要观察环境时查看；像亲眼看到后自然反应。"
+            "仅在用户允许或明确要看环境时使用。"
 
         name.contains("clipboard") || name.contains("sms") || name.contains("alarm") || name.contains("write") ->
-            "此工具敏感或会改变设备状态；除非用户有明确意图，否则先用语言确认。"
+            "敏感或会改设备状态；除非用户明确要求，否则先确认。"
 
         else -> ""
     }
