@@ -1254,7 +1254,6 @@ private fun DrawResultCelebration(
     val currentVideoUri = when {
         revealState.phase == DrawRevealPhase.RainbowVideo -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
         revealState.phase == DrawRevealPhase.RewardVideo -> currentReveal?.video?.uri
-        current?.rarity == StudyRarity.Rainbow -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
         else -> null
     }
     val currentVideoPlaybackKey = when (revealState.phase) {
@@ -1274,9 +1273,21 @@ private fun DrawResultCelebration(
         ),
         label = "draw-pulse",
     )
+    fun nextPendingRewardVideoIndex(): Int? {
+        val startIndex = revealState.index.coerceAtLeast(0)
+        return results
+            .withIndex()
+            .firstOrNull { (index, reveal) ->
+                index >= startIndex &&
+                    reveal.video != null &&
+                    index !in playedRewardVideoIndexes
+            }
+            ?.index
+    }
     fun skipAll() {
-        revealState = if (rewardVideoPending) {
-            revealState.copy(phase = DrawRevealPhase.RewardVideo)
+        val nextRewardVideoIndex = nextPendingRewardVideoIndex()
+        revealState = if (nextRewardVideoIndex != null) {
+            revealState.copy(index = nextRewardVideoIndex, phase = DrawRevealPhase.RewardVideo)
         } else {
             DrawRevealFlow.skip(revealState, drawResults)
         }

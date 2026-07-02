@@ -241,11 +241,12 @@ object StarWishRules {
         if (visibleVideos.isEmpty()) {
             return StarWishVideoUnlockResult(starWishState, studyState, null, consumedFragment = false)
         }
-        val lockedVideo = visibleVideos.firstOrNull { it.id !in starWishState.unlockedVideoIds }
-        if (lockedVideo != null) {
+        val lockedVideos = visibleVideos.filter { it.id !in starWishState.unlockedVideoIds }
+        if (lockedVideos.isNotEmpty()) {
             if (studyState.inventory.epicFragments < VIDEO_FRAGMENTS_PER_UNLOCK) {
                 return StarWishVideoUnlockResult(starWishState, studyState, null, consumedFragment = false)
             }
+            val lockedVideo = lockedVideos[random.nextInt(lockedVideos.size)]
             return StarWishVideoUnlockResult(
                 starWishState = starWishState.copy(
                     unlockedVideoIds = starWishState.unlockedVideoIds + lockedVideo.id,

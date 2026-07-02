@@ -22,7 +22,11 @@ object DrawRevealFlow {
         if (results.isEmpty()) return DrawRevealState(index = -1, phase = DrawRevealPhase.Done, lastIndex = -1)
         return DrawRevealState(
             index = 0,
-            phase = if (results.first().rarity == StudyRarity.Rainbow) DrawRevealPhase.RainbowVideo else DrawRevealPhase.Card,
+            phase = if (results.any { it.rarity == StudyRarity.Rainbow }) {
+                DrawRevealPhase.RainbowVideo
+            } else {
+                DrawRevealPhase.Card
+            },
             lastIndex = results.lastIndex,
         )
     }
@@ -40,28 +44,15 @@ object DrawRevealFlow {
         val nextIndex = state.index + 1
         return state.copy(
             index = nextIndex,
-            phase = if (results[nextIndex].rarity == StudyRarity.Rainbow) DrawRevealPhase.RainbowVideo else DrawRevealPhase.Card,
+            phase = DrawRevealPhase.Card,
         )
     }
 
     fun summary(state: DrawRevealState): DrawRevealState = state.copy(index = state.lastIndex, phase = DrawRevealPhase.Summary)
 
-    fun skipToNextRainbowVideoOrSummary(
-        state: DrawRevealState,
-        results: List<StudyDrawResult>,
-    ): DrawRevealState {
+    fun skip(state: DrawRevealState, results: List<StudyDrawResult>): DrawRevealState {
         if (results.isEmpty()) return DrawRevealState(index = -1, phase = DrawRevealPhase.Done, lastIndex = -1)
-        val nextIndex = results
-            .withIndex()
-            .firstOrNull { (index, result) -> index > state.index && result.rarity == StudyRarity.Rainbow }
-            ?.index
-        return if (nextIndex == null) {
-            summary(state)
-        } else {
-            state.copy(index = nextIndex, phase = DrawRevealPhase.RainbowVideo)
-        }
+        if (state.phase == DrawRevealPhase.RainbowVideo) return videoFinished(state, results)
+        return summary(state)
     }
-
-    fun skip(state: DrawRevealState, results: List<StudyDrawResult>): DrawRevealState =
-        skipToNextRainbowVideoOrSummary(state, results)
 }
