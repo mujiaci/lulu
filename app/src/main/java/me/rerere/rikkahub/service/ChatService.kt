@@ -52,6 +52,7 @@ import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.finishPendingTools
@@ -78,6 +79,7 @@ import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
+import me.rerere.rikkahub.data.ai.transformers.LULU_PRESENCE_METADATA_TYPE
 import me.rerere.rikkahub.data.ai.transformers.LuluStateTransformer
 import me.rerere.rikkahub.data.ai.transformers.LuluExpressionOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
@@ -218,7 +220,7 @@ internal fun Settings.recordLuluPresenceTurn(
     val previousState = luluStates.luluStateHistory(assistantId).firstOrNull()
     val input = perceptionInput?.copy(userText = cleanUserText)
         ?: LuluPerceptionInput(userText = cleanUserText, hourOfDay = hourOfDay)
-    val nextState = buildLuluStateFromTurn(
+    val generatedState = buildLuluStateFromTurn(
         assistantId = assistantId,
         previous = previousState,
         perceptionInput = input,
@@ -227,6 +229,10 @@ internal fun Settings.recordLuluPresenceTurn(
         assistantPersona = assistant?.toLuluStatePersona().orEmpty(),
         preferredInnerVoice = modelPresence?.innerVoice,
         nowMillis = nowMillis,
+    )
+    val nextState = generatedState.copy(
+        statusText = modelPresence?.statusText.cleanLuluPresenceField(maxLength = 32) ?: generatedState.statusText,
+        selfScene = modelPresence?.description.cleanLuluPresenceField(maxLength = 220) ?: generatedState.selfScene,
     )
     val nextThought = buildLuluThoughtFromTurn(
         assistantId = assistantId,
@@ -257,9 +263,18 @@ internal fun Settings.recordLuluPresenceTurn(
 }
 
 internal data class LuluModelPresence(
+    val statusText: String? = null,
+    val description: String? = null,
     val innerVoice: String? = null,
     val thought: String? = null,
 )
+
+private fun String?.cleanLuluPresenceField(maxLength: Int): String? =
+    this
+        ?.trim()
+        ?.replace(Regex("\\s+"), " ")
+        ?.take(maxLength)
+        ?.takeIf { it.isNotBlank() }
 
 private fun Assistant.toLuluStatePersona(): String = buildString {
     appendLine("角色名：${name.ifBlank { "当前角色" }}")
@@ -751,7 +766,8 @@ class ChatService(
             .orEmpty()
 
     private fun List<UIMessage>.extractLuluModelPresence(): LuluModelPresence? =
-        asReversed()
+        extractLuluPresenceMetadata()
+            ?: asReversed()
             .asSequence()
             .flatMap { message -> message.parts.asReversed().asSequence() }
             .filterIsInstance<UIMessagePart.Tool>()
@@ -761,12 +777,38 @@ class ChatService(
                 runCatching {
                     val json = JsonInstant.parseToJsonElement(input).jsonObject
                     LuluModelPresence(
+                        statusText = json["status"]?.jsonPrimitive?.contentOrNull
+                            ?: json["status_text"]?.jsonPrimitive?.contentOrNull,
+                        description = json["description"]?.jsonPrimitive?.contentOrNull,
                         innerVoice = json["inner_voice"]?.jsonPrimitive?.contentOrNull,
                         thought = json["thought"]?.jsonPrimitive?.contentOrNull,
                     )
                 }.getOrNull()
             }
-            ?.takeIf { !it.innerVoice.isNullOrBlank() || !it.thought.isNullOrBlank() }
+            ?.takeIf { it.hasContent() }
+
+    private fun List<UIMessage>.extractLuluPresenceMetadata(): LuluModelPresence? =
+        asReversed()
+            .asSequence()
+            .flatMap { message -> message.annotations.asReversed().asSequence() }
+            .filterIsInstance<UIMessageAnnotation.Metadata>()
+            .firstOrNull { it.type == LULU_PRESENCE_METADATA_TYPE }
+            ?.data
+            ?.let { json ->
+                LuluModelPresence(
+                    statusText = json["status"]?.jsonPrimitive?.contentOrNull,
+                    description = json["description"]?.jsonPrimitive?.contentOrNull,
+                    innerVoice = json["inner_voice"]?.jsonPrimitive?.contentOrNull,
+                    thought = json["thought"]?.jsonPrimitive?.contentOrNull,
+                )
+            }
+            ?.takeIf { it.hasContent() }
+
+    private fun LuluModelPresence.hasContent(): Boolean =
+        !statusText.isNullOrBlank() ||
+            !description.isNullOrBlank() ||
+            !innerVoice.isNullOrBlank() ||
+            !thought.isNullOrBlank()
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
         launchWithConversationReference(conversationId) {

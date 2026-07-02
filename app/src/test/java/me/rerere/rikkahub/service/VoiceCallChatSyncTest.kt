@@ -124,6 +124,34 @@ class VoiceCallChatSyncTest {
     }
 
     @Test
+    fun `presence turn prefers model hidden presence fields`() {
+        val assistantId = Uuid.parse("91919191-9191-9191-9191-919191919191")
+        val settings = Settings(
+            assistants = listOf(Assistant(id = assistantId, name = "露露")),
+        )
+
+        val updated = settings.recordLuluPresenceTurn(
+            assistantId = assistantId,
+            userText = "我有点累",
+            assistantText = "我陪你缓一下。",
+            modelPresence = LuluModelPresence(
+                statusText = "靠近听你说",
+                description = "我把手机握近了一点，认真等你说完。",
+                innerVoice = "我有点担心，但不想把你逼得更累。",
+                thought = "我想记得他现在需要被温柔接住。",
+            ),
+            nowMillis = 10_000L,
+            hourOfDay = 21,
+        )
+
+        val state = updated.luluStates.currentLuluState(assistantId)
+        assertEquals("靠近听你说", state.statusText)
+        assertEquals("我把手机握近了一点，认真等你说完。", state.selfScene)
+        assertEquals("我有点担心，但不想把你逼得更累。", state.innerVoice)
+        assertEquals("我想记得他现在需要被温柔接住。", updated.luluThoughts.single().content)
+    }
+
+    @Test
     fun `presence turn ignores blank assistant reply`() {
         val assistantId = Uuid.parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
         val settings = Settings(

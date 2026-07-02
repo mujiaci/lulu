@@ -785,6 +785,13 @@ sealed class UIMessageAnnotation {
         val title: String,
         val url: String
     ) : UIMessageAnnotation()
+
+    @Serializable
+    @SerialName("metadata")
+    data class Metadata(
+        val type: String,
+        val data: JsonObject,
+    ) : UIMessageAnnotation()
 }
 
 @Serializable

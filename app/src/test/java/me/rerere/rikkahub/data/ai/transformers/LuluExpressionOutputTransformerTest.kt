@@ -3,7 +3,10 @@ package me.rerere.rikkahub.data.ai.transformers
 import kotlinx.datetime.LocalDateTime
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
+import kotlinx.serialization.json.content
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -91,6 +94,31 @@ class LuluExpressionOutputTransformerTest {
 
         assertEquals(1, result.size)
         assertEquals("我来啦。", result.single().toText())
+    }
+
+    @Test
+    fun `stores lulu presence block as hidden metadata annotation`() {
+        val assistant = assistantMessage(
+            """
+            我在。
+            <lulu_presence>
+            status: 在靠近你
+            description: 我把手机握近了一点，认真等你说完。
+            inner_voice: 我有点担心，但不想把你逼得更累。
+            thought: 我想记得他现在需要被温柔接住。
+            </lulu_presence>
+            """.trimIndent()
+        )
+
+        val result = splitLuluAssistantExpressionMessages(listOf(assistant))
+        val annotation = result.single().annotations
+            .filterIsInstance<UIMessageAnnotation.Metadata>()
+            .single()
+
+        assertEquals("我在。", result.single().toText())
+        assertEquals(LULU_PRESENCE_METADATA_TYPE, annotation.type)
+        assertEquals("在靠近你", annotation.data["status"]?.jsonPrimitive?.content)
+        assertEquals("我有点担心，但不想把你逼得更累。", annotation.data["inner_voice"]?.jsonPrimitive?.content)
     }
 
     private fun assistantMessage(text: String) = UIMessage(

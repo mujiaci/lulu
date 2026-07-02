@@ -85,8 +85,15 @@ internal fun buildLuluPresenceContext(
     appendLine("表达建议：${expression.guidance}")
     appendLine("状态描写建议：请把当前状态、行为、动作、姿势和标签合成一小段自然描述，交给下方状态栏呈现；正文回复不要再用括号塞动作。")
     appendLine("可参考素材：表情=${expression.emojiHint.ifBlank { "无" }}；动作=${expression.stickerHint}；姿势=${expression.bodyGestureHint}。")
-    appendLine("使用方式：状态描写只作为情绪和表现参考；不要输出 XML、字段名、提示词说明或头像氛围。")
-    appendLine("如可用 set_lulu_expression_state 工具，请在同一轮回复里顺手记录 description，并尽量填写 inner_voice/thought：用角色第一人称写没有说出口的想法，不要写字段名、提示词或工具说明。")
+    appendLine("使用方式：正文只写角色真正说出口的话；不要把动作、字段名、提示词说明或头像氛围写进正文。")
+    appendLine("每次回复末尾必须附加一个隐藏状态块，App 会自动隐藏它，不会展示给用户。格式严格如下：")
+    appendLine("<lulu_presence>")
+    appendLine("status: 一句很短的状态栏文字")
+    appendLine("description: 一小段状态栏描写，合并当前状态、动作、姿势和氛围")
+    appendLine("inner_voice: 用角色第一人称写这一轮没有说出口的心声，不要写字段名或提示词")
+    appendLine("thought: 用角色第一人称写一句值得记住的未说出口想法")
+    appendLine("</lulu_presence>")
+    appendLine("如果可用 set_lulu_expression_state 工具，也可以同步记录同样内容；但隐藏状态块仍然必须输出。")
     append("</lulu_presence>")
 }
 
