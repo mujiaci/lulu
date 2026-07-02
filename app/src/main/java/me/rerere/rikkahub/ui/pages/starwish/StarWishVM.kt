@@ -97,13 +97,14 @@ class StarWishVM(
             val media = genMediaRepository.listAllMedia()
             _generatedImages.value = media.mapNotNull { entity ->
                 if (entity.id in current.hiddenGeneratedImageIds) return@mapNotNull null
-                val launch = launches.firstOrNull { it.prompt == entity.prompt } ?: return@mapNotNull null
+                val launch = launches.firstOrNull { it.prompt == entity.prompt }
                 StarWishGeneratedImage(
                     id = entity.id,
-                    outfit = launch.outfit,
+                    outfit = launch?.outfit ?: "生成图库",
                     filePath = File(imagesDir, entity.path.removePrefix("images/")).absolutePath,
                     prompt = entity.prompt,
                     createdAt = entity.createAt,
+                    fromStarWish = launch != null,
                 )
             }
         }

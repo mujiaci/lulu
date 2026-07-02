@@ -70,6 +70,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import coil3.compose.AsyncImage
 import java.io.File
 import kotlinx.coroutines.launch
@@ -126,6 +129,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     val clipboard = LocalClipboardManager.current
+    val lifecycleOwner = LocalLifecycleOwner.current
     var selectedVideo by remember { mutableStateOf<StarWishVideoItem?>(null) }
     var section by remember { mutableStateOf(StarWishSection.Scrolls) }
     var scrollSubsection by remember { mutableStateOf(ScrollSubsection.Prompts) }
@@ -146,6 +150,17 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     }
     LaunchedEffect(Unit) {
         vm.videoMessage.collect { snackbarHostState.showSnackbar(it) }
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                vm.refreshGeneratedImages()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
     }
     val videoPickerLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let(vm::importVideo)
@@ -351,8 +366,19 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
         val promptKey = scroll.title
         val saved = state.customOutfitPrompts[promptKey] ?: state.customOutfitPrompts[outfit]
         val prompts = saved ?: StarWishOutfitPrompts(
-            solo = StarWishRules.imagePromptForCompanion(scroll.soloPrompt, companionAssistant, interaction = false),
-            interaction = StarWishRules.imagePromptForCompanion(scroll.interactionPrompt, companionAssistant, interaction = true),
+            solo = StarWishRules.imagePromptForCompanion(
+                basePrompt = scroll.soloPrompt,
+                assistant = companionAssistant,
+                interaction = false,
+            ),
+            interaction = StarWishRules.imagePromptForCompanion(
+                basePrompt = scroll.interactionPrompt,
+                assistant = companionAssistant,
+                interaction = true,
+                userNickname = settings.displaySetting.userNickname,
+                userProfile = settings.displaySetting.userProfile,
+                userAppearancePrompt = settings.displaySetting.userAppearancePrompt,
+            ),
         )
         ScrollDetailDialog(
             scroll = scroll,
@@ -370,6 +396,9 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                     basePrompt = prompt,
                     assistant = companionAssistant,
                     interaction = isInteraction,
+                    userNickname = settings.displaySetting.userNickname,
+                    userProfile = settings.displaySetting.userProfile,
+                    userAppearancePrompt = settings.displaySetting.userAppearancePrompt,
                 )
                 vm.recordImageLaunch(promptKey, finalPrompt)
                 selectedScroll = null
@@ -671,7 +700,11 @@ private fun StarWishGeneratedImageRow(image: StarWishGeneratedImage, onDelete: (
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(image.outfit, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("已生成图片 · ${image.createdAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (image.fromStarWish) "已同步到画卷 · ${image.createdAt}" else "来自生成图库 · ${image.createdAt}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Text(image.prompt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
             IconButton(onClick = onDelete) {

@@ -291,6 +291,9 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                                     basePrompt = scroll.soloPrompt,
                                     assistant = companionAssistant,
                                     interaction = false,
+                                    userNickname = settings.displaySetting.userNickname,
+                                    userProfile = settings.displaySetting.userProfile,
+                                    userAppearancePrompt = settings.displaySetting.userAppearancePrompt,
                                 )
                                 navController.navigate(
                                     Screen.ImageGen(

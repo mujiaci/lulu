@@ -731,6 +731,7 @@ class ChatService(
             model = model,
             processingStatus = MutableStateFlow<String?>(null),
             messages = hiddenMessages
+                .withUserProfileContext(settings)
                 .withMemoryRecallContext(memoryContext)
                 .withProactiveToolInstruction(assistant, proactiveContext),
             assistant = assistant,
@@ -1021,6 +1022,7 @@ class ChatService(
                         it
                     }
                 }
+                    .withUserProfileContext(settings)
                     .withMemoryRecallContext(memoryContext)
                     .withProactiveToolInstruction(assistant, proactiveContext),
                 assistant = assistant,
@@ -1615,6 +1617,27 @@ class ChatService(
     private fun List<UIMessage>.withMemoryRecallContext(memoryContext: String): List<UIMessage> {
         if (memoryContext.isBlank()) return this
         return listOf(UIMessage.system(memoryContext)) + this
+    }
+
+    private fun List<UIMessage>.withUserProfileContext(settings: Settings): List<UIMessage> {
+        val context = settings.buildUserProfileContext()
+        if (context.isBlank()) return this
+        return listOf(UIMessage.system(context)) + this
+    }
+
+    private fun Settings.buildUserProfileContext(): String {
+        val display = displaySetting
+        val nickname = display.userNickname.trim()
+        val profile = display.userProfile.trim()
+        val appearance = display.userAppearancePrompt.trim()
+        if (nickname.isBlank() && profile.isBlank() && appearance.isBlank()) return ""
+        return buildString {
+            appendLine("用户资料（只作为理解用户和保持互动一致性的稳定设定，不要逐字复述）：")
+            if (nickname.isNotBlank()) appendLine("昵称：${nickname.take(80)}")
+            if (profile.isNotBlank()) appendLine("个人资料：${profile.take(600)}")
+            if (appearance.isNotBlank()) appendLine("我的外貌：${appearance.take(600)}")
+            append("聊天、称呼、关系感、身体/性别/外貌描写、以及涉及用户出现在画面里的内容，都要优先遵守这些资料。")
+        }.trim()
     }
 
     private fun List<Tool>.withProactiveCooldown(): List<Tool> {

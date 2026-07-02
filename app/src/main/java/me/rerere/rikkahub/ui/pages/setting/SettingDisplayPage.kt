@@ -22,6 +22,7 @@ import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -244,6 +245,55 @@ fun SettingDisplayPage(vm: SettingVM = koinViewModel()) {
                             },
                         )
                     }
+                }
+            }
+
+            item {
+                CardGroup(
+                    modifier = Modifier.padding(horizontal = 8.dp),
+                    title = { Text("我的资料") },
+                ) {
+                    item(
+                        headlineContent = { Text("我的昵称") },
+                        supportingContent = {
+                            OutlinedTextField(
+                                value = displaySetting.userNickname,
+                                onValueChange = {
+                                    updateDisplaySetting(displaySetting.copy(userNickname = it))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true,
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text("我的个人资料") },
+                        supportingContent = {
+                            OutlinedTextField(
+                                value = displaySetting.userProfile,
+                                onValueChange = {
+                                    updateDisplaySetting(displaySetting.copy(userProfile = it))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 2,
+                                maxLines = 5,
+                            )
+                        },
+                    )
+                    item(
+                        headlineContent = { Text("我的外貌 / 互动生图参考") },
+                        supportingContent = {
+                            OutlinedTextField(
+                                value = displaySetting.userAppearancePrompt,
+                                onValueChange = {
+                                    updateDisplaySetting(displaySetting.copy(userAppearancePrompt = it))
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                minLines = 3,
+                                maxLines = 6,
+                            )
+                        },
+                    )
                 }
             }
 

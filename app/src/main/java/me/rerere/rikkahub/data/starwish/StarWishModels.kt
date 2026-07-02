@@ -84,6 +84,7 @@ data class StarWishGeneratedImage(
     val filePath: String,
     val prompt: String,
     val createdAt: Long,
+    val fromStarWish: Boolean = true,
 )
 
 data class StarWishVideoUnlockResult(

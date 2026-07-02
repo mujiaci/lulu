@@ -281,11 +281,17 @@ object StarWishRules {
         basePrompt: String,
         assistant: Assistant,
         interaction: Boolean,
+        userNickname: String = "",
+        userProfile: String = "",
+        userAppearancePrompt: String = "",
     ): String {
         val subjectName = assistant.name.ifBlank { "当前陪伴角色" }
         val appearance = assistant.appearancePrompt.trim().ifBlank {
             "使用角色「$subjectName」的角色页外貌设定作为外貌参考。"
         }
+        val cleanUserName = userNickname.trim().ifBlank { "用户" }
+        val cleanUserProfile = userProfile.trim()
+        val cleanUserAppearance = userAppearancePrompt.trim()
         val cleanBase = basePrompt
             .replace("露露", subjectName)
             .trim()
@@ -293,6 +299,17 @@ object StarWishRules {
         return buildString {
             append("请生成一张高质量二次元精致 CG，$version。")
             append("主体是$subjectName，外貌参考：$appearance ")
+            if (interaction) {
+                append("互动对象是$cleanUserName。")
+                if (cleanUserProfile.isNotBlank()) {
+                    append("互动对象个人资料：$cleanUserProfile ")
+                }
+                if (cleanUserAppearance.isNotBlank()) {
+                    append("互动对象外貌参考：$cleanUserAppearance ")
+                } else {
+                    append("如果画到互动对象的脸、身体或手，请保持与用户资料一致，不要随意改变性别、年龄感和手部特征。")
+                }
+            }
             append(cleanBase)
             append(" 避免真人照片风、欧美厚涂脸、低清、脏脸、黑脸、畸形手、多余手指、空背景、服装与主题无关、道具遮住脸。")
         }.replace(Regex("\\s+"), " ").trim()
