@@ -2,9 +2,15 @@ package me.rerere.rikkahub.ui.pages.study
 
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.using
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -1245,7 +1251,9 @@ private fun DrawResultCelebration(
     var revealState by remember(results) { mutableStateOf(DrawRevealFlow.start(drawResults)) }
     val currentReveal = results.getOrNull(revealState.index)
     val current = currentReveal?.result
-    val showRainbowBackdrop = current?.rarity == StudyRarity.Rainbow &&
+    val currentVideoUri = currentReveal?.video?.uri
+        ?: if (current?.rarity == StudyRarity.Rainbow) DEFAULT_RAINBOW_DRAW_VIDEO_URI else null
+    val showRainbowBackdrop = currentVideoUri != null &&
         revealState.phase != DrawRevealPhase.Summary &&
         revealState.phase != DrawRevealPhase.Done
     val transition = rememberInfiniteTransition(label = "draw-result")
@@ -1259,7 +1267,7 @@ private fun DrawResultCelebration(
         label = "draw-pulse",
     )
     fun skipAll() {
-        revealState = DrawRevealFlow.skip(revealState)
+        revealState = DrawRevealFlow.skip(revealState, drawResults)
     }
     LaunchedEffect(revealState.phase) {
         if (revealState.phase == DrawRevealPhase.Done) {
@@ -1277,7 +1285,7 @@ private fun DrawResultCelebration(
         ) {
             if (showRainbowBackdrop) {
                 RainbowDrawVideoLayer(
-                    videoUri = currentReveal?.video?.uri ?: DEFAULT_RAINBOW_DRAW_VIDEO_URI,
+                    videoUri = currentVideoUri ?: DEFAULT_RAINBOW_DRAW_VIDEO_URI,
                     shouldPlay = revealState.phase == DrawRevealPhase.RainbowVideo,
                     onFinished = {
                         revealState = DrawRevealFlow.videoFinished(revealState, drawResults)
@@ -1322,7 +1330,16 @@ private fun DrawResultCelebration(
                 Spacer(Modifier.weight(1f))
                 AnimatedContent(
                     targetState = revealState.index to revealState.phase,
-                    transitionSpec = { fadeIn(tween(260)) togetherWith fadeOut(tween(180)) },
+                    transitionSpec = {
+                        val direction = if (targetState.first >= initialState.first) 1 else -1
+                        val enter = fadeIn(tween(220)) +
+                            slideInHorizontally(tween(360)) { width -> width * direction } +
+                            slideInVertically(tween(360)) { 28 }
+                        val exit = fadeOut(tween(180)) +
+                            slideOutHorizontally(tween(300)) { width -> -width * direction } +
+                            slideOutVertically(tween(300)) { -28 }
+                        (enter togetherWith exit).using(SizeTransform(clip = false))
+                    },
                     label = "draw-card-fade",
                 ) { (index, phase) ->
                     val cardResult = if (phase == DrawRevealPhase.Card) drawResults.getOrNull(index) else null
@@ -1494,13 +1511,6 @@ private fun DrawResultSquare(
                 .background(drawCardBrush(result.rarity))
                 .padding(6.dp),
         ) {
-            Text(
-                result.rarity.label.take(1),
-                color = Color.White.copy(alpha = 0.78f),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.TopStart),
-            )
             Text(
                 result.title,
                 color = Color.White,

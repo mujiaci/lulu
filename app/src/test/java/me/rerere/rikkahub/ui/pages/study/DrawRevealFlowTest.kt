@@ -39,10 +39,21 @@ class DrawRevealFlowTest {
     }
 
     @Test
-    fun skipShowsSummary() {
-        val results = listOf(draw(StudyRarity.Rainbow), draw(StudyRarity.Epic))
+    fun skipJumpsToNextRainbowVideoBeforeSummary() {
+        val results = listOf(draw(StudyRarity.Normal), draw(StudyRarity.Rainbow), draw(StudyRarity.Epic))
 
-        val skipped = DrawRevealFlow.skip(DrawRevealFlow.start(results))
+        val skipped = DrawRevealFlow.skip(DrawRevealFlow.start(results), results)
+
+        assertEquals(DrawRevealPhase.RainbowVideo, skipped.phase)
+        assertEquals(1, skipped.index)
+    }
+
+    @Test
+    fun skipShowsSummaryWhenNoMoreRainbowVideosRemain() {
+        val results = listOf(draw(StudyRarity.Rainbow), draw(StudyRarity.Epic))
+        val rainbowCard = DrawRevealFlow.videoFinished(DrawRevealFlow.start(results), results)
+
+        val skipped = DrawRevealFlow.skip(rainbowCard, results)
 
         assertEquals(DrawRevealPhase.Summary, skipped.phase)
         assertEquals(results.lastIndex, skipped.index)

@@ -45,5 +45,22 @@ object DrawRevealFlow {
 
     fun summary(state: DrawRevealState): DrawRevealState = state.copy(index = state.lastIndex, phase = DrawRevealPhase.Summary)
 
-    fun skip(state: DrawRevealState): DrawRevealState = summary(state)
+    fun skipToNextRainbowVideoOrSummary(
+        state: DrawRevealState,
+        results: List<StudyDrawResult>,
+    ): DrawRevealState {
+        if (results.isEmpty()) return DrawRevealState(index = -1, phase = DrawRevealPhase.Done, lastIndex = -1)
+        val nextIndex = results
+            .withIndex()
+            .firstOrNull { (index, result) -> index > state.index && result.rarity == StudyRarity.Rainbow }
+            ?.index
+        return if (nextIndex == null) {
+            summary(state)
+        } else {
+            state.copy(index = nextIndex, phase = DrawRevealPhase.RainbowVideo)
+        }
+    }
+
+    fun skip(state: DrawRevealState, results: List<StudyDrawResult>): DrawRevealState =
+        skipToNextRainbowVideoOrSummary(state, results)
 }
