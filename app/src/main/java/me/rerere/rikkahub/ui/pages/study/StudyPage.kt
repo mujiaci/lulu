@@ -1,5 +1,8 @@
 package me.rerere.rikkahub.ui.pages.study
 
+import android.content.Context
+import android.graphics.Bitmap
+import android.media.MediaMetadataRetriever
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
@@ -7,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -73,7 +77,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.font.FontWeight
@@ -85,7 +91,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
 import me.rerere.hugeicons.stroke.AiMagic
@@ -1252,20 +1260,11 @@ private fun DrawResultCelebration(
     val rewardVideoPending = revealState.phase == DrawRevealPhase.Card &&
         currentReveal?.video != null &&
         revealState.index !in playedRewardVideoIndexes
-    val currentVideoUri = when {
-        revealState.phase == DrawRevealPhase.RainbowVideo -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
-        revealState.phase == DrawRevealPhase.RewardVideo -> currentReveal?.video?.uri
-        revealState.phase == DrawRevealPhase.Card && hasRainbowDraw -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
-        else -> null
-    }
-    val currentVideoPlaybackKey = when (revealState.phase) {
-        DrawRevealPhase.RewardVideo -> "${revealState.index}:reward"
-        else -> "${revealState.index}:process"
-    }
-    val showRainbowBackdrop = currentVideoUri != null &&
+    val showRainbowBackdrop = hasRainbowDraw &&
         revealState.phase != DrawRevealPhase.Summary &&
         revealState.phase != DrawRevealPhase.Done
-    val freezeRainbowBackdrop = revealState.phase == DrawRevealPhase.Card && hasRainbowDraw
+    val rewardVideoUri = currentReveal?.video?.uri
+        ?.takeIf { revealState.phase == DrawRevealPhase.RewardVideo }
     val transition = rememberInfiniteTransition(label = "draw-result")
     val pulse by transition.animateFloat(
         initialValue = 0.96f,
@@ -1324,36 +1323,42 @@ private fun DrawResultCelebration(
             modifier = Modifier
                 .fillMaxSize()
                 .then(
-                    if (freezeRainbowBackdrop) {
+                    if (showRainbowBackdrop) {
                         Modifier
                     } else {
                         Modifier.background(drawFullscreenBrush(current?.rarity ?: best))
                     }
                 ),
         ) {
-            if (showRainbowBackdrop && currentVideoUri != null) {
-                RainbowDrawVideoLayer(
-                    videoUri = currentVideoUri,
-                    playbackKey = currentVideoPlaybackKey,
-                    shouldPlay = revealState.phase == DrawRevealPhase.RainbowVideo ||
-                        revealState.phase == DrawRevealPhase.RewardVideo,
+            if (showRainbowBackdrop) {
+                RainbowDrawBackdropLayer(
+                    videoUri = DEFAULT_RAINBOW_DRAW_VIDEO_URI,
+                    shouldPlay = revealState.phase == DrawRevealPhase.RainbowVideo,
                     onFinished = {
-                        if (revealState.phase == DrawRevealPhase.RewardVideo) {
-                            playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
-                            revealState = revealState.copy(phase = DrawRevealPhase.Card)
-                        } else {
+                        if (revealState.phase == DrawRevealPhase.RainbowVideo) {
                             revealState = DrawRevealFlow.videoFinished(revealState, drawResults)
                         }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                if (!freezeRainbowBackdrop) {
+                if (revealState.phase == DrawRevealPhase.RainbowVideo) {
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(Color.Black.copy(alpha = 0.04f)),
                     )
                 }
+            }
+            if (rewardVideoUri != null) {
+                DrawRewardVideoLayer(
+                    videoUri = rewardVideoUri,
+                    playbackKey = "${revealState.index}:reward",
+                    onFinished = {
+                        playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
+                        revealState = revealState.copy(phase = DrawRevealPhase.Card)
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             if (revealState.phase == DrawRevealPhase.Summary) {
                 DrawResultSummary(
@@ -1446,10 +1451,52 @@ private fun DrawResultCelebration(
 }
 
 @Composable
-private fun RainbowDrawVideoLayer(
+private fun RainbowDrawBackdropLayer(
+    videoUri: String,
+    shouldPlay: Boolean,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (shouldPlay) {
+        DrawVideoLayer(
+            videoUri = videoUri,
+            playbackKey = "rainbow-opening",
+            shouldPlay = true,
+            freezeAtEnd = true,
+            onFinished = onFinished,
+            modifier = modifier,
+        )
+    } else {
+        DrawVideoFrozenFrame(
+            videoUri = videoUri,
+            modifier = modifier,
+        )
+    }
+}
+
+@Composable
+private fun DrawRewardVideoLayer(
+    videoUri: String,
+    playbackKey: String,
+    onFinished: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    DrawVideoLayer(
+        videoUri = videoUri,
+        playbackKey = playbackKey,
+        shouldPlay = true,
+        freezeAtEnd = false,
+        onFinished = onFinished,
+        modifier = modifier,
+    )
+}
+
+@Composable
+private fun DrawVideoLayer(
     videoUri: String,
     playbackKey: String,
     shouldPlay: Boolean,
+    freezeAtEnd: Boolean,
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1475,9 +1522,20 @@ private fun RainbowDrawVideoLayer(
         setOnCompletionListener {
             if (!completed) {
                 completed = true
-                freezeAtEnd()
+                if (freezeAtEnd) {
+                    freezeAtEnd()
+                } else {
+                    pause()
+                }
                 onFinished()
             }
+        }
+        setOnErrorListener { _, _, _ ->
+            if (!completed) {
+                completed = true
+                onFinished()
+            }
+            true
         }
     }
     DisposableEffect(videoUri, playbackKey) {
@@ -1506,6 +1564,51 @@ private fun RainbowDrawVideoLayer(
             }
         },
     )
+}
+
+@Composable
+private fun DrawVideoFrozenFrame(
+    videoUri: String,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    var bitmap by remember(videoUri) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(videoUri) {
+        bitmap = withContext(Dispatchers.IO) {
+            loadVideoLastFrame(context, videoUri)
+        }
+    }
+    val frame = bitmap
+    if (frame != null) {
+        Image(
+            bitmap = frame.asImageBitmap(),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = modifier.background(Color.Black),
+        )
+    } else {
+        Box(
+            modifier = modifier.background(drawFullscreenBrush(StudyRarity.Rainbow)),
+        )
+    }
+}
+
+private fun loadVideoLastFrame(context: Context, videoUri: String): Bitmap? {
+    val retriever = MediaMetadataRetriever()
+    return try {
+        retriever.setDataSource(context, resolveAppVideoUri(context, videoUri))
+        val durationMs = retriever
+            .extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
+            ?.toLongOrNull()
+            ?: 0L
+        val frameTimeUs = (durationMs - 80L).coerceAtLeast(0L) * 1_000L
+        retriever.getFrameAtTime(frameTimeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+            ?: retriever.getFrameAtTime()
+    } catch (_: Throwable) {
+        null
+    } finally {
+        runCatching { retriever.release() }
+    }
 }
 
 @Composable
