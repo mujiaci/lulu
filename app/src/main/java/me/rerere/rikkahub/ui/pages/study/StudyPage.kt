@@ -2,7 +2,6 @@ package me.rerere.rikkahub.ui.pages.study
 
 import android.widget.VideoView
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
@@ -10,7 +9,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.using
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -1338,7 +1336,7 @@ private fun DrawResultCelebration(
                         val exit = fadeOut(tween(180)) +
                             slideOutHorizontally(tween(300)) { width -> -width * direction } +
                             slideOutVertically(tween(300)) { -28 }
-                        (enter togetherWith exit).using(SizeTransform(clip = false))
+                        enter togetherWith exit
                     },
                     label = "draw-card-fade",
                 ) { (index, phase) ->
