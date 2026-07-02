@@ -103,6 +103,35 @@ class LuluPresenceTest {
     }
 
     @Test
+    fun `preferred thought ignores prompt leakage`() {
+        val thought = buildLuluThoughtFromTurn(
+            assistantId = assistantId,
+            userText = "我有点累",
+            state = LuluState(assistantId = assistantId),
+            preferredThought = "<lulu_presence> use field thought and inner_voice",
+            nowMillis = 1_000L,
+        )
+
+        val content = thought?.content.orEmpty()
+        assertFalse(content.contains("lulu_presence"))
+        assertFalse(content.contains("inner_voice"))
+    }
+
+    @Test
+    fun `preferred inner voice ignores prompt leakage`() {
+        val state = buildLuluStateFromTurn(
+            assistantId = assistantId,
+            userText = "我有点累",
+            assistantText = "我陪你缓一下。",
+            preferredInnerVoice = "set_lulu_expression_state inner_voice description",
+            nowMillis = 1_000L,
+        )
+
+        assertFalse(state.innerVoice.contains("set_lulu_expression_state"))
+        assertFalse(state.innerVoice.contains("inner_voice"))
+    }
+
+    @Test
     fun `pending action is marked expressed when user returns`() {
         val pending = LuluThought(
             assistantId = assistantId,

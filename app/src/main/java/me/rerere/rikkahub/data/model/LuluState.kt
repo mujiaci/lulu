@@ -400,8 +400,26 @@ private fun String?.sanitizeLuluInnerVoice(): String? =
     this
         ?.trim()
         ?.replace(Regex("\\s+"), " ")
+        ?.takeUnless { it.containsLuluPromptLeak() }
         ?.take(160)
         ?.takeIf { it.isNotBlank() }
+
+private fun String.containsLuluPromptLeak(): Boolean {
+    val lowered = lowercase()
+    return listOf(
+        "<lulu_presence",
+        "</lulu_presence",
+        "set_lulu_expression_state",
+        "inner_voice",
+        "description",
+        "xml",
+        "field",
+        "prompt",
+        "提示词",
+        "字段",
+        "工具名",
+    ).any { it in lowered }
+}
 
 private fun buildSelfScene(
     mood: LuluMood,

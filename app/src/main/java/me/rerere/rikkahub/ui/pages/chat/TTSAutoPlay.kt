@@ -55,15 +55,10 @@ fun TTSAutoPlay(setting: Settings, conversation: Conversation, loading: Boolean)
     LaunchedEffect(target.map { it.id }, isAvailable, setting.displaySetting.ttsOnlyReadQuoted) {
         if (!isAvailable || target.isEmpty()) return@LaunchedEffect
         delay(450)
-        val text = target
-            .mapNotNull { message ->
-                buildSpeakableMessageText(
-                    message = message,
-                    onlyReadQuoted = setting.displaySetting.ttsOnlyReadQuoted,
-                )
-            }
-            .joinToString("\n")
-            .takeIf { it.isNotBlank() }
+        val text = buildAutoPlayTTSBatchText(
+            messages = target,
+            onlyReadQuoted = setting.displaySetting.ttsOnlyReadQuoted,
+        )
         spokenMessageIds = spokenMessageIds + target.map { it.id }
         if (text == null) return@LaunchedEffect
         tts.speak(text, providerOverride = setting.getAssistantTTSProvider(conversation.assistantId))
@@ -83,6 +78,24 @@ internal fun findAutoPlayTTSMessages(
     return nodes
         .map { it.currentMessage }
         .filter { it.isFinishedSpeakableAssistantMessage() && it.id !in spokenMessageIds }
+}
+
+internal fun buildAutoPlayTTSBatchText(
+    messages: List<UIMessage>,
+    onlyReadQuoted: Boolean,
+): String? {
+    val seen = LinkedHashSet<String>()
+    messages.forEach { message ->
+        buildSpeakableMessageText(
+            message = message,
+            onlyReadQuoted = onlyReadQuoted,
+        )
+            ?.lineSequence()
+            ?.map { it.trim() }
+            ?.filter { it.isNotBlank() }
+            ?.forEach { seen += it }
+    }
+    return seen.joinToString("\n").takeIf { it.isNotBlank() }
 }
 
 private fun UIMessage.isFinishedSpeakableAssistantMessage(): Boolean =

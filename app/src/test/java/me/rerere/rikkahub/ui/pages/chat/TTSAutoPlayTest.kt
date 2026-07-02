@@ -66,6 +66,17 @@ class TTSAutoPlayTest {
         )
     }
 
+    @Test
+    fun `builds autoplay batch text from visible messages without duplicate lines`() {
+        val first = assistantMessage("visible reply")
+        val second = assistantMessage("visible reply")
+
+        assertEquals(
+            "visible reply",
+            buildAutoPlayTTSBatchText(listOf(first, second), onlyReadQuoted = false),
+        )
+    }
+
     private fun assistantMessage(text: String): UIMessage =
         UIMessage.assistant(text).copy(
             finishedAt = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())

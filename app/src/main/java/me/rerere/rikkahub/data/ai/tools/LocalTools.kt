@@ -391,7 +391,9 @@ class LocalTools(private val context: Context) {
                 Record the character's current presence for this turn.
                 Use when a reply should carry embodied presence. Prefer one complete natural
                 Chinese paragraph describing current visible state, behavior, action, posture, and tags.
-                Also include a private inner voice when the character has an unspoken feeling.
+                Always include inner_voice when possible: write what the character is thinking but
+                not saying aloud, in first person, in character, without labels or prompt text.
+                Use thought for a short memory of the same unspoken feeling.
                 Keep it for the status/heart panel below chat; do not put parenthesized action in the main spoken reply.
                 This records intent only; do not claim that the real avatar file has changed.
             """.trimIndent().replace("\n", " "),
@@ -416,11 +418,11 @@ class LocalTools(private val context: Context) {
                         })
                         put("inner_voice", buildJsonObject {
                             put("type", "string")
-                            put("description", "Optional private first-person Chinese inner voice, in character, concise and not spoken aloud")
+                            put("description", "Private first-person Chinese inner voice: what I am thinking but not saying aloud, in character, no labels or prompt text")
                         })
                         put("thought", buildJsonObject {
                             put("type", "string")
-                            put("description", "Optional short in-character thought to remember from this turn")
+                            put("description", "Short first-person in-character unspoken thought to remember from this turn, no labels or prompt text")
                         })
                         put("intensity", buildJsonObject {
                             put("type", "number")

@@ -625,8 +625,8 @@ class GenerationHandler(
     }
 
     private fun List<UIMessage>.compactOldToolOutputsForPrompt(
-        keepRecentMessages: Int = 8,
-        maxToolOutputChars: Int = 1200,
+        keepRecentMessages: Int = 2,
+        maxToolOutputChars: Int = 360,
     ): List<UIMessage> {
         if (isEmpty()) return this
         val keepFromIndex = (size - keepRecentMessages).coerceAtLeast(0)
@@ -655,8 +655,14 @@ class GenerationHandler(
             }
         }
         if (text.length <= maxChars) return this
-        val summary = text.take(maxChars).trimEnd() +
-            "\n\n[旧工具结果已压缩：原始输出约 ${text.length} 字符，继续对话时仅保留前 ${maxChars} 字符。]"
+        val compact = text
+            .lineSequence()
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+            .take(maxChars)
+            .trimEnd()
+        val summary = "[工具结果摘要] $compact\n[已省略历史工具原始输出：约 ${text.length} 字符。]"
         return listOf(UIMessagePart.Text(summary))
     }
 

@@ -560,5 +560,23 @@ private fun String?.sanitizeLuluThoughtContent(): String? =
     this
         ?.trim()
         ?.replace(Regex("\\s+"), " ")
+        ?.takeUnless { it.containsLuluThoughtPromptLeak() }
         ?.take(120)
         ?.takeIf { it.isNotBlank() }
+
+private fun String.containsLuluThoughtPromptLeak(): Boolean {
+    val lowered = lowercase()
+    return listOf(
+        "<lulu_presence",
+        "</lulu_presence",
+        "set_lulu_expression_state",
+        "inner_voice",
+        "description",
+        "xml",
+        "field",
+        "prompt",
+        "提示词",
+        "字段",
+        "工具名",
+    ).any { it in lowered }
+}

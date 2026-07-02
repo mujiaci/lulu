@@ -52,6 +52,16 @@ class SpeakableMessageTextTest {
     }
 
     @Test
+    fun `buildSpeakableMessageText reads full visible text even when quoted mode is enabled`() {
+        val message = UIMessage.assistant("visible before \"quoted part\" visible after")
+
+        assertEquals(
+            "visible before \"quoted part\" visible after",
+            buildSpeakableMessageText(message, onlyReadQuoted = true)
+        )
+    }
+
+    @Test
     fun `buildSpeakableMessageText prefers visible assistant text over text to speech tool input`() {
         val message = UIMessage(
             role = MessageRole.ASSISTANT,

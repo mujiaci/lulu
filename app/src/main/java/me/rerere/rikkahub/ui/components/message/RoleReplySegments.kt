@@ -3,7 +3,6 @@ package me.rerere.rikkahub.ui.components.message
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.utils.JsonInstant
-import me.rerere.rikkahub.utils.extractQuotedContentAsText
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -66,14 +65,11 @@ fun String.extractSpeakableRoleText(): String =
 private fun String.removeHiddenZipTags(): String =
     replace(Regex("\\[zip:[^\\]]+\\]", RegexOption.IGNORE_CASE), "")
 
+@Suppress("UNUSED_PARAMETER")
 fun buildSpeakableMessageText(message: UIMessage, onlyReadQuoted: Boolean): String? {
     val rawText = message.toText().removeHiddenZipTags()
     val sourceText = rawText.ifBlank { message.extractTextToSpeechToolText() }
-    val selectedText = if (onlyReadQuoted) {
-        sourceText.extractQuotedContentAsText() ?: sourceText
-    } else {
-        sourceText
-    }
+    val selectedText = sourceText
     val withoutSpeakingLines = selectedText.removeGeneratedSpeakingLines()
     val visibleSpeakableText = withoutSpeakingLines.extractSpeakableRoleText()
     if (withoutSpeakingLines.isNotBlank()) {
