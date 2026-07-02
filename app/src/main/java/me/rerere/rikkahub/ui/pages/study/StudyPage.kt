@@ -1248,12 +1248,14 @@ private fun DrawResultCelebration(
     var playedRewardVideoIndexes by remember(results) { mutableStateOf(emptySet<Int>()) }
     val currentReveal = results.getOrNull(revealState.index)
     val current = currentReveal?.result
+    val hasRainbowDraw = remember(drawResults) { drawResults.any { it.rarity == StudyRarity.Rainbow } }
     val rewardVideoPending = revealState.phase == DrawRevealPhase.Card &&
         currentReveal?.video != null &&
         revealState.index !in playedRewardVideoIndexes
     val currentVideoUri = when {
         revealState.phase == DrawRevealPhase.RainbowVideo -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
         revealState.phase == DrawRevealPhase.RewardVideo -> currentReveal?.video?.uri
+        revealState.phase == DrawRevealPhase.Card && hasRainbowDraw -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
         else -> null
     }
     val currentVideoPlaybackKey = when (revealState.phase) {
@@ -1263,6 +1265,7 @@ private fun DrawResultCelebration(
     val showRainbowBackdrop = currentVideoUri != null &&
         revealState.phase != DrawRevealPhase.Summary &&
         revealState.phase != DrawRevealPhase.Done
+    val freezeRainbowBackdrop = revealState.phase == DrawRevealPhase.Card && hasRainbowDraw
     val transition = rememberInfiniteTransition(label = "draw-result")
     val pulse by transition.animateFloat(
         initialValue = 0.96f,
@@ -1320,7 +1323,13 @@ private fun DrawResultCelebration(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(drawFullscreenBrush(current?.rarity ?: best)),
+                .then(
+                    if (freezeRainbowBackdrop) {
+                        Modifier
+                    } else {
+                        Modifier.background(drawFullscreenBrush(current?.rarity ?: best))
+                    }
+                ),
         ) {
             if (showRainbowBackdrop && currentVideoUri != null) {
                 RainbowDrawVideoLayer(
@@ -1338,15 +1347,13 @@ private fun DrawResultCelebration(
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Color.Black.copy(
-                                alpha = if (revealState.phase == DrawRevealPhase.Card) 0.16f else 0.04f,
-                            ),
-                        ),
-                )
+                if (!freezeRainbowBackdrop) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.04f)),
+                    )
+                }
             }
             if (revealState.phase == DrawRevealPhase.Summary) {
                 DrawResultSummary(
@@ -1449,19 +1456,26 @@ private fun RainbowDrawVideoLayer(
     val context = LocalContext.current
     var videoView by remember(videoUri, playbackKey) { mutableStateOf<VideoView?>(null) }
     var completed by remember(videoUri, playbackKey) { mutableStateOf(false) }
+    fun VideoView.freezeAtEnd() {
+        seekTo((duration - 80).coerceAtLeast(0))
+        pause()
+    }
     fun VideoView.loadDrawVideo() {
         tag = "$videoUri#$playbackKey"
         completed = false
         setVideoURI(resolveAppVideoUri(context, videoUri))
         setOnPreparedListener { player ->
             player.isLooping = false
-            if (shouldPlay) start()
+            if (shouldPlay) {
+                start()
+            } else {
+                freezeAtEnd()
+            }
         }
         setOnCompletionListener {
             if (!completed) {
                 completed = true
-                seekTo((duration - 80).coerceAtLeast(0))
-                pause()
+                freezeAtEnd()
                 onFinished()
             }
         }
@@ -1487,6 +1501,8 @@ private fun RainbowDrawVideoLayer(
                 view.loadDrawVideo()
             } else if (shouldPlay && !completed && !view.isPlaying) {
                 view.start()
+            } else if (!shouldPlay && !completed && view.duration > 0) {
+                view.freezeAtEnd()
             }
         },
     )
