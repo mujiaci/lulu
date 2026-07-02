@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.study.StudyRarity
 enum class DrawRevealPhase {
     RainbowVideo,
     Card,
+    RewardVideo,
     Summary,
     Done,
 }

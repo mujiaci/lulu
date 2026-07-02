@@ -1247,10 +1247,22 @@ private fun DrawResultCelebration(
     val drawResults = remember(results) { results.map { it.result } }
     val best = drawResults.maxByOrNull { it.rarity.weight }?.rarity ?: StudyRarity.Normal
     var revealState by remember(results) { mutableStateOf(DrawRevealFlow.start(drawResults)) }
+    var playedRewardVideoIndexes by remember(results) { mutableStateOf(emptySet<Int>()) }
     val currentReveal = results.getOrNull(revealState.index)
     val current = currentReveal?.result
-    val currentVideoUri = currentReveal?.video?.uri
-        ?: if (current?.rarity == StudyRarity.Rainbow) DEFAULT_RAINBOW_DRAW_VIDEO_URI else null
+    val rewardVideoPending = revealState.phase == DrawRevealPhase.Card &&
+        currentReveal?.video != null &&
+        revealState.index !in playedRewardVideoIndexes
+    val currentVideoUri = when {
+        revealState.phase == DrawRevealPhase.RainbowVideo -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
+        revealState.phase == DrawRevealPhase.RewardVideo -> currentReveal?.video?.uri ?: DEFAULT_RAINBOW_DRAW_VIDEO_URI
+        current?.rarity == StudyRarity.Rainbow -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
+        else -> null
+    }
+    val currentVideoPlaybackKey = when (revealState.phase) {
+        DrawRevealPhase.RewardVideo -> "${revealState.index}:reward"
+        else -> "${revealState.index}:process"
+    }
     val showRainbowBackdrop = currentVideoUri != null &&
         revealState.phase != DrawRevealPhase.Summary &&
         revealState.phase != DrawRevealPhase.Done
@@ -1265,7 +1277,27 @@ private fun DrawResultCelebration(
         label = "draw-pulse",
     )
     fun skipAll() {
-        revealState = DrawRevealFlow.skip(revealState, drawResults)
+        revealState = if (rewardVideoPending) {
+            revealState.copy(phase = DrawRevealPhase.RewardVideo)
+        } else {
+            DrawRevealFlow.skip(revealState, drawResults)
+        }
+    }
+    fun closeCurrentVideo() {
+        revealState = when (revealState.phase) {
+            DrawRevealPhase.RainbowVideo -> DrawRevealFlow.videoFinished(revealState, drawResults)
+            DrawRevealPhase.RewardVideo -> {
+                playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
+                revealState.copy(phase = DrawRevealPhase.Card)
+            }
+            else -> DrawRevealFlow.skip(revealState, drawResults)
+        }
+    }
+    LaunchedEffect(revealState.index, revealState.phase, currentReveal?.video?.uri, playedRewardVideoIndexes) {
+        if (rewardVideoPending) {
+            delay(420)
+            revealState = revealState.copy(phase = DrawRevealPhase.RewardVideo)
+        }
     }
     LaunchedEffect(revealState.phase) {
         if (revealState.phase == DrawRevealPhase.Done) {
@@ -1284,9 +1316,16 @@ private fun DrawResultCelebration(
             if (showRainbowBackdrop) {
                 RainbowDrawVideoLayer(
                     videoUri = currentVideoUri ?: DEFAULT_RAINBOW_DRAW_VIDEO_URI,
-                    shouldPlay = revealState.phase == DrawRevealPhase.RainbowVideo,
+                    playbackKey = currentVideoPlaybackKey,
+                    shouldPlay = revealState.phase == DrawRevealPhase.RainbowVideo ||
+                        revealState.phase == DrawRevealPhase.RewardVideo,
                     onFinished = {
-                        revealState = DrawRevealFlow.videoFinished(revealState, drawResults)
+                        if (revealState.phase == DrawRevealPhase.RewardVideo) {
+                            playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
+                            revealState = revealState.copy(phase = DrawRevealPhase.Card)
+                        } else {
+                            revealState = DrawRevealFlow.videoFinished(revealState, drawResults)
+                        }
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1309,7 +1348,7 @@ private fun DrawResultCelebration(
                 return@Box
             }
             IconButton(
-                onClick = { skipAll() },
+                onClick = { closeCurrentVideo() },
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 18.dp, end = 14.dp)
@@ -1317,70 +1356,74 @@ private fun DrawResultCelebration(
             ) {
                 Text("×", color = Color.White, style = MaterialTheme.typography.headlineSmall)
             }
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 18.dp, vertical = 28.dp)
-                    .navigationBarsPadding(),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp),
+            if (revealState.phase != DrawRevealPhase.RainbowVideo &&
+                revealState.phase != DrawRevealPhase.RewardVideo
             ) {
-                Spacer(Modifier.weight(1f))
-                AnimatedContent(
-                    targetState = revealState.index to revealState.phase,
-                    transitionSpec = {
-                        val direction = if (targetState.first >= initialState.first) 1 else -1
-                        val enter = fadeIn(tween(220)) +
-                            slideInHorizontally(tween(360)) { width -> width * direction } +
-                            slideInVertically(tween(360)) { 28 }
-                        val exit = fadeOut(tween(180)) +
-                            slideOutHorizontally(tween(300)) { width -> -width * direction } +
-                            slideOutVertically(tween(300)) { -28 }
-                        enter togetherWith exit
-                    },
-                    label = "draw-card-fade",
-                ) { (index, phase) ->
-                    val cardResult = if (phase == DrawRevealPhase.Card) drawResults.getOrNull(index) else null
-                    if (cardResult == null) {
-                        Surface(
-                            color = Color.Black.copy(alpha = 0.18f),
-                            shape = RoundedCornerShape(24.dp),
-                            modifier = Modifier.size(width = 236.dp, height = 316.dp),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Text(
-                                    "愿光正在汇聚",
-                                    color = Color.White.copy(alpha = 0.86f),
-                                    fontWeight = FontWeight.Black,
-                                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 18.dp, vertical = 28.dp)
+                        .navigationBarsPadding(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Spacer(Modifier.weight(1f))
+                    AnimatedContent(
+                        targetState = revealState.index to revealState.phase,
+                        transitionSpec = {
+                            val direction = if (targetState.first >= initialState.first) 1 else -1
+                            val enter = fadeIn(tween(220)) +
+                                slideInHorizontally(tween(360)) { width -> width * direction } +
+                                slideInVertically(tween(360)) { 28 }
+                            val exit = fadeOut(tween(180)) +
+                                slideOutHorizontally(tween(300)) { width -> -width * direction } +
+                                slideOutVertically(tween(300)) { -28 }
+                            enter togetherWith exit
+                        },
+                        label = "draw-card-fade",
+                    ) { (index, phase) ->
+                        val cardResult = if (phase == DrawRevealPhase.Card) drawResults.getOrNull(index) else null
+                        if (cardResult == null) {
+                            Surface(
+                                color = Color.Black.copy(alpha = 0.18f),
+                                shape = RoundedCornerShape(24.dp),
+                                modifier = Modifier.size(width = 236.dp, height = 316.dp),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(
+                                        "愿光正在汇聚",
+                                        color = Color.White.copy(alpha = 0.86f),
+                                        fontWeight = FontWeight.Black,
+                                    )
+                                }
                             }
+                        } else {
+                            DrawRevealCard(result = cardResult, pulse = pulse)
+                        }
+                    }
+                    Spacer(Modifier.weight(0.8f))
+                    if (revealState.index < drawResults.lastIndex) {
+                        Button(
+                            onClick = { revealState = DrawRevealFlow.next(revealState, drawResults) },
+                            enabled = revealState.phase == DrawRevealPhase.Card && !rewardVideoPending,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("下一个")
+                        }
+                        OutlinedButton(
+                            onClick = { skipAll() },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("跳过全部")
                         }
                     } else {
-                        DrawRevealCard(result = cardResult, pulse = pulse)
-                    }
-                }
-                Spacer(Modifier.weight(0.8f))
-                if (revealState.index < drawResults.lastIndex) {
-                    Button(
-                        onClick = { revealState = DrawRevealFlow.next(revealState, drawResults) },
-                        enabled = revealState.phase == DrawRevealPhase.Card,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("下一个")
-                    }
-                    OutlinedButton(
-                        onClick = { skipAll() },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("跳过全部")
-                    }
-                } else {
-                    Button(
-                        onClick = { revealState = DrawRevealFlow.summary(revealState) },
-                        enabled = revealState.phase == DrawRevealPhase.Card,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("查看结果")
+                        Button(
+                            onClick = { revealState = DrawRevealFlow.summary(revealState) },
+                            enabled = revealState.phase == DrawRevealPhase.Card && !rewardVideoPending,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text("查看结果")
+                        }
                     }
                 }
             }
@@ -1391,15 +1434,16 @@ private fun DrawResultCelebration(
 @Composable
 private fun RainbowDrawVideoLayer(
     videoUri: String,
+    playbackKey: String,
     shouldPlay: Boolean,
     onFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    var videoView by remember(videoUri) { mutableStateOf<VideoView?>(null) }
-    var completed by remember(videoUri) { mutableStateOf(false) }
+    var videoView by remember(videoUri, playbackKey) { mutableStateOf<VideoView?>(null) }
+    var completed by remember(videoUri, playbackKey) { mutableStateOf(false) }
     fun VideoView.loadDrawVideo() {
-        tag = videoUri
+        tag = "$videoUri#$playbackKey"
         completed = false
         setVideoURI(resolveAppVideoUri(context, videoUri))
         setOnPreparedListener { player ->
@@ -1415,7 +1459,7 @@ private fun RainbowDrawVideoLayer(
             }
         }
     }
-    DisposableEffect(videoUri) {
+    DisposableEffect(videoUri, playbackKey) {
         onDispose {
             videoView?.stopPlayback()
             videoView = null
@@ -1431,7 +1475,7 @@ private fun RainbowDrawVideoLayer(
         },
         update = { view ->
             if (videoView !== view) videoView = view
-            if (view.tag != videoUri) {
+            if (view.tag != "$videoUri#$playbackKey") {
                 view.stopPlayback()
                 view.loadDrawVideo()
             } else if (shouldPlay && !completed && !view.isPlaying) {
