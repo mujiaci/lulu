@@ -103,7 +103,7 @@ internal fun humanLikeToolGuidance(toolName: String): String {
     val name = toolName.removePrefix("mcp__").lowercase()
     return when {
         name == "set_lulu_expression_state" ->
-            "需要更新露露状态栏时使用；正文自然聊天，不要提工具名。"
+            "需要更新露露状态栏/心声时使用；可填内心独白，正文自然聊天，不提工具名。"
 
         name == "get_weather" || name.contains("weather") ->
             "问天气/温度/雨雪/带伞时使用；自然回答，不提工具名。"

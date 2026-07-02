@@ -10,6 +10,12 @@ data class StarWishState(
     val specialStoryChapters: Map<String, List<StarWishTheaterChapter>> = emptyMap(),
     val customTheaters: List<StarWishTheaterSeed> = emptyList(),
     val customSpecialStories: List<StarWishTheaterSeed> = emptyList(),
+    val hiddenScrollTitles: Set<String> = emptySet(),
+    val hiddenTheaterTitles: Set<String> = emptySet(),
+    val hiddenSpecialStoryTitles: Set<String> = emptySet(),
+    val hiddenImageLaunchIds: Set<String> = emptySet(),
+    val hiddenGeneratedImageIds: Set<Int> = emptySet(),
+    val lastSection: String = "Scrolls",
 )
 
 @Serializable

@@ -92,10 +92,12 @@ class StarWishVM(
 
     fun refreshGeneratedImages() {
         viewModelScope.launch {
-            val launches = state.value.imageLaunches
+            val current = state.value
+            val launches = current.imageLaunches.filterNot { it.id in current.hiddenImageLaunchIds }
             val imagesDir = filesManager.getImagesDir()
             val media = genMediaRepository.listAllMedia()
             _generatedImages.value = media.mapNotNull { entity ->
+                if (entity.id in current.hiddenGeneratedImageIds) return@mapNotNull null
                 val launch = launches.firstOrNull { it.prompt == entity.prompt } ?: return@mapNotNull null
                 StarWishGeneratedImage(
                     id = entity.id,
@@ -111,6 +113,14 @@ class StarWishVM(
     fun redeemVideo() {
         viewModelScope.launch {
             studyStore.update { current -> StudyRules.redeemVideo(current).state }
+        }
+    }
+
+    fun clearVideoRecords() {
+        viewModelScope.launch {
+            studyStore.update { current ->
+                current.copy(stats = current.stats.copy(videoRewardsRedeemed = 0))
+            }
         }
     }
 
@@ -222,6 +232,65 @@ class StarWishVM(
         }
     }
 
+    fun rememberSection(section: String) {
+        viewModelScope.launch {
+            store.update { it.copy(lastSection = section) }
+        }
+    }
+
+    fun deleteScroll(title: String, legacyOutfit: String? = null) {
+        viewModelScope.launch {
+            store.update { current ->
+                val keys = setOfNotNull(title, legacyOutfit)
+                current.copy(
+                    hiddenScrollTitles = current.hiddenScrollTitles + title,
+                    customOutfitPrompts = current.customOutfitPrompts - keys,
+                    imageLaunches = current.imageLaunches.filterNot { it.outfit in keys },
+                )
+            }
+        }
+    }
+
+    fun deleteImageLaunch(id: String) {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(hiddenImageLaunchIds = current.hiddenImageLaunchIds + id)
+            }
+        }
+    }
+
+    fun deleteGeneratedImage(id: Int) {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(hiddenGeneratedImageIds = current.hiddenGeneratedImageIds + id)
+            }
+        }
+    }
+
+    fun deleteTheater(title: String) {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(
+                    hiddenTheaterTitles = current.hiddenTheaterTitles + title,
+                    customTheaters = current.customTheaters.filterNot { it.title == title },
+                    theaterChapters = current.theaterChapters - title,
+                )
+            }
+        }
+    }
+
+    fun deleteSpecialStory(title: String) {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(
+                    hiddenSpecialStoryTitles = current.hiddenSpecialStoryTitles + title,
+                    customSpecialStories = current.customSpecialStories.filterNot { it.title == title },
+                    specialStoryChapters = current.specialStoryChapters - title,
+                )
+            }
+        }
+    }
+
     private suspend fun generateTheaterChapterContent(
         seed: StarWishTheaterSeed,
         chapters: List<StarWishTheaterChapter>,
@@ -273,7 +342,7 @@ class StarWishVM(
     fun addCustomSpecialStory(title: String, prompt: String) {
         val cleanTitle = title.trim()
         val cleanPrompt = prompt.trim()
-        if (cleanTitle.isBlank() || cleanPrompt.isBlank()) return
+        if (cleanTitle.isBlank()) return
         viewModelScope.launch {
             val seed = StarWishTheaterSeed(
                 id = "custom-special-${System.currentTimeMillis()}-${cleanTitle.hashCode()}",

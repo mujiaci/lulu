@@ -168,6 +168,7 @@ fun buildLuluStateFromTurn(
     assistantText: String,
     assistantName: String = "露露",
     assistantPersona: String = "",
+    preferredInnerVoice: String? = null,
     nowMillis: Long = System.currentTimeMillis(),
     hourOfDay: Int = LocalDateTime.now().hour,
 ): LuluState = buildLuluStateFromTurn(
@@ -180,6 +181,7 @@ fun buildLuluStateFromTurn(
     assistantText = assistantText,
     assistantName = assistantName,
     assistantPersona = assistantPersona,
+    preferredInnerVoice = preferredInnerVoice,
     nowMillis = nowMillis,
 )
 
@@ -190,6 +192,7 @@ fun buildLuluStateFromTurn(
     assistantText: String,
     assistantName: String = "露露",
     assistantPersona: String = "",
+    preferredInnerVoice: String? = null,
     nowMillis: Long = System.currentTimeMillis(),
 ): LuluState {
     val userText = perceptionInput.userText
@@ -255,7 +258,7 @@ fun buildLuluStateFromTurn(
             isMorning -> "元气满满"
             else -> "陪着你"
         },
-        innerVoice = buildInnerVoice(
+        innerVoice = preferredInnerVoice.sanitizeLuluInnerVoice() ?: buildInnerVoice(
             mood = mood,
             userText = userText,
             assistantText = assistantText,
@@ -392,6 +395,13 @@ private fun buildInnerVoice(
         }
     }.trim()
 }
+
+private fun String?.sanitizeLuluInnerVoice(): String? =
+    this
+        ?.trim()
+        ?.replace(Regex("\\s+"), " ")
+        ?.take(160)
+        ?.takeIf { it.isNotBlank() }
 
 private fun buildSelfScene(
     mood: LuluMood,

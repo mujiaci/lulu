@@ -388,11 +388,11 @@ class LocalTools(private val context: Context) {
         Tool(
             name = "set_lulu_expression_state",
             description = """
-                Record the character's current visible expression intent for this turn.
+                Record the character's current presence for this turn.
                 Use when a reply should carry embodied presence. Prefer one complete natural
-                Chinese paragraph describing current state, behavior, action, posture, and tags.
-                Keep it for the status strip below chat; do not put parenthesized action in the
-                main spoken reply.
+                Chinese paragraph describing current visible state, behavior, action, posture, and tags.
+                Also include a private inner voice when the character has an unspoken feeling.
+                Keep it for the status/heart panel below chat; do not put parenthesized action in the main spoken reply.
                 This records intent only; do not claim that the real avatar file has changed.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -414,6 +414,14 @@ class LocalTools(private val context: Context) {
                             put("type", "string")
                             put("description", "Optional posture/body-language hint")
                         })
+                        put("inner_voice", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional private first-person Chinese inner voice, in character, concise and not spoken aloud")
+                        })
+                        put("thought", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional short in-character thought to remember from this turn")
+                        })
                         put("intensity", buildJsonObject {
                             put("type", "number")
                             put("description", "0.0 to 1.0 expression intensity")
@@ -431,6 +439,8 @@ class LocalTools(private val context: Context) {
                     put("emoji", params["emoji"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("sticker", params["sticker"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("gesture", params["gesture"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                    put("inner_voice", params["inner_voice"]?.jsonPrimitive?.contentOrNull.orEmpty())
+                    put("thought", params["thought"]?.jsonPrimitive?.contentOrNull.orEmpty())
                     put("intensity", params["intensity"]?.jsonPrimitive?.doubleOrNull ?: 0.5)
                 }
                 val luluDir = File(context.filesDir, "lulu").apply { mkdirs() }

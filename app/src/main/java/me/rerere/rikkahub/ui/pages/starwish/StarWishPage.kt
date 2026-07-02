@@ -42,6 +42,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -125,6 +126,9 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
             ?: settings.getCurrentAssistant()
     }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    LaunchedEffect(state.lastSection) {
+        section = StarWishSection.entries.firstOrNull { it.name == state.lastSection } ?: StarWishSection.Scrolls
+    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -146,7 +150,12 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
             contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 14.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { StarWishHero(section = section, onSection = { section = it }) }
+            item {
+                StarWishHero(section = section, onSection = {
+                    section = it
+                    vm.rememberSection(it.name)
+                })
+            }
             when (section) {
                 StarWishSection.Scrolls -> {
                     item {
@@ -162,7 +171,8 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                     }
                     when (scrollSubsection) {
                         ScrollSubsection.Images -> {
-                            if (state.imageLaunches.isEmpty()) {
+                            val visibleLaunches = state.imageLaunches.filterNot { it.id in state.hiddenImageLaunchIds }
+                            if (visibleLaunches.isEmpty() && generatedImages.isEmpty()) {
                                 item {
                                     StarWishEmptyCard(
                                         title = "还没有画卷图片",
@@ -179,11 +189,11 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                                 }
                                 if (generatedImages.isNotEmpty()) {
                                     items(generatedImages) { image ->
-                                        StarWishGeneratedImageRow(image = image)
+                                        StarWishGeneratedImageRow(image = image, onDelete = { vm.deleteGeneratedImage(image.id) })
                                     }
                                 } else {
-                                    items(state.imageLaunches) { launch ->
-                                        StarWishImageLaunchRow(launch = launch)
+                                    items(visibleLaunches) { launch ->
+                                        StarWishImageLaunchRow(launch = launch, onDelete = { vm.deleteImageLaunch(launch.id) })
                                     }
                                 }
                                 item {
@@ -197,17 +207,19 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             }
                         }
                         ScrollSubsection.Prompts -> {
-                            items(StudyRules.outfitNames) { outfit ->
-                                val scroll = StarWishRules.scrollForOutfit(outfit)
+                            val scrollEntries = StudyRules.outfitNames.map { outfit -> outfit to StarWishRules.scrollForOutfit(outfit) }
+                                .filterNot { (_, scroll) -> scroll.title in state.hiddenScrollTitles }
+                            items(scrollEntries) { (outfit, scroll) ->
                                 val unlocked = StarWishRules.scrollUnlockedForOutfit(studyState, outfit)
-                                val launches = state.imageLaunches.count { it.outfit == outfit }
+                                val launches = state.imageLaunches.count { it.outfit == scroll.title || it.outfit == outfit }
                                 StarWishListRow(
-                                    title = outfit,
+                                    title = scroll.title,
                                     subtitle = if (unlocked) "已点亮 · 已生成 $launches 次" else "未解锁 · 去考研 App 收集完整套装",
                                     unlocked = unlocked,
                                     progress = outfitProgress(outfit, studyState.inventory.normalFragments),
                                     icon = HugeIcons.AiImage,
                                     onClick = { if (unlocked) selectedScroll = outfit to scroll },
+                                    onDelete = { vm.deleteScroll(scroll.title, outfit) },
                                 )
                             }
                         }
@@ -220,7 +232,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             onAdd = { showAddTheater = true },
                         )
                     }
-                    items(StarWishRules.allTheaters(state.customTheaters)) { theater ->
+                    items(StarWishRules.allTheaters(state.customTheaters).filterNot { it.title in state.hiddenTheaterTitles }) { theater ->
                         val credits = StarWishRules.chapterCredits(studyState)
                         val chapters = state.theaterChapters[theater.title].orEmpty()
                             .filterNot { it.isPromptPlaceholder(theater) }
@@ -233,7 +245,13 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             unlocked = canCreate || hasChapter,
                             progress = (studyState.inventory.universalRareFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.BookOpen02,
-                            onClick = { if (canCreate || hasChapter) navController.navigate(Screen.StarWishTheater(theater.title)) },
+                            onClick = {
+                                if (canCreate || hasChapter) {
+                                    vm.rememberSection(StarWishSection.Theaters.name)
+                                    navController.navigate(Screen.StarWishTheater(theater.title))
+                                }
+                            },
+                            onDelete = { vm.deleteTheater(theater.title) },
                         )
                     }
                 }
@@ -244,7 +262,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             onAdd = { showAddSpecialStory = true },
                         )
                     }
-                    items(StarWishRules.allSpecialStories(state.customSpecialStories)) { story ->
+                    items(StarWishRules.allSpecialStories(state.customSpecialStories).filterNot { it.title in state.hiddenSpecialStoryTitles }) { story ->
                         val chapters = state.specialStoryChapters[story.title].orEmpty()
                             .filterNot { it.isPromptPlaceholder(story) }
                             .size
@@ -261,7 +279,13 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             progress = studyState.inventory.specialStoryFragments.coerceAtMost(StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER) /
                                 StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.Favourite,
-                            onClick = { if (canCreate || hasChapter) navController.navigate(Screen.StarWishSpecialStory(story.title)) },
+                            onClick = {
+                                if (canCreate || hasChapter) {
+                                    vm.rememberSection(StarWishSection.SpecialStories.name)
+                                    navController.navigate(Screen.StarWishSpecialStory(story.title))
+                                }
+                            },
+                            onDelete = { vm.deleteSpecialStory(story.title) },
                         )
                     }
                 }
@@ -273,6 +297,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                             videoModelStatus = videoModelStatus,
                             onRedeem = vm::redeemVideo,
                             onOpenVideoSetting = { navController.navigate(Screen.SettingModels) },
+                            onClearVideoRecords = vm::clearVideoRecords,
                         )
                     }
                 }
@@ -281,7 +306,8 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     }
 
     selectedScroll?.let { (outfit, scroll) ->
-        val saved = state.customOutfitPrompts[outfit]
+        val promptKey = scroll.title
+        val saved = state.customOutfitPrompts[promptKey] ?: state.customOutfitPrompts[outfit]
         val prompts = saved ?: StarWishOutfitPrompts(
             solo = StarWishRules.imagePromptForCompanion(scroll.soloPrompt, companionAssistant, interaction = false),
             interaction = StarWishRules.imagePromptForCompanion(scroll.interactionPrompt, companionAssistant, interaction = true),
@@ -290,9 +316,9 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
             scroll = scroll,
             outfit = outfit,
             prompts = prompts,
-            launches = state.imageLaunches.filter { it.outfit == outfit },
+            launches = state.imageLaunches.filter { it.outfit == promptKey || it.outfit == outfit },
             onDismiss = { selectedScroll = null },
-            onSave = { vm.savePrompts(outfit, it) },
+            onSave = { vm.savePrompts(promptKey, it) },
             onCopy = {
                 clipboard.setText(AnnotatedString(it))
                 scope.launch { snackbarHostState.showSnackbar("提示词已复制") }
@@ -303,7 +329,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                     assistant = companionAssistant,
                     interaction = isInteraction,
                 )
-                vm.recordImageLaunch(outfit, finalPrompt)
+                vm.recordImageLaunch(promptKey, finalPrompt)
                 selectedScroll = null
                 navController.navigate(Screen.ImageGen(initialPrompt = finalPrompt, count = 1, autoGenerate = false))
             },
@@ -312,6 +338,10 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
 
     if (showAddTheater) {
         AddTheaterDialog(
+            dialogTitle = "添加小剧场",
+            description = "添加后会出现在小剧场列表里；未花小剧场碎片生成章节前，它仍然只是候选。",
+            promptLabel = "剧情提示词",
+            promptRequired = true,
             onDismiss = { showAddTheater = false },
             onAdd = { title, prompt ->
                 vm.addCustomTheater(title, prompt)
@@ -322,6 +352,10 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
 
     if (showAddSpecialStory) {
         AddTheaterDialog(
+            dialogTitle = "添加特殊剧情",
+            description = "添加后会出现在特殊剧情列表里；剧情指导可以留空，右上角指导也会保持空白。",
+            promptLabel = "剧情指导（可空）",
+            promptRequired = false,
             onDismiss = { showAddSpecialStory = false },
             onAdd = { title, prompt ->
                 vm.addCustomSpecialStory(title, prompt)
@@ -422,6 +456,7 @@ private fun StarWishListRow(
     progress: Float,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
+    onDelete: (() -> Unit)? = null,
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().clickable(enabled = unlocked, onClick = onClick),
@@ -451,6 +486,11 @@ private fun StarWishListRow(
                     Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 Text(if (unlocked) "进入" else "锁定", style = MaterialTheme.typography.labelMedium, color = if (unlocked) StarWishColors.inkBlue else MaterialTheme.colorScheme.outline)
+                if (onDelete != null) {
+                    IconButton(onClick = onDelete) {
+                        Icon(HugeIcons.Delete01, contentDescription = "删除")
+                    }
+                }
             }
             LinearProgressIndicator(progress = { progress.coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
         }
@@ -514,7 +554,7 @@ private fun SpecialStoryWalletCard(
 }
 
 @Composable
-private fun StarWishImageLaunchRow(launch: StarWishImageLaunch) {
+private fun StarWishImageLaunchRow(launch: StarWishImageLaunch, onDelete: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.86f)),
@@ -542,12 +582,15 @@ private fun StarWishImageLaunchRow(launch: StarWishImageLaunch) {
                 Text(launch.outfit, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("已发起双图生成 · ${launch.createdAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
+            IconButton(onClick = onDelete) {
+                Icon(HugeIcons.Delete01, contentDescription = "删除")
+            }
         }
     }
 }
 
 @Composable
-private fun StarWishGeneratedImageRow(image: StarWishGeneratedImage) {
+private fun StarWishGeneratedImageRow(image: StarWishGeneratedImage, onDelete: () -> Unit) {
     var showPreview by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -572,6 +615,9 @@ private fun StarWishGeneratedImageRow(image: StarWishGeneratedImage) {
                 Text(image.outfit, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("已生成图片 · ${image.createdAt}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(image.prompt, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            IconButton(onClick = onDelete) {
+                Icon(HugeIcons.Delete01, contentDescription = "删除")
             }
         }
     }
@@ -703,6 +749,7 @@ private fun VideoRewardCard(
     videoModelStatus: String,
     onRedeem: () -> Unit,
     onOpenVideoSetting: () -> Unit,
+    onClearVideoRecords: () -> Unit,
 ) {
     Card(
         colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.84f)),
@@ -743,6 +790,15 @@ private fun VideoRewardCard(
                     Text("视频模型设置")
                 }
             }
+            TextButton(
+                onClick = onClearVideoRecords,
+                enabled = redeemed > 0,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Icon(HugeIcons.Delete01, null)
+                Spacer(Modifier.width(6.dp))
+                Text("清空视频兑换记录")
+            }
         }
     }
 }
@@ -765,6 +821,7 @@ private fun TheaterDetailContent(
     var influence by remember(theater.title, visibleChapters.size) { mutableStateOf("") }
     var showGuide by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
+    val guide = remember(theater.prompt) { StarWishRules.theaterGuide(theater).trim() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     Box(modifier = modifier.fillMaxSize()) {
@@ -789,7 +846,7 @@ private fun TheaterDetailContent(
                             DropdownMenuItem(
                                 text = {
                                     Text(
-                                        StarWishRules.theaterGuide(theater),
+                                        guide.ifBlank { "暂无剧情指导" },
                                         style = MaterialTheme.typography.bodySmall,
                                     )
                                 },
@@ -909,6 +966,10 @@ private fun me.rerere.rikkahub.data.starwish.StarWishTheaterChapter.isPromptPlac
 
 @Composable
 private fun AddTheaterDialog(
+    dialogTitle: String,
+    description: String,
+    promptLabel: String,
+    promptRequired: Boolean,
     onDismiss: () -> Unit,
     onAdd: (String, String) -> Unit,
 ) {
@@ -917,15 +978,15 @@ private fun AddTheaterDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            Button(onClick = { onAdd(title, prompt) }, enabled = title.isNotBlank() && prompt.isNotBlank()) {
+            Button(onClick = { onAdd(title, prompt) }, enabled = title.isNotBlank() && (!promptRequired || prompt.isNotBlank())) {
                 Text("添加")
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
-        title = { Text("添加小剧场") },
+        title = { Text(dialogTitle) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("添加后会出现在小剧场列表里；未花小剧场碎片生成章节前，它仍然只是候选。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 OutlinedTextField(
                     value = title,
                     onValueChange = { title = it },
@@ -936,7 +997,7 @@ private fun AddTheaterDialog(
                 OutlinedTextField(
                     value = prompt,
                     onValueChange = { prompt = it },
-                    label = { Text("剧情提示词") },
+                    label = { Text(promptLabel) },
                     minLines = 5,
                     modifier = Modifier.fillMaxWidth(),
                 )
@@ -944,7 +1005,6 @@ private fun AddTheaterDialog(
         },
     )
 }
-
 private fun outfitProgress(outfit: String, fragments: Map<String, Int>): Float {
     val prefix = "normal:$outfit:"
     val count = fragments.entries.sumOf { (key, value) ->

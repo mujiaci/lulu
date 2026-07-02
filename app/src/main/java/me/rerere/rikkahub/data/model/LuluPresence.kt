@@ -518,6 +518,7 @@ fun buildLuluThoughtFromTurn(
     assistantId: Uuid,
     userText: String,
     state: LuluState,
+    preferredThought: String? = null,
     nowMillis: Long = System.currentTimeMillis(),
 ): LuluThought? {
     val perception = buildLuluPerception(userText)
@@ -528,7 +529,7 @@ fun buildLuluThoughtFromTurn(
         LuluUserSignal.SAD in perception.userSignals -> LuluThoughtCategory.CONCERN
         else -> LuluThoughtCategory.SHORT_TERM
     }
-    val content = when {
+    val content = preferredThought.sanitizeLuluThoughtContent() ?: when {
         hasReturnPromise && hasStudy -> "他去学习了，我想等他回来时轻轻接一下。"
         hasReturnPromise -> "他说等下回来，我想记得等他回来。"
         hasStudy -> "他现在要学习，我先别打扰太多。"
@@ -554,3 +555,10 @@ fun buildLuluThoughtFromTurn(
         },
     )
 }
+
+private fun String?.sanitizeLuluThoughtContent(): String? =
+    this
+        ?.trim()
+        ?.replace(Regex("\\s+"), " ")
+        ?.take(120)
+        ?.takeIf { it.isNotBlank() }

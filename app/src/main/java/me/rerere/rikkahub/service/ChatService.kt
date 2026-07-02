@@ -205,6 +205,7 @@ internal fun Settings.recordLuluPresenceTurn(
     assistantText: String,
     perceptionInput: LuluPerceptionInput? = null,
     proactiveReminderPlan: ProactiveReminderPlan? = null,
+    modelPresence: LuluModelPresence? = null,
     nowMillis: Long = System.currentTimeMillis(),
     hourOfDay: Int = java.time.LocalDateTime.now().hour,
 ): Settings {
@@ -224,12 +225,14 @@ internal fun Settings.recordLuluPresenceTurn(
         assistantText = cleanAssistantText,
         assistantName = assistant?.name.orEmpty(),
         assistantPersona = assistant?.toLuluStatePersona().orEmpty(),
+        preferredInnerVoice = modelPresence?.innerVoice,
         nowMillis = nowMillis,
     )
     val nextThought = buildLuluThoughtFromTurn(
         assistantId = assistantId,
         userText = cleanUserText,
         state = nextState,
+        preferredThought = modelPresence?.thought,
         nowMillis = nowMillis,
     )
     val proactiveThought = proactiveReminderPlan?.toLuluPendingThought(
@@ -252,6 +255,11 @@ internal fun Settings.recordLuluPresenceTurn(
         ),
     )
 }
+
+internal data class LuluModelPresence(
+    val innerVoice: String? = null,
+    val thought: String? = null,
+)
 
 private fun Assistant.toLuluStatePersona(): String = buildString {
     appendLine("角色名：${name.ifBlank { "当前角色" }}")
@@ -664,6 +672,7 @@ class ChatService(
                 userText = visibleUserText.orEmpty(),
                 assistantText = reply,
                 perceptionInput = perceptionInput,
+                modelPresence = listOf(replyMessage).extractLuluModelPresence(),
             )
         }
 
@@ -740,6 +749,24 @@ class ChatService(
                 }.getOrNull()
             }
             .orEmpty()
+
+    private fun List<UIMessage>.extractLuluModelPresence(): LuluModelPresence? =
+        asReversed()
+            .asSequence()
+            .flatMap { message -> message.parts.asReversed().asSequence() }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .firstOrNull { it.toolName == "set_lulu_expression_state" }
+            ?.input
+            ?.let { input ->
+                runCatching {
+                    val json = JsonInstant.parseToJsonElement(input).jsonObject
+                    LuluModelPresence(
+                        innerVoice = json["inner_voice"]?.jsonPrimitive?.contentOrNull,
+                        thought = json["thought"]?.jsonPrimitive?.contentOrNull,
+                    )
+                }.getOrNull()
+            }
+            ?.takeIf { !it.innerVoice.isNullOrBlank() || !it.thought.isNullOrBlank() }
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
         launchWithConversationReference(conversationId) {
@@ -1035,6 +1062,7 @@ class ChatService(
                     assistantText = lastAssistantText,
                     perceptionInput = perceptionInput,
                     proactiveReminderPlan = scheduledPlan,
+                    modelPresence = finalConversation.currentMessages.takeLast(8).extractLuluModelPresence(),
                 )
             }
             scheduleProactiveReminderFromTurn(
