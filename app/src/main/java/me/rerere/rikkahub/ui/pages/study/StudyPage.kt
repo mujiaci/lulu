@@ -156,6 +156,7 @@ private enum class PlanView(val label: String) {
 private enum class DailyDashboardView(val label: String) {
     Tasks("待办"),
     Plan("今日计划"),
+    Tomorrow("明日待办"),
     Tips("Tips"),
 }
 
@@ -805,6 +806,7 @@ private fun DailyStudyDashboard(
 ) {
     val today = LocalDate.now()
     val todayPlan = ExamStudyPlan.todayPlan(today)
+    val tomorrowPlan = ExamStudyPlan.todayPlan(today.plusDays(1))
     val schedule = ExamStudyPlan.todaySchedule(today)
     val tips = ExamStudyPlan.todayTips(today)
 
@@ -837,6 +839,7 @@ private fun DailyStudyDashboard(
                 onDelete = onDelete,
             )
             DailyDashboardView.Plan -> TodayPlanContent(todayPlan = todayPlan, schedule = schedule)
+            DailyDashboardView.Tomorrow -> TomorrowPlanContent(tomorrowPlan = tomorrowPlan)
             DailyDashboardView.Tips -> StudyTipsContent(tips = tips)
         }
     }
@@ -958,6 +961,43 @@ private fun TodayPlanContent(
 }
 
 @Composable
+private fun TomorrowPlanContent(
+    tomorrowPlan: DailyStudyPlan?,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(HugeIcons.BookOpen02, null, tint = StudyColors.purple)
+            Column(Modifier.weight(1f)) {
+                Text("明日待办", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text(tomorrowPlan?.title ?: "明天先保留弹性，不提前制造压力", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (tomorrowPlan == null) {
+            Text("还没有明天的预制计划。今晚收尾时只写明天第一步。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        } else {
+            tomorrowPlan.tasks.forEachIndexed { index, task ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Surface(shape = CircleShape, color = StudyColors.softBlue, modifier = Modifier.size(26.dp)) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text("${index + 1}", style = MaterialTheme.typography.labelSmall, color = StudyColors.blue)
+                        }
+                    }
+                    Column(Modifier.weight(1f)) {
+                        Text(task.kind.label, style = MaterialTheme.typography.labelSmall, color = StudyColors.purple)
+                        Text(task.title, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+            Text(
+                "明日待办只是预览；今晚收尾时再决定明天第一步，不把焦虑提前搬到今天。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun StudyTipsCard(tips: List<StudyTip>) {
     StudyCard {
         StudyTipsContent(tips = tips)
@@ -987,7 +1027,6 @@ private fun StudyTipsContent(tips: List<StudyTip>) {
 private fun PlanOverviewCard() {
     var planView by remember { mutableStateOf(PlanView.Weekly) }
     val today = LocalDate.now()
-    val month = ExamStudyPlan.monthlyPlans.firstOrNull { it.month == "2026-07" }
     val week = ExamStudyPlan.julyWeeks.firstOrNull { week ->
         val parts = week.dateRange.split(" 至 ")
         parts.size == 2 && today >= LocalDate.parse(parts[0]) && today <= LocalDate.parse(parts[1])
@@ -1015,12 +1054,17 @@ private fun PlanOverviewCard() {
                 } ?: Text("本周计划待生成", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             PlanView.Monthly -> {
-                month?.let {
-                    Text("7月方向：${it.focus}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    it.tasks.forEach { task ->
-                        Text("· $task", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("7-12月总计划", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    ExamStudyPlan.monthlyPlans.forEach { month ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text("${month.month} · ${month.focus}", fontWeight = FontWeight.SemiBold)
+                            month.tasks.forEach { task ->
+                                Text("· $task", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
                     }
-                } ?: Text("7月方向待生成", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
         }
     }
