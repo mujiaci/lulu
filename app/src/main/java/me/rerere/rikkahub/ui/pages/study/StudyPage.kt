@@ -1491,13 +1491,17 @@ private fun StudyVideoPlayerDialog(
             videoView = null
         }
     }
-    AlertDialog(
+    Dialog(
         onDismissRequest = onDismiss,
-        confirmButton = { Button(onClick = onDismiss) { Text("收起") } },
-        title = { Text(video.title) },
-        text = {
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black),
+        ) {
             AndroidView(
-                modifier = Modifier.fillMaxWidth().aspectRatio(9f / 16f).clip(RoundedCornerShape(16.dp)),
+                modifier = Modifier.fillMaxSize(),
                 factory = { viewContext ->
                     VideoView(viewContext).apply {
                         videoView = this
@@ -1515,8 +1519,17 @@ private fun StudyVideoPlayerDialog(
                     if (videoView !== view) videoView = view
                 },
             )
-        },
-    )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 18.dp, end = 14.dp)
+                    .background(Color.Black.copy(alpha = 0.42f), CircleShape),
+            ) {
+                Text("×", color = Color.White, style = MaterialTheme.typography.headlineSmall)
+            }
+        }
+    }
 }
 
 @Composable
