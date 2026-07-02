@@ -91,6 +91,7 @@ import me.rerere.rikkahub.data.starwish.StarWishImageLaunch
 import me.rerere.rikkahub.data.starwish.StarWishOutfitPrompts
 import me.rerere.rikkahub.data.starwish.StarWishRules
 import me.rerere.rikkahub.data.starwish.StarWishScroll
+import me.rerere.rikkahub.data.starwish.StarWishTheaterGuide
 import me.rerere.rikkahub.data.starwish.StarWishTheaterSeed
 import me.rerere.rikkahub.data.starwish.StarWishVideoItem
 import me.rerere.rikkahub.data.study.StudyRules
@@ -446,8 +447,14 @@ fun StarWishTheaterPage(
                 Text("这个小剧场暂时找不到了")
             }
         } else {
+            val guide = if (special) {
+                state.specialStoryGuides[theater.title] ?: StarWishRules.defaultTheaterGuide(theater, includeChapterPlan = false)
+            } else {
+                state.theaterGuides[theater.title] ?: StarWishRules.defaultTheaterGuide(theater)
+            }
             TheaterDetailContent(
                 theater = theater,
+                guide = guide,
                 credits = if (special) {
                     studyState.inventory.specialStoryFragments / StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER
                 } else {
@@ -465,6 +472,9 @@ fun StarWishTheaterPage(
                 },
                 onDeleteChapter = { chapterId ->
                     if (special) vm.deleteSpecialStoryChapter(theater.title, chapterId) else vm.deleteChapter(theater.title, chapterId)
+                },
+                onSaveGuide = { updatedGuide ->
+                    if (special) vm.saveSpecialStoryGuide(theater.title, updatedGuide) else vm.saveTheaterGuide(theater.title, updatedGuide)
                 },
             )
         }
@@ -947,6 +957,7 @@ private fun StarWishVideoPlayerDialog(
 @Composable
 private fun TheaterDetailContent(
     theater: StarWishTheaterSeed,
+    guide: StarWishTheaterGuide,
     credits: Int,
     rareFragments: Int,
     chapters: List<me.rerere.rikkahub.data.starwish.StarWishTheaterChapter>,
@@ -957,12 +968,12 @@ private fun TheaterDetailContent(
     fragmentLabel: String = "小剧场碎片",
     onCreateChapter: (String) -> Unit,
     onDeleteChapter: (String) -> Unit,
+    onSaveGuide: (StarWishTheaterGuide) -> Unit,
 ) {
     val visibleChapters = remember(theater, chapters) { chapters.filterNot { it.isPromptPlaceholder(theater) } }
     var influence by remember(theater.title, visibleChapters.size) { mutableStateOf("") }
-    var showGuide by remember { mutableStateOf(false) }
+    var showGuideEditor by remember { mutableStateOf(false) }
     var showCatalog by remember { mutableStateOf(false) }
-    val guide = remember(theater.prompt) { StarWishRules.theaterGuide(theater).trim() }
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     Box(modifier = modifier.fillMaxSize()) {
@@ -979,21 +990,8 @@ private fun TheaterDetailContent(
                         modifier = Modifier.weight(1f),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Box {
-                        IconButton(onClick = { showGuide = true }) {
-                            Icon(HugeIcons.MoreVertical, contentDescription = "剧情指导")
-                        }
-                        DropdownMenu(expanded = showGuide, onDismissRequest = { showGuide = false }) {
-                            DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        guide.ifBlank { "暂无剧情指导" },
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                },
-                                onClick = { showGuide = false },
-                            )
-                        }
+                    IconButton(onClick = { showGuideEditor = true }) {
+                        Icon(HugeIcons.MoreVertical, contentDescription = "剧情规划")
                     }
                 }
             }
@@ -1092,6 +1090,121 @@ private fun TheaterDetailContent(
             }
         }
     }
+    if (showGuideEditor) {
+        TheaterGuideDialog(
+            theaterTitle = theater.title,
+            guide = guide,
+            overviewFallback = theater.prompt,
+            onDismiss = { showGuideEditor = false },
+            onSave = {
+                onSaveGuide(it)
+                showGuideEditor = false
+            },
+        )
+    }
+}
+
+@Composable
+private fun TheaterGuideDialog(
+    theaterTitle: String,
+    guide: StarWishTheaterGuide,
+    overviewFallback: String,
+    onDismiss: () -> Unit,
+    onSave: (StarWishTheaterGuide) -> Unit,
+) {
+    var overview by remember(guide) { mutableStateOf(guide.overview) }
+    var wordCount by remember(guide) { mutableStateOf(guide.wordCount) }
+    var chapter1 by remember(guide) { mutableStateOf(guide.chapters.getOrNull(0).orEmpty()) }
+    var chapter2 by remember(guide) { mutableStateOf(guide.chapters.getOrNull(1).orEmpty()) }
+    var chapter3 by remember(guide) { mutableStateOf(guide.chapters.getOrNull(2).orEmpty()) }
+    var chapter4 by remember(guide) { mutableStateOf(guide.chapters.getOrNull(3).orEmpty()) }
+    var chapter5 by remember(guide) { mutableStateOf(guide.chapters.getOrNull(4).orEmpty()) }
+    var chapter6 by remember(guide) { mutableStateOf(guide.chapters.getOrNull(5).orEmpty()) }
+    val chapters = listOf(chapter1, chapter2, chapter3, chapter4, chapter5, chapter6)
+    val preview = remember(overview, wordCount, chapters, overviewFallback) {
+        val normalized = StarWishTheaterGuide(
+            overview = overview,
+            chapters = chapters,
+            wordCount = wordCount,
+        ).normalized()
+        buildString {
+            appendLine("剧情介绍：")
+            appendLine(normalized.overview.ifBlank { overviewFallback })
+            appendLine()
+            appendLine("章节规划：")
+            normalized.chapters.forEachIndexed { index, chapter ->
+                appendLine("第 ${index + 1} 章：${chapter.ifBlank { "可自由发挥，但必须承接总剧情介绍。" }}")
+            }
+            appendLine()
+            appendLine("每章字数：${normalized.wordCount}")
+        }.trim()
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            Button(
+                onClick = {
+                    onSave(
+                        StarWishTheaterGuide(
+                            overview = overview,
+                            chapters = chapters,
+                            wordCount = wordCount,
+                        ),
+                    )
+                },
+            ) {
+                Text("保存")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } },
+        title = { Text("$theaterTitle · 剧情规划") },
+        text = {
+            LazyColumn(
+                modifier = Modifier.height(520.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = overview,
+                        onValueChange = { overview = it },
+                        label = { Text("剧情介绍") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = wordCount,
+                        onValueChange = { wordCount = it },
+                        label = { Text("每章字数") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                val setters = listOf<(String) -> Unit>(
+                    { chapter1 = it },
+                    { chapter2 = it },
+                    { chapter3 = it },
+                    { chapter4 = it },
+                    { chapter5 = it },
+                    { chapter6 = it },
+                )
+                items(chapters.size) { index ->
+                    OutlinedTextField(
+                        value = chapters[index],
+                        onValueChange = setters[index],
+                        label = { Text("第 ${index + 1} 章剧情") },
+                        minLines = 2,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
+                item {
+                    Text("保存后预览", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                    Text(preview, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        },
+    )
 }
 
 private fun me.rerere.rikkahub.data.starwish.StarWishTheaterChapter.isPromptPlaceholder(

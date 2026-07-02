@@ -8,6 +8,8 @@ data class StarWishState(
     val imageLaunches: List<StarWishImageLaunch> = emptyList(),
     val theaterChapters: Map<String, List<StarWishTheaterChapter>> = emptyMap(),
     val specialStoryChapters: Map<String, List<StarWishTheaterChapter>> = emptyMap(),
+    val theaterGuides: Map<String, StarWishTheaterGuide> = emptyMap(),
+    val specialStoryGuides: Map<String, StarWishTheaterGuide> = emptyMap(),
     val customTheaters: List<StarWishTheaterSeed> = emptyList(),
     val customSpecialStories: List<StarWishTheaterSeed> = emptyList(),
     val hiddenScrollTitles: Set<String> = emptySet(),
@@ -53,6 +55,19 @@ data class StarWishTheaterSeed(
     val prompt: String,
     val createdAt: Long = 0L,
 )
+
+@Serializable
+data class StarWishTheaterGuide(
+    val overview: String = "",
+    val chapters: List<String> = List(6) { "" },
+    val wordCount: String = "1200-2200",
+) {
+    fun normalized(): StarWishTheaterGuide = copy(
+        overview = overview.trim(),
+        chapters = (chapters.take(6) + List((6 - chapters.size).coerceAtLeast(0)) { "" }).take(6).map { it.trim() },
+        wordCount = wordCount.trim().ifBlank { "1200-2200" },
+    )
+}
 
 @Serializable
 data class StarWishVideoItem(

@@ -312,8 +312,42 @@ object StarWishRules {
         return studyState.inventory.universalRareFragments / RARE_FRAGMENTS_PER_CHAPTER
     }
 
-    fun theaterGuide(seed: StarWishTheaterSeed): String {
-        return seed.prompt
+    fun defaultTheaterGuide(seed: StarWishTheaterSeed, includeChapterPlan: Boolean = true): StarWishTheaterGuide {
+        return if (includeChapterPlan) {
+            StarWishTheaterGuide(
+                overview = seed.prompt,
+                chapters = listOf(
+                    "强钩子开局，女主被轻视、被误解或被推入困局，含“露”的核心角色登场，建立关系张力。",
+                    "女主第一次反击，局势出现爽点，露字角色开始被她吸引、信服、臣服或产生强烈兴趣。",
+                    "危机升级，恶人或规则露出破绽，女主用智谋、气场或现代知识控场，关系继续升温。",
+                    "情感、主从、搭档或命运关系爆发，强者低头，角色之间出现更明确的偏爱和牵绊。",
+                    "终局反转，惩罚恶人、打脸旧秩序或破解核心危机，把前文伏笔集中回收。",
+                    "奖励、余韵、亲密收束，并留下可续写钩子，让读者期待下一轮故事。",
+                ),
+                wordCount = "1200-2200",
+            )
+        } else {
+            StarWishTheaterGuide(
+                overview = seed.prompt,
+                chapters = List(6) { "" },
+                wordCount = "1200-2200",
+            )
+        }
+    }
+
+    fun theaterGuide(seed: StarWishTheaterSeed, guide: StarWishTheaterGuide = defaultTheaterGuide(seed)): String {
+        val normalized = guide.normalized()
+        return buildString {
+            appendLine("剧情介绍：")
+            appendLine(normalized.overview.ifBlank { seed.prompt })
+            appendLine()
+            appendLine("章节规划：")
+            normalized.chapters.forEachIndexed { index, chapter ->
+                appendLine("第 ${index + 1} 章：${chapter.ifBlank { "可自由发挥，但必须承接总剧情介绍。" }}")
+            }
+            appendLine()
+            appendLine("每章字数：${normalized.wordCount}")
+        }.trim()
     }
 
     fun theaterChapterPrompt(
@@ -321,13 +355,24 @@ object StarWishRules {
         previousChapters: List<StarWishTheaterChapter>,
         chapter: Int,
         influence: String = "",
+        guide: StarWishTheaterGuide = defaultTheaterGuide(seed),
     ): String {
+        val normalizedGuide = guide.normalized()
+        val currentChapterPlan = normalizedGuide.chapters.getOrNull(chapter - 1).orEmpty()
         return buildString {
             appendLine("你是一个擅长强代入爽文、恋爱张力和互动小剧场的中文小说作者。")
             appendLine("请根据下面设定生成《${seed.title}》第 $chapter 章正文。")
             appendLine()
-            appendLine("总设定：")
-            appendLine(seed.prompt)
+            appendLine("总剧情介绍：")
+            appendLine(normalizedGuide.overview.ifBlank { seed.prompt })
+            appendLine()
+            appendLine("6 章剧情规划：")
+            normalizedGuide.chapters.forEachIndexed { index, chapterPlan ->
+                appendLine("第 ${index + 1} 章：${chapterPlan.ifBlank { "可自由发挥，但必须承接总剧情介绍。" }}")
+            }
+            appendLine()
+            appendLine("本次必须生成第 $chapter 章，本章规划：")
+            appendLine(currentChapterPlan.ifBlank { "根据总剧情介绍、前文和用户影响自然续写。" })
             appendLine()
             appendLine("硬性要求：")
             appendLine("1. 只输出正文，不要输出标题、简介、提示词、创作说明、章节大纲。")
@@ -335,7 +380,7 @@ object StarWishRules {
             appendLine("3. 另一位核心角色名字必须含“露”，并与女主有明显感情关系、主从关系或强烈命运绑定。")
             appendLine("4. 每章要有钩子、冲突、反转、情绪波动和让人想继续看的结尾。")
             appendLine("5. 风格要有趣、爽、好读，允许抽象搞笑、打脸、救赎、求生、强者臣服等元素。")
-            appendLine("6. 第 $chapter 章字数控制在 1200-2200 字。")
+            appendLine("6. 第 $chapter 章字数控制在 ${normalizedGuide.wordCount} 字。")
             if (previousChapters.isNotEmpty()) {
                 appendLine()
                 appendLine("前文摘要：")

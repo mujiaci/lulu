@@ -32,6 +32,7 @@ import me.rerere.rikkahub.data.starwish.StarWishRules
 import me.rerere.rikkahub.data.starwish.StarWishState
 import me.rerere.rikkahub.data.starwish.StarWishStore
 import me.rerere.rikkahub.data.starwish.StarWishTheaterChapter
+import me.rerere.rikkahub.data.starwish.StarWishTheaterGuide
 import me.rerere.rikkahub.data.starwish.StarWishTheaterSeed
 import me.rerere.rikkahub.data.starwish.StarWishVideoItem
 import me.rerere.rikkahub.data.study.StudyRules
@@ -189,8 +190,9 @@ class StarWishVM(
                 val study = studyState.value
                 if (study.inventory.universalRareFragments < StarWishRules.RARE_FRAGMENTS_PER_CHAPTER) return@launch
                 val chapters = state.value.theaterChapters[theater].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
+                val guide = state.value.theaterGuides[theater] ?: StarWishRules.defaultTheaterGuide(seed)
                 val nextChapter = chapters.size + 1
-                val content = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim())
+                val content = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim(), guide)
                 studyStore.update { current ->
                     current.copy(
                         inventory = current.inventory.copy(
@@ -229,8 +231,9 @@ class StarWishVM(
                 val study = studyState.value
                 if (study.inventory.specialStoryFragments < StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER) return@launch
                 val chapters = state.value.specialStoryChapters[story].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
+                val guide = state.value.specialStoryGuides[story] ?: StarWishRules.defaultTheaterGuide(seed, includeChapterPlan = false)
                 val nextChapter = chapters.size + 1
-                val content = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim())
+                val content = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim(), guide)
                 studyStore.update { current ->
                     StudyRules.redeemSpecialStory(current).state
                 }
@@ -288,6 +291,22 @@ class StarWishVM(
         }
     }
 
+    fun saveTheaterGuide(title: String, guide: StarWishTheaterGuide) {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(theaterGuides = current.theaterGuides + (title to guide.normalized()))
+            }
+        }
+    }
+
+    fun saveSpecialStoryGuide(title: String, guide: StarWishTheaterGuide) {
+        viewModelScope.launch {
+            store.update { current ->
+                current.copy(specialStoryGuides = current.specialStoryGuides + (title to guide.normalized()))
+            }
+        }
+    }
+
     fun rememberSection(section: String) {
         viewModelScope.launch {
             store.update { it.copy(lastSection = section) }
@@ -330,6 +349,7 @@ class StarWishVM(
                     hiddenTheaterTitles = current.hiddenTheaterTitles + title,
                     customTheaters = current.customTheaters.filterNot { it.title == title },
                     theaterChapters = current.theaterChapters - title,
+                    theaterGuides = current.theaterGuides - title,
                 )
             }
         }
@@ -342,6 +362,7 @@ class StarWishVM(
                     hiddenSpecialStoryTitles = current.hiddenSpecialStoryTitles + title,
                     customSpecialStories = current.customSpecialStories.filterNot { it.title == title },
                     specialStoryChapters = current.specialStoryChapters - title,
+                    specialStoryGuides = current.specialStoryGuides - title,
                 )
             }
         }
@@ -352,6 +373,7 @@ class StarWishVM(
         chapters: List<StarWishTheaterChapter>,
         nextChapter: Int,
         influence: String,
+        guide: StarWishTheaterGuide,
     ): String {
         val settings = settingsStore.settingsFlow.first()
         val selectedModel: Model? = settings.theaterModelId?.let { settings.findModelById(it) }
@@ -361,7 +383,7 @@ class StarWishVM(
         val providerSetting = model.findProvider(settings.providers)
             ?: error("小剧场模型没有找到对应提供商。")
         val provider = providerManager.getProviderByType(providerSetting)
-        val prompt = StarWishRules.theaterChapterPrompt(seed, chapters, nextChapter, influence)
+        val prompt = StarWishRules.theaterChapterPrompt(seed, chapters, nextChapter, influence, guide)
         val chunk = provider.generateText(
             providerSetting = providerSetting,
             messages = listOf(UIMessage.user(prompt)),
