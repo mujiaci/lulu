@@ -166,6 +166,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val state by vm.state.collectAsStateWithLifecycle()
+    val isGeneratingSchedule by vm.isGeneratingSchedule.collectAsStateWithLifecycle()
     val companionAssistant = remember(settings.assistants, settings.assistantId, state.selectedAssistantId) {
         val selected = state.selectedAssistantId
         settings.assistants.firstOrNull { it.id.toString() == selected }
@@ -235,12 +236,15 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                     item {
                         DailyStudyDashboard(
                             tasks = state.tasks,
+                            generatedSchedule = state.generatedSchedules[LocalDate.now().toString()],
+                            isGeneratingSchedule = isGeneratingSchedule,
                             newTask = newTask,
                             onNewTask = { newTask = it },
                             onAdd = {
                                 vm.addTask(newTask)
                                 newTask = ""
                             },
+                            onGenerateSchedule = vm::generateTodaySchedule,
                             onToggle = vm::toggleTask,
                             onDelete = vm::deleteTask,
                         )
@@ -799,16 +803,19 @@ private fun TodayProgressCard(
 @Composable
 private fun DailyStudyDashboard(
     tasks: List<StudyTask>,
+    generatedSchedule: List<StudyScheduleBlock>?,
+    isGeneratingSchedule: Boolean,
     newTask: String,
     onNewTask: (String) -> Unit,
     onAdd: () -> Unit,
+    onGenerateSchedule: () -> Unit,
     onToggle: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
 ) {
     val today = LocalDate.now()
     val todayPlan = ExamStudyPlan.todayPlan(today)
     val tomorrowPlan = ExamStudyPlan.todayPlan(today.plusDays(1))
-    val schedule = ExamStudyPlan.todaySchedule(today)
+    val schedule = generatedSchedule ?: ExamStudyPlan.todaySchedule(today)
     val tips = ExamStudyPlan.todayTips(today)
 
     var dashboardView by remember { mutableStateOf(DailyDashboardView.Tasks) }
@@ -839,7 +846,13 @@ private fun DailyStudyDashboard(
                 onToggle = onToggle,
                 onDelete = onDelete,
             )
-            DailyDashboardView.Plan -> TodayPlanContent(todayPlan = todayPlan, schedule = schedule)
+            DailyDashboardView.Plan -> TodayPlanContent(
+                todayPlan = todayPlan,
+                schedule = schedule,
+                generatedByAi = generatedSchedule != null,
+                isGeneratingSchedule = isGeneratingSchedule,
+                onGenerateSchedule = onGenerateSchedule,
+            )
             DailyDashboardView.Tomorrow -> TomorrowPlanContent(tomorrowPlan = tomorrowPlan)
             DailyDashboardView.Tips -> StudyTipsContent(tips = tips)
         }
@@ -927,7 +940,13 @@ private fun TodayPlanCard(
     schedule: List<StudyScheduleBlock>,
 ) {
     StudyCard {
-        TodayPlanContent(todayPlan = todayPlan, schedule = schedule)
+        TodayPlanContent(
+            todayPlan = todayPlan,
+            schedule = schedule,
+            generatedByAi = false,
+            isGeneratingSchedule = false,
+            onGenerateSchedule = {},
+        )
     }
 }
 
@@ -935,13 +954,35 @@ private fun TodayPlanCard(
 private fun TodayPlanContent(
     todayPlan: DailyStudyPlan?,
     schedule: List<StudyScheduleBlock>,
+    generatedByAi: Boolean,
+    isGeneratingSchedule: Boolean,
+    onGenerateSchedule: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
             Icon(HugeIcons.Clock02, null, tint = StudyColors.blue)
             Column(Modifier.weight(1f)) {
                 Text("今日计划", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(todayPlan?.title ?: "今天先守住最小学习闭环", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (generatedByAi) "已按今日待办重新生成" else todayPlan?.title ?: "今天先守住最小学习闭环",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FilledTonalButton(onClick = onGenerateSchedule, enabled = !isGeneratingSchedule) {
+                if (isGeneratingSchedule) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(HugeIcons.AiMagic, null, modifier = Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(if (isGeneratingSchedule) "生成中" else "生成计划表")
             }
         }
         schedule.forEach { block ->

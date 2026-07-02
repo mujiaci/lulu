@@ -2,11 +2,36 @@ package me.rerere.rikkahub.data.study
 
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import kotlinx.serialization.Serializable
 
 object ExamStudyPlan {
     val examDate: LocalDate = LocalDate.of(2026, 12, 21)
     const val vocabularyBacklog: Int = 1550
-    val vocabularyDailyOptions: List<Int> = listOf(40, 60, 80, 100)
+    const val dailyVocabularyTarget: Int = 120
+    const val dailyVocabularyGroups: Int = 6
+    val vocabularyDailyOptions: List<Int> = listOf(dailyVocabularyTarget)
+    const val dailyVocabularyTaskTitle: String = "不背单词 120 个（6 组）"
+
+    val dynamicScheduleSystemPrompt = """
+        你是考研日计划编排助手。你只负责把用户今天的预制任务、手动新增待办、作息信息和学习习惯整理成可执行的日程表。
+        输出必须严格使用中文，每行一个时间块，格式为：HH:mm-HH:mm｜标题｜具体安排。
+        不要输出解释、鼓励语、Markdown 表格、编号、项目符号或多余前后缀。
+        安排必须具体、严肃、可勾选；遇到听课任务时写清“听众合法硕某科课程”，不要只写“听课”。
+    """.trimIndent()
+
+    val studyHabitReference = """
+        个人学习习惯与排计划规则：
+        - 这是考研计划，优先追求可执行、稳定、可持续，不用漂亮但空泛的日程。
+        - 专业课优先级最高。法理学已经听课和做题一遍，现在重点是背诵、框架、错题回看，不要重新从零听大量课程。
+        - 刑法学、民法、宪法学、法制史需要从一轮听课和基础题开始。专业课听课默认使用众合法硕课程；安排时写成“听众合法硕刑法课程”“听众合法硕民法课程”等。
+        - 每章尽量拆成听课/看课、章节题、错题整理、第一轮背诵、框架图，不要只写“学习专业课”。
+        - 不背单词总复习池约 $vocabularyBacklog 个，但每天固定安排 $dailyVocabularyTaskTitle，不把总池一次性塞进当天。
+        - 长难句按“小红书经验贴的稳定方法”处理：先听/复习方法论，再每日 1 句或 66 句体系打卡；每句只做主干、修饰成分/从句、译文复述，不做无边界抄笔记。
+        - 用户最近容易熬夜，日程要尊重她手动写下的起床和睡觉时间；如果没有写，默认上午慢启动、晚上 22:30 收尾。
+        - 每天保留 15-30 分钟散步/拉伸。突发任务可以插入，但不要挤掉睡前收尾。
+        - 用户可以手动新增学校任务，例如“写论文 50分钟”。这类任务必须被安排进今日计划。
+        - 输出日程要先主线、再题目/回炉、再英语、再背诵收尾；中间要有饭点和休息。
+    """.trimIndent()
 
     val monthlyPlans = listOf(
         MonthlyStudyPlan(
@@ -17,7 +42,7 @@ object ExamStudyPlan {
                 "法理学已经听课和做题一遍，本月不重新从零听课，重点做 13 章框架、错题回看、第一轮背诵找回",
                 "刑法学、民法从零启动：听课后立刻做章节题，先建立题感，再进入背诵",
                 "宪法学、法制史只轻量入门，不和刑民抢主力时间",
-                "不背单词约 $vocabularyBacklog 个复习池按 20 个一组滚动：重专业课日 40 或 60 个，复盘/轻量日 80 或 100 个；没有单词任务的日子只保留长难句或阅读手感",
+                "不背单词约 $vocabularyBacklog 个复习池按 20 个一组滚动，每天固定 $dailyVocabularyTaskTitle；长难句按每日 1 句拆主干、修饰和译文复述",
                 "每天给大脑留收尾口：晚上只做背诵输出、错题封口和明日第一步，不用熬夜证明自己",
             ),
         ),
@@ -29,7 +54,7 @@ object ExamStudyPlan {
                 "完成宪法学第 4-7 章、法制史第 4-7 章一轮",
                 "五科开始第二轮背诵：先背框架，再背关键词，再背完整表述，不卷遍数，只追求能输出",
                 "刑法、民法每周固定章节题和错题回炉，综合课每周固定框架默写",
-                "英语进入稳定恢复：不背单词按 60、80 或 100 个滚动，阅读每周 2-3 次，长难句作为断线保护",
+                "英语进入稳定恢复：每天固定 $dailyVocabularyTaskTitle，阅读每周 2-3 次，长难句作为断线保护",
             ),
         ),
         MonthlyStudyPlan(
@@ -83,7 +108,7 @@ object ExamStudyPlan {
                 "从 7 月 2 日正式进入章节制，7 月 1 日作为登录、调研、校准和资料整理日",
                 "法理学第 1-4 章：错题回看、目录式背诵、框架图，不重复从零听课",
                 "刑法学第 1-2 章、民法第 1 章：看课后立刻做 10-15 题，建立题感",
-                "英语先恢复连续性：7 月 2 日只做长难句；之后按 20 个一组安排不背单词 40、60 或 80 个，不追复习池总数",
+                "英语先恢复连续性：每天固定 $dailyVocabularyTaskTitle；长难句每周至少 3 句，不追复习池总数",
                 "建立 Everything 命名和检索规则，每天只整理一个小资料块",
                 "第 7 天做休息/缓冲/复盘，只补最小漏项",
             ),
@@ -96,7 +121,7 @@ object ExamStudyPlan {
                 "法理学第 5-8 章：第一轮背诵找回、错题回看、框架图",
                 "刑法学第 3-5 章：犯罪论总框架继续推进，章节题当天完成",
                 "民法第 2-4 章：民事法律行为、代理等基础推进",
-                "不背单词按 60/80/100 个三档滚动，必须是 20 的倍数；长难句每周至少 3 句，不和单词互相惩罚",
+                "不背单词固定 $dailyVocabularyTaskTitle；长难句每周至少 3 句，不和单词互相惩罚",
                 "第 14 天做轻量缓冲，把法理 1-8 章画成一张总图",
             ),
         ),
@@ -109,7 +134,7 @@ object ExamStudyPlan {
                 "刑法学第 6-8 章：犯罪形态、共同犯罪等，做题后整理错因",
                 "民法第 5-7 章：诉讼时效、物权入口等",
                 "宪法学第 1 章、法制史第 1 章入门",
-                "英语维持 60 或 80 个不背单词，或 1 句长难句；专业课爆量日允许只做英语最小闭环",
+                "英语维持 $dailyVocabularyTaskTitle 和 1 句长难句；专业课爆量日也保留英语最小闭环",
                 "整理本周最常错 10 个点，第 21 天复盘和休息",
             ),
         ),
@@ -122,7 +147,7 @@ object ExamStudyPlan {
                 "刑法学第 9-12 章、民法第 8-11 章",
                 "宪法学第 2 章、法制史第 2 章",
                 "每科至少补一张知识框架图，刑民各做一次错题回炉",
-                "英语不追求漂亮时长：不背单词 60 或 80 个，或阅读手感 1 小段，保证不断线",
+                "英语不追求漂亮时长：固定 $dailyVocabularyTaskTitle，状态好再加阅读手感 1 小段，保证不断线",
                 "第 28 天做 7 月阶段复盘，不新增硬章节",
             ),
         ),
@@ -134,30 +159,30 @@ object ExamStudyPlan {
                 "法理学 13 章框架闭环，列出最不会背的 20 个点",
                 "刑法学推进到第 13 章，民法推进到第 12 章",
                 "宪法学第 3 章、法制史第 3 章",
-                "不背单词复盘本月漏组，最多补 100 个，不用在月底清空总池",
+                "不背单词只按当天 $dailyVocabularyTaskTitle 走，不在月底突击清空总池",
                 "整理 7 月背诵清单、错题清单、框架图清单，给 8 月安排续接入口",
             ),
         ),
     )
 
     val dailyPlans: Map<LocalDate, DailyStudyPlan> = listOf(
-        daily("2026-06-30", "启动准备日", "确认 7 月备考资料：文运/众合题册、考试分析、网课目录", "不背单词复习 40 个（2 组），只做热身", "散步 15 分钟，给大脑换气"),
+        daily("2026-06-30", "启动准备日", "确认 7 月备考资料：文运/众合题册、考试分析、网课目录", dailyVocabularyTaskTitle, "散步 15 分钟，给大脑换气"),
         daily("2026-07-01", "启动调研日：不计正式进度", "登录和调研小红书法硕非法经验", "确认五科章节账本：法理 13、刑法 25、民法 21、宪法 7、法制史 7", "整理资料命名规则：科目-章节-题型-错因", "把 7 月计划校准到 7 月 2 日开始执行", "晚上只做收尾，不再开新章节"),
         daily("2026-07-02", "法理2 + 刑法1", "法理学第 2 章：错题回看、框架整理、第一轮背诵", "刑法学第 1 章：听课抓犯罪论总入口", "刑法学第 1 章：做 10-15 题并标错因", "英语长难句 1 句", "睡前 10 分钟整理明日最小任务"),
         daily("2026-07-03", "法理3 + 民法1", "法理学第 3 章：目录式回忆并补框架", "民法第 1 章：看课并做 10 题", "背诵：法理第 1-2 章第一轮滚动", "画民法第 1 章主体框架", "散步 15 分钟"),
-        daily("2026-07-04", "刑法2 + 英语恢复", "刑法学第 2 章：看课并做题", "刑法第 1-2 章：整理犯罪论入口图", "法理第 1-3 章：口头背目录 15 分钟", "不背单词 60 个（3 组）", "晚上不要加新课，只收错题"),
+        daily("2026-07-04", "刑法2 + 英语恢复", "刑法学第 2 章：看课并做题", "刑法第 1-2 章：整理犯罪论入口图", "法理第 1-3 章：口头背目录 15 分钟", dailyVocabularyTaskTitle, "晚上不要加新课，只收错题"),
         daily("2026-07-05", "法理4 + 民法2", "法理学第 4 章：错题回看并背关键词", "民法第 2 章：看课并做 10 题", "背诵：民法第 1-2 章关键词", "画民法第 1-2 章总框架", "散步 15 分钟"),
         daily("2026-07-06", "刑法2补强 + 法理回背", "刑法学第 2 章：补 10 题并整理错因", "法理第 1-4 章：目录式回背", "背诵：法理第 3-4 章第一轮", "用一页纸写本周专业课小结", "散步或拉伸 20 分钟"),
-        daily("2026-07-07", "第一周复盘与容错", "不背单词 80 个（4 组），只在复盘完成后做", "回看法理第 1-4 章错题", "回看刑法/民法第 1-2 章错题", "补一个本周漏掉的小任务，只补最小一块", "好好吃一顿饭，散步 20 分钟"),
-        daily("2026-07-08", "法理5 + 刑法3", "法理学第 5 章：错题回看、框架整理、第一轮背诵", "刑法学第 3 章：看课并做 10-15 题", "背诵：法理第 1-4 章滚动 15 分钟", "画法理第 1-5 章小总图", "不背单词 60 个（3 组）"),
+        daily("2026-07-07", "第一周复盘与容错", dailyVocabularyTaskTitle, "回看法理第 1-4 章错题", "回看刑法/民法第 1-2 章错题", "补一个本周漏掉的小任务，只补最小一块", "好好吃一顿饭，散步 20 分钟"),
+        daily("2026-07-08", "法理5 + 刑法3", "法理学第 5 章：错题回看、框架整理、第一轮背诵", "刑法学第 3 章：看课并做 10-15 题", "背诵：法理第 1-4 章滚动 15 分钟", "画法理第 1-5 章小总图", dailyVocabularyTaskTitle),
         daily("2026-07-09", "法理6 + 民法3", "法理学第 6 章：目录式回忆并补框架", "民法第 3 章：看课并做 10-15 题", "背诵：刑法第 1-3 章关键词", "画民法第 1-3 章框架", "英语长难句 1 句"),
         daily("2026-07-10", "法理7 + 刑法4", "法理学第 7 章：错题回看并背关键词", "刑法学第 4 章：看课并做题", "背诵：法理第 5-6 章第一轮", "整理刑法第 1-4 章犯罪论框架", "散步 15 分钟"),
-        daily("2026-07-11", "民法4 + 刑法5", "民法第 4 章：看课并做题", "刑法学第 5 章：听课抓重点", "背诵：民法第 1-3 章关键词", "画民法法律行为框架", "不背单词 80 个（4 组）"),
+        daily("2026-07-11", "民法4 + 刑法5", "民法第 4 章：看课并做题", "刑法学第 5 章：听课抓重点", "背诵：民法第 1-3 章关键词", "画民法法律行为框架", dailyVocabularyTaskTitle),
         daily("2026-07-12", "法理8 + 本周闭环", "法理学第 8 章：错题回看、框架整理、第一轮背诵", "回看法理第 1-7 章错题", "口头背诵法理第 1-8 章标题和关键词", "画法理第 1-8 章总框架", "整理一页本周不会背清单"),
         daily("2026-07-13", "刑民补题日", "刑法第 1-5 章：错题回看 10 题", "民法第 1-4 章：错题回看 10 题", "背诵：刑法/民法各 15 分钟", "补本周漏掉的框架图"),
-        daily("2026-07-14", "轻量缓冲日", "不背单词 80 个（4 组）", "法理第 1-7 章二次回背 20 分钟", "刑法第 1-5 章错题回看", "散步 20 分钟"),
+        daily("2026-07-14", "轻量缓冲日", dailyVocabularyTaskTitle, "法理第 1-7 章二次回背 20 分钟", "刑法第 1-5 章错题回看", "散步 20 分钟"),
         daily("2026-07-15", "刑法6 + 民法5", "刑法学第 6 章：看课并做题", "民法第 5 章：听课抓关键词", "背诵：刑法第 4-5 章第一轮", "画刑法第 4-6 章框架图"),
-        daily("2026-07-16", "民法6 + 宪法1", "民法第 6 章：看课并做题", "宪法学第 1 章：看课并做题", "背诵：民法第 4-5 章第一轮", "画宪法第 1 章框架", "不背单词 60 个（3 组）"),
+        daily("2026-07-16", "民法6 + 宪法1", "民法第 6 章：看课并做题", "宪法学第 1 章：看课并做题", "背诵：民法第 4-5 章第一轮", "画宪法第 1 章框架", dailyVocabularyTaskTitle),
         daily("2026-07-17", "法理9 + 法制史1", "法理学第 9 章：错题回看、框架整理、第一轮背诵", "法制史第 1 章：看课并做题", "背诵：法理第 1-8 章第二次滚动", "整理法制史时间线入口图"),
         daily("2026-07-18", "刑法7 + 民法7", "刑法学第 7 章：看课并做题", "民法第 7 章：听课抓重点", "背诵：刑法第 6 章第一轮", "错题：刑法本周错题回看"),
         daily("2026-07-19", "刑法8 + 民法8", "刑法学第 8 章：看课并做题", "民法第 8 章：看课并做题", "背诵：民法第 6-7 章第一轮", "画民法第 5-8 章小框架"),
@@ -197,7 +222,7 @@ object ExamStudyPlan {
         val hasReviewDay = tasks.any { it.title.hasAny("复盘", "缓冲", "收口", "整理 7 月") }
         val lawTasks = tasks.filter { it.kind == StudyPlanTaskKind.Law }.map { it.title }
         val reviewTasks = tasks.filter { it.kind == StudyPlanTaskKind.Review }.map { it.title }
-        val englishTask = tasks.firstOrNull { it.kind == StudyPlanTaskKind.English }?.title
+        val englishTasks = tasks.filter { it.kind == StudyPlanTaskKind.English }.map { it.title }
 
         val mainInput = when {
             hasReviewDay -> "只处理复盘和漏项，不开大新章节。"
@@ -224,8 +249,8 @@ object ExamStudyPlan {
             add(StudyScheduleBlock("12:00-14:00", "午饭 + 午休", "吃饭和休息不计入学习时长；午休 20-40 分钟，避免下午断电。"))
             add(StudyScheduleBlock("14:20-16:00", if (hasPractice) "章节题/错题" else "回炉复习", practice))
             add(StudyScheduleBlock("16:20-17:20", if (hasFramework) "框架整理" else "二次消化", "把今天专业课压成目录、表格或错题清单，资料整理最多占 20 分钟。"))
-            if (hasEnglish || englishTask != null) {
-                add(StudyScheduleBlock("19:30-20:10", "英语", englishTask ?: "不背单词按 20 个一组滚动，状态好再加 1 句长难句。"))
+            if (hasEnglish || englishTasks.isNotEmpty()) {
+                add(StudyScheduleBlock("19:30-20:10", "英语", englishTasks.joinToString("；").ifBlank { "$dailyVocabularyTaskTitle，状态好再加 1 句长难句。" }))
             }
             add(StudyScheduleBlock("20:20-21:10", "背诵输出", eveningOutput))
             add(StudyScheduleBlock("21:10-21:40", "散步/拉伸", "离开桌面 15-30 分钟，让明天还能继续，而不是今晚硬熬。"))
@@ -242,6 +267,12 @@ object ExamStudyPlan {
             "今天的原则",
             "先完成专业课主线，再整理资料。经验帖只提供方法，不能替你完成看课、做题、背诵和错题回炉。",
         )
+        if (tasks.any { it.kind == StudyPlanTaskKind.English }) {
+            tips += StudyTip(
+                "长难句三步拆",
+                "$vocabularyBacklog 左右是总复习池，不是当天任务。今天固定 $dailyVocabularyTaskTitle；长难句按 1 句小剂量来：先划主干，再圈修饰成分/从句，最后合上笔记复述译文。",
+            )
+        }
         if (tasks.any { it.title.hasAny("看课", "听课") }) {
             tips += StudyTip(
                 "看课别做抄写员",
@@ -272,12 +303,6 @@ object ExamStudyPlan {
                 "文件名按“科目-章节-任务-日期”写，例如“刑法-第1章-错题-0702.md”。每天资料整理最多一个小块，必须转成题、背诵或框架。",
             )
         }
-        if (tasks.any { it.kind == StudyPlanTaskKind.English }) {
-            tips += StudyTip(
-                "英语不断线",
-                "1550 左右是总复习池，不是当天任务。单词按 20 个一组，重专业课日 40/60 个，轻量日 80/100 个；长难句只拆主干、修饰和翻译。",
-            )
-        }
         if (tasks.any { it.kind == StudyPlanTaskKind.Health || it.title.hasAny("复盘", "缓冲", "休息") }) {
             tips += StudyTip(
                 "缓冲不是偷懒",
@@ -291,14 +316,78 @@ object ExamStudyPlan {
         return tips.take(5)
     }
 
+    fun dynamicSchedulePrompt(
+        date: LocalDate,
+        presetPlan: DailyStudyPlan?,
+        defaultSchedule: List<StudyScheduleBlock>,
+        tasks: List<StudyTask>,
+    ): String {
+        val planTasks = tasks.filter { it.source == StudyTaskSource.Plan }
+        val manualTasks = tasks.filter { it.source == StudyTaskSource.Manual }
+        return buildString {
+            appendLine(studyHabitReference)
+            appendLine()
+            appendLine("日期：$date")
+            appendLine("今日预制主题：${presetPlan?.title ?: "无预制主题，按最小闭环安排"}")
+            appendLine("今日预制任务：")
+            presetPlan?.tasks.orEmpty().forEachIndexed { index, task ->
+                appendLine("${index + 1}. ${task.kind.label}｜${task.title}")
+            }
+            if (presetPlan == null) appendLine("1. 专业课小块 + 英语小块 + 散步/收尾")
+            appendLine()
+            appendLine("当前待办（包含用户手动新增和系统计划任务）：")
+            if (tasks.isEmpty()) {
+                appendLine("- 暂无待办，请按预制主题安排。")
+            } else {
+                planTasks.forEach { task -> appendLine("- 计划：${task.title}") }
+                manualTasks.forEach { task -> appendLine("- 手动：${task.title}") }
+            }
+            appendLine()
+            appendLine("默认日程骨架，可调整但不要丢掉饭点、休息、运动和睡前收尾：")
+            defaultSchedule.forEach { block ->
+                appendLine("${block.time}｜${block.title}｜${block.detail}")
+            }
+            appendLine()
+            appendLine("请重新生成今天的计划表。要求：")
+            appendLine("- 如果用户手动待办里写了起床/睡觉时间，按它调整时间段。")
+            appendLine("- 如果用户手动待办里写了临时任务和分钟数，必须插入计划表。")
+            appendLine("- 每天固定保留 $dailyVocabularyTaskTitle。")
+            appendLine("- 长难句安排成“拆主干 + 圈修饰/从句 + 复述译文”，不要写成泛泛学习。")
+            appendLine("- 听课任务必须写“听众合法硕某科课程”，例如“听众合法硕刑法课程第 1 章”。")
+            appendLine("- 只输出时间表，每行：HH:mm-HH:mm｜标题｜具体安排。")
+        }
+    }
+
+    fun parseScheduleBlocks(text: String): List<StudyScheduleBlock> {
+        val linePattern = Regex("""^\s*(\d{1,2}:\d{2}\s*[-–—]\s*\d{1,2}:\d{2})\s*[｜|]\s*([^｜|]+)\s*[｜|]\s*(.+?)\s*$""")
+        return text.lineSequence()
+            .mapNotNull { rawLine ->
+                val line = rawLine.trim().trimStart('-', '•', '*').trim()
+                val match = linePattern.matchEntire(line) ?: return@mapNotNull null
+                StudyScheduleBlock(
+                    time = match.groupValues[1].replace(Regex("\\s+"), "").replace('–', '-').replace('—', '-'),
+                    title = match.groupValues[2].trim().trim('：', ':'),
+                    detail = match.groupValues[3].trim(),
+                )
+            }
+            .filter { it.time.length in 10..13 && it.title.isNotBlank() && it.detail.isNotBlank() }
+            .take(12)
+            .toList()
+    }
+
     fun daysLeft(date: LocalDate = LocalDate.now()): Long =
         ChronoUnit.DAYS.between(date, examDate).coerceAtLeast(0)
 
-    private fun daily(date: String, title: String, vararg tasks: String): DailyStudyPlan =
-        DailyStudyPlan(
+    private fun daily(date: String, title: String, vararg tasks: String): DailyStudyPlan {
+        val normalizedTasks = tasks
+            .map(::normalizeTaskTitle)
+            .let { normalized ->
+                if (normalized.any { it.contains("不背单词") }) normalized else normalized + dailyVocabularyTaskTitle
+            }
+        return DailyStudyPlan(
             date = LocalDate.parse(date),
             title = title,
-            tasks = tasks.map { task ->
+            tasks = normalizedTasks.map { task ->
                 planTask(
                     title = task,
                     kind = when {
@@ -312,9 +401,30 @@ object ExamStudyPlan {
                 )
             },
         )
+    }
 
     private fun planTask(title: String, kind: StudyPlanTaskKind): StudyPlanTask =
         StudyPlanTask(title = title, kind = kind)
+
+    private fun normalizeTaskTitle(task: String): String =
+        task.replace(
+            Regex("""不背单词(?:复习)?\s*\d+\s*个（\d+\s*组）"""),
+            dailyVocabularyTaskTitle,
+        ).withPreferredCourseProvider()
+
+    private fun String.withPreferredCourseProvider(): String {
+        if (!hasAny("听课", "看课") || contains("众合法硕")) return this
+        val subject = when {
+            contains("刑法") -> "刑法"
+            contains("民法") -> "民法"
+            contains("宪法") -> "宪法"
+            contains("法制史") -> "法制史"
+            contains("法理") -> "法理"
+            else -> return this
+        }
+        return replace("听课", "听众合法硕${subject}课程")
+            .replace("看课", "听众合法硕${subject}课程")
+    }
 
     private fun String.hasAny(vararg keywords: String): Boolean =
         keywords.any { contains(it) }
@@ -339,6 +449,7 @@ data class DailyStudyPlan(
     val tasks: List<StudyPlanTask>,
 )
 
+@Serializable
 data class StudyScheduleBlock(
     val time: String,
     val title: String,

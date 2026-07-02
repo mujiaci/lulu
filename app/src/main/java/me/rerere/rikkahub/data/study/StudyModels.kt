@@ -27,6 +27,7 @@ data class StudyState(
     val manualShopRefreshDate: String? = null,
     val recentEvents: List<StudyEvent> = emptyList(),
     val activePlanDate: String? = null,
+    val generatedSchedules: Map<String, List<StudyScheduleBlock>> = emptyMap(),
     val selectedAssistantId: String? = null,
     val internalTestGrantVersion: Int = 0,
 )

@@ -2,10 +2,24 @@ package me.rerere.rikkahub.ui.pages.study
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import me.rerere.ai.core.ReasoningLevel
+import me.rerere.ai.provider.ModelType
+import me.rerere.ai.provider.ProviderManager
+import me.rerere.ai.provider.TextGenerationParams
+import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.findModelById
+import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.study.ExamStudyPlan
 import me.rerere.rikkahub.data.study.StudyDrawResult
 import me.rerere.rikkahub.data.study.StudyMysteryBoxReward
 import me.rerere.rikkahub.data.study.StudyRarity
@@ -22,11 +36,15 @@ import kotlin.random.Random
 class StudyVM(
     private val store: StudyStore,
     private val starWishStore: StarWishStore,
+    private val settingsStore: SettingsStore,
+    private val providerManager: ProviderManager,
 ) : ViewModel() {
     val state: StateFlow<StudyState> = store.state
 
     private val _effects = MutableSharedFlow<StudyEffect>(extraBufferCapacity = 8)
     val effects: SharedFlow<StudyEffect> = _effects
+    private val _isGeneratingSchedule = MutableStateFlow(false)
+    val isGeneratingSchedule = _isGeneratingSchedule.asStateFlow()
 
     fun syncToday() = reduce { StudyRules.rolloverToDate(it, LocalDate.now()) }
 
@@ -38,9 +56,65 @@ class StudyVM(
         result.state
     }
 
-    fun addTask(title: String) = reduce { StudyRules.addTask(it, title) }
+    fun addTask(title: String) = reduce {
+        if (title.isBlank()) return@reduce it
+        StudyRules.clearGeneratedSchedule(StudyRules.addTask(it, title), LocalDate.now())
+    }
 
-    fun deleteTask(id: String) = reduce { StudyRules.deleteTask(it, id) }
+    fun deleteTask(id: String) = reduce {
+        StudyRules.clearGeneratedSchedule(StudyRules.deleteTask(it, id), LocalDate.now())
+    }
+
+    fun generateTodaySchedule() {
+        viewModelScope.launch {
+            if (_isGeneratingSchedule.value) return@launch
+            _isGeneratingSchedule.value = true
+            try {
+                val date = LocalDate.now()
+                val currentState = state.value
+                val settings = settingsStore.settingsFlow.first()
+                val assistant = settings.getCurrentAssistant()
+                val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+                    ?.takeIf { it.type == ModelType.CHAT }
+                    ?: error("请先设置主聊天模型，再生成今日计划。")
+                val providerSetting = model.findProvider(settings.providers)
+                    ?: error("当前主聊天模型没有找到对应提供商。")
+                val provider = providerManager.getProviderByType(providerSetting)
+                val prompt = ExamStudyPlan.dynamicSchedulePrompt(
+                    date = date,
+                    presetPlan = ExamStudyPlan.todayPlan(date),
+                    defaultSchedule = ExamStudyPlan.todaySchedule(date),
+                    tasks = currentState.tasks,
+                )
+                val chunk = provider.generateText(
+                    providerSetting = providerSetting,
+                    messages = listOf(
+                        UIMessage.system(ExamStudyPlan.dynamicScheduleSystemPrompt),
+                        UIMessage.user(prompt),
+                    ),
+                    params = TextGenerationParams(
+                        model = model,
+                        temperature = 0.35f,
+                        topP = 0.9f,
+                        maxTokens = 1800,
+                        reasoningLevel = ReasoningLevel.OFF,
+                    ),
+                )
+                val text = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
+                val schedule = ExamStudyPlan.parseScheduleBlocks(text)
+                if (schedule.isEmpty()) {
+                    error("主 API 没有返回可读取的时间表，请再点一次生成。")
+                }
+                store.set(StudyRules.saveGeneratedSchedule(currentState, date, schedule))
+                _effects.tryEmit(StudyEffect.Message("今日计划表已生成"))
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                _effects.tryEmit(StudyEffect.Message(e.message ?: "今日计划表生成失败"))
+            } finally {
+                _isGeneratingSchedule.value = false
+            }
+        }
+    }
 
     fun toggleTask(id: String, done: Boolean) = reduce {
         val result = StudyRules.toggleTask(it, id, done)

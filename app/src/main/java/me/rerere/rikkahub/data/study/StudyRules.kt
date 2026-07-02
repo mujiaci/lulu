@@ -122,7 +122,6 @@ object StudyRules {
 
     fun syncPlanTasks(state: StudyState, date: LocalDate = LocalDate.now()): StudyState {
         val dateText = date.toString()
-        if (state.activePlanDate == dateText) return state
         val plan = ExamStudyPlan.todayPlan(date)
         val manualTasks = state.tasks.filter { it.source != StudyTaskSource.Plan }
         val planTasks = plan?.tasks?.mapIndexed { index, task ->
@@ -133,6 +132,9 @@ object StudyRules {
                 source = StudyTaskSource.Plan,
             )
         }.orEmpty()
+        val existingPlanTitles = state.tasks.filter { it.source == StudyTaskSource.Plan }.map { it.title }
+        val nextPlanTitles = planTasks.map { it.title }
+        if (state.activePlanDate == dateText && existingPlanTitles == nextPlanTitles) return state
         return state.copy(
             today = dateText,
             tasks = planTasks + manualTasks,
@@ -570,6 +572,22 @@ object StudyRules {
 
     fun deleteTask(state: StudyState, id: String): StudyState {
         return state.copy(tasks = state.tasks.filterNot { it.id == id })
+    }
+
+    fun clearGeneratedSchedule(state: StudyState, date: LocalDate): StudyState {
+        return state.copy(generatedSchedules = state.generatedSchedules - date.toString())
+    }
+
+    fun saveGeneratedSchedule(
+        state: StudyState,
+        date: LocalDate,
+        schedule: List<StudyScheduleBlock>,
+    ): StudyState {
+        val cleanSchedule = schedule
+            .filter { it.time.isNotBlank() && it.title.isNotBlank() && it.detail.isNotBlank() }
+            .take(12)
+        if (cleanSchedule.isEmpty()) return state
+        return state.copy(generatedSchedules = state.generatedSchedules + (date.toString() to cleanSchedule))
     }
 
     fun normalTitle(key: String): String {
