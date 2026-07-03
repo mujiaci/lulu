@@ -834,7 +834,12 @@ private fun DailyStudyDashboard(
     var dashboardView by remember { mutableStateOf(DailyDashboardView.Tasks) }
 
     StudyCard {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+        ) {
             DailyDashboardView.entries.forEach { view ->
                 FilterChip(
                     selected = dashboardView == view,
@@ -843,10 +848,8 @@ private fun DailyStudyDashboard(
                         Text(
                             text = view.label,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
                         )
                     },
-                    modifier = Modifier.weight(1f),
                 )
             }
         }
@@ -936,8 +939,6 @@ private fun TaskContent(
                     Text(
                         text = task.title,
                         textDecoration = if (task.done) TextDecoration.LineThrough else null,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
                     )
                 }
                 IconButton(onClick = { onDelete(task.id) }) {
