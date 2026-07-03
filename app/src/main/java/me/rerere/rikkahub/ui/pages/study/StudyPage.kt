@@ -1250,6 +1250,7 @@ private fun DrawResultCelebration(
     onDismissRequest: () -> Unit,
 ) {
     val drawResults = remember(results) { results.map { it.result } }
+    val isSingleDraw = drawResults.size == 1
     val best = drawResults.maxByOrNull { it.rarity.weight }?.rarity ?: StudyRarity.Normal
     var revealState by remember(results) { mutableStateOf(DrawRevealFlow.start(drawResults)) }
     var playedRewardVideoIndexes by remember(results) { mutableStateOf(emptySet<Int>()) }
@@ -1311,7 +1312,11 @@ private fun DrawResultCelebration(
     }
     LaunchedEffect(revealState.phase) {
         if (revealState.phase == DrawRevealPhase.Done) {
-            revealState = DrawRevealFlow.summary(revealState)
+            if (isSingleDraw) {
+                onDismissRequest()
+            } else {
+                revealState = DrawRevealFlow.summary(revealState)
+            }
         }
     }
     Dialog(
@@ -1436,11 +1441,17 @@ private fun DrawResultCelebration(
                         }
                     } else {
                         Button(
-                            onClick = { revealState = DrawRevealFlow.summary(revealState) },
+                            onClick = {
+                                if (isSingleDraw) {
+                                    onDismissRequest()
+                                } else {
+                                    revealState = DrawRevealFlow.summary(revealState)
+                                }
+                            },
                             enabled = revealState.phase == DrawRevealPhase.Card && !rewardVideoPending,
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Text("查看结果")
+                            Text(if (isSingleDraw) "收下" else "查看结果")
                         }
                     }
                 }
