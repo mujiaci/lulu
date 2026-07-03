@@ -50,6 +50,23 @@ class ExamStudyPlanTest {
     }
 
     @Test
+    fun unfinishedNewChaptersOnlyReviewHeardKeywords() {
+        val text = listOf(
+            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 23)),
+            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 26)),
+            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 30)),
+        ).flatMap { it?.tasks.orEmpty() }.joinToString("\n") { it.title }
+
+        assertTrue(text.contains("未确认整章闭环前不算第一轮背诵"))
+        assertTrue(text.contains("未闭环章节不算第一轮"))
+        assertTrue(text.contains("没闭环就不挑题"))
+        assertFalse(text.contains("刑法第 2 章第一轮关键词"))
+        assertFalse(text.contains("刑法第 2-3 章第一轮"))
+        assertFalse(text.contains("刑法第 3-4 章第一轮关键词"))
+        assertFalse(text.contains("刑法第 1-2 章已闭环范围"))
+    }
+
+    @Test
     fun lawTheoryIsRecitedInsteadOfOnlySkimmed() {
         val july = ExamStudyPlan.monthlyPlans.single { it.month == "2026-07" }
         val text = july.tasks.joinToString("\n")
