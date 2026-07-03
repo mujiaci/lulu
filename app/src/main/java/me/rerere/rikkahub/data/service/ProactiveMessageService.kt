@@ -93,6 +93,7 @@ import me.rerere.rikkahub.service.LuluIntentInput
 import me.rerere.rikkahub.service.LuluIntentModelPlanner
 import me.rerere.rikkahub.service.LuluIntentPlan
 import me.rerere.rikkahub.service.LuluIntentPlanner
+import me.rerere.rikkahub.service.LivingPresenceAction
 import me.rerere.rikkahub.service.ProactiveReminderPlan
 import me.rerere.rikkahub.service.toProactiveReminderPlan
 import me.rerere.rikkahub.utils.sendNotification
@@ -913,11 +914,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (!isTargetedTrigger && autonomousPlan?.intent == LuluIntent.DO_NOT_DISTURB) {
                     Log.d(TAG, "Lulu intent planner chose not to disturb")
                     runCatching {
-                        cihaiService.recordSilentJudgment(
+                        cihaiService.recordSilentPresenceAction(
                             assistantId = assistantUuid.toString(),
                             assistantName = assistant.name,
                             reason = "自主脉冲判断后决定不打扰：${autonomousPlan.reason}",
                             userText = historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
+                            actionHintNames = defaultSilentPresenceActionHints(),
                         )
                     }.onFailure { error ->
                         Log.w(ProactiveMessageService.TAG, "Failed to record silent Cihai judgment", error)
@@ -1075,11 +1077,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     // AI 选择跳过，移除本次生成的 aiMessage node（基于 id 匹配，不误删历史）
                     Log.d(ProactiveMessageService.TAG, "AI chose to skip proactive message")
                     runCatching {
-                        cihaiService.recordSilentJudgment(
+                        cihaiService.recordSilentPresenceAction(
                             assistantId = assistantUuid.toString(),
                             assistantName = assistant.name,
                             reason = effectiveTargetedReason ?: "主动触发后，角色判断现在没有必要开口。",
-                            userText = targetedUserText ?: historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
+                            userText = targetedUserText
+                                ?: historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
+                            actionHintNames = defaultSilentPresenceActionHints(),
                         )
                     }.onFailure { error ->
                         Log.w(ProactiveMessageService.TAG, "Failed to record skipped Cihai judgment", error)
@@ -1610,6 +1614,12 @@ internal fun Settings.markTargetedProactiveThoughtExpressed(
         }
     )
 }
+
+private fun defaultSilentPresenceActionHints(): List<String> = listOf(
+    LivingPresenceAction.WRITE_JOURNAL.name,
+    LivingPresenceAction.READ_BOOK.name,
+    LivingPresenceAction.MEMORY_REFLECT.name,
+)
 
 internal fun buildTargetedProactiveSensingInstruction(
     targetedKind: String?,

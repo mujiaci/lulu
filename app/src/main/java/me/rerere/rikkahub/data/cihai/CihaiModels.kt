@@ -85,6 +85,81 @@ data class CihaiReadingResult(
     val updatedBook: CihaiBook,
 )
 
+data class CihaiSilentPresenceInput(
+    val assistantId: String,
+    val assistantName: String,
+    val reason: String,
+    val userText: String,
+    val actionHintNames: List<String> = emptyList(),
+    val books: List<CihaiBook> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+data class CihaiSilentPresenceResult(
+    val entries: List<CihaiEntry>,
+    val updatedBook: CihaiBook? = null,
+)
+
+fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenceResult {
+    val normalizedHints = input.actionHintNames
+        .map { it.trim().uppercase() }
+        .filter { it.isNotBlank() }
+        .ifEmpty { listOf(CIHAI_ACTION_WRITE_JOURNAL, CIHAI_ACTION_READ_BOOK) }
+    val journal = CihaiEntry.fromSilentJudgment(
+        assistantId = input.assistantId,
+        assistantName = input.assistantName,
+        reason = input.reason,
+        userText = input.userText,
+        createdAt = input.createdAt,
+    )
+    val readableBook = if (CIHAI_ACTION_READ_BOOK in normalizedHints) {
+        input.books
+            .filter { book ->
+                book.assistantId == input.assistantId &&
+                    book.content.isNotBlank() &&
+                    book.progressPercent < 100
+            }
+            .sortedWith(
+                compareBy<CihaiBook> { it.lastReadAt ?: Long.MIN_VALUE }
+                    .thenBy { it.createdAt }
+            )
+            .firstOrNull()
+    } else {
+        null
+    }
+    val reading = readableBook?.readNextReflection(nowMillis = input.createdAt + 2)
+    val actionLog = CihaiEntry(
+        assistantId = input.assistantId,
+        kind = CihaiEntryKind.ACTION_LOG,
+        title = "${input.assistantName.ifBlank { "角色" }} 的静默行动",
+        content = buildString {
+            append("这次我重新判断后，没有立刻打扰用户。\n")
+            append("判断理由：")
+            append(input.reason.trim().ifBlank { "当前没有足够自然或必要的开口理由。" })
+            append("\n")
+            if (reading != null) {
+                append("我的选择：先把没说出口的担心写进心迹，再读《")
+                append(reading.entry.sourceTitle ?: "未命名材料")
+                append("》的一段，给之后的陪伴多留一点理解。")
+            } else if (CIHAI_ACTION_READ_BOOK in normalizedHints) {
+                append("我的选择：本来想读一段用户给我的材料，但现在没有可读材料；所以先写日志、等待、保留下一次判断。")
+            } else {
+                append("我的选择：先写日志并等待下一次判断，不把关心变成机械催促。")
+            }
+        },
+        emotion = "克制、照看、继续判断",
+        createdAt = input.createdAt + 1,
+    )
+    return CihaiSilentPresenceResult(
+        entries = buildList {
+            add(journal)
+            add(actionLog)
+            reading?.entry?.let(::add)
+        },
+        updatedBook = reading?.updatedBook,
+    )
+}
+
 fun CihaiBook.readNextReflection(nowMillis: Long = System.currentTimeMillis()): CihaiReadingResult {
     val cleanContent = content.trim()
     val start = (cleanContent.length * progressPercent.coerceIn(0, 99) / 100)
@@ -118,6 +193,8 @@ fun CihaiBook.readNextReflection(nowMillis: Long = System.currentTimeMillis()): 
 }
 
 private const val READING_EXCERPT_LENGTH = 700
+private const val CIHAI_ACTION_WRITE_JOURNAL = "WRITE_JOURNAL"
+private const val CIHAI_ACTION_READ_BOOK = "READ_BOOK"
 
 fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
     val kindName = when (kind) {

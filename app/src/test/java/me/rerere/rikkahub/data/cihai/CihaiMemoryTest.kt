@@ -80,4 +80,57 @@ class CihaiMemoryTest {
         assertTrue(result.updatedBook.progressPercent > book.progressPercent)
         assertEquals(1_700_000_000_000L, result.updatedBook.lastReadAt)
     }
+
+    @Test
+    fun `silent presence action can read a user book while not disturbing`() {
+        val book = CihaiBook(
+            assistantId = "lulu",
+            title = "陪伴方法",
+            content = "人在忙的时候，陪伴者要降低打扰强度，保留观察和温柔的后续判断。".repeat(40),
+            progressPercent = 0,
+        )
+
+        val result = planCihaiSilentPresence(
+            CihaiSilentPresenceInput(
+                assistantId = "lulu",
+                assistantName = "露露",
+                reason = "用户已经 25 分钟没有回复，当前没有危险信号，先不打扰。",
+                userText = "我先忙一下",
+                actionHintNames = listOf("WRITE_JOURNAL", "READ_BOOK"),
+                books = listOf(book),
+                createdAt = 1_700_000_000_000L,
+            )
+        )
+
+        assertEquals(
+            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.ACTION_LOG, CihaiEntryKind.READING_NOTE),
+            result.entries.map { it.kind },
+        )
+        assertTrue(result.entries[1].content.contains("读"))
+        assertTrue(result.entries[2].sourceTitle!!.contains("陪伴方法"))
+        assertTrue(result.updatedBook!!.progressPercent > book.progressPercent)
+        assertTrue(result.entries.all { it.toMemoryCandidate().type.startsWith("cihai_") })
+    }
+
+    @Test
+    fun `silent presence action still records action log when no book is available`() {
+        val result = planCihaiSilentPresence(
+            CihaiSilentPresenceInput(
+                assistantId = "lulu",
+                assistantName = "露露",
+                reason = "主动判断后决定不打扰。",
+                userText = "",
+                actionHintNames = listOf("WRITE_JOURNAL", "READ_BOOK"),
+                books = emptyList(),
+                createdAt = 1_700_000_000_000L,
+            )
+        )
+
+        assertEquals(
+            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.ACTION_LOG),
+            result.entries.map { it.kind },
+        )
+        assertEquals(null, result.updatedBook)
+        assertTrue(result.entries[1].content.contains("没有可读材料"))
+    }
 }
