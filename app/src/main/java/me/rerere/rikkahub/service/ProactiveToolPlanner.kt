@@ -33,6 +33,11 @@ object ProactiveToolPlanner {
             }
         }
 
+        val asksStudyPlan = normalized.containsAny(STUDY_PLAN_WORDS)
+        if (asksStudyPlan) {
+            addAuto("today_study_plan", "用户在问学习 App 里的考研今日计划、待办、番茄钟或完成状态；必须读取本地 StudyStore，不能用系统日历代替。")
+        }
+
         if (normalized.containsAny(TIRED_WORDS)) {
             addAuto("get_gadgetbridge_data", "用户表达疲惫或身体状态不好，需要主动查看睡眠、心率和健康数据。", """{"data_type":"all"}""")
             addAuto("get_app_usage", "用户表达疲惫时，屏幕使用情况可能帮助判断是否熬夜或用机过久。", """{"limit":5}""")
@@ -59,9 +64,12 @@ object ProactiveToolPlanner {
         }
 
         if (normalized.containsAny(SCHEDULE_WORDS)) {
+            if (asksStudyPlan) {
+                addAuto("today_study_plan", "用户提到的是学习计划/待办/考研安排，优先读取学习 App 本地计划。")
+            }
             addAuto("get_app_usage", "用户提到上课、学习或具体时间，需要判断现在是否可能正在忙。", """{"limit":5}""")
             addAuto("get_location", "用户提到上课或行程，位置线索可能帮助判断是否已经到达相关场景。", """{"include_address":true,"force_refresh":true}""")
-            if (normalized.hasExplicitActionConsent()) {
+            if (normalized.hasExplicitActionConsent() && !asksStudyPlan) {
                 addAuto("calendar_tool", "用户明确提到课程、日程或具体时间，可以主动读取或写入日历来延续安排。", """{"action":"read","limit":5}""")
                 normalized.buildAlarmArgumentsJson()?.let { alarmArgs ->
                     addAuto("set_alarm", "用户明确提到课程提醒或叫他，并且给出了具体时间，可以主动设置提醒闹钟。", alarmArgs)
@@ -80,6 +88,7 @@ object ProactiveToolPlanner {
         }
 
         if (normalized.containsAny(STUDY_WORDS)) {
+            addAuto("today_study_plan", "用户提到学习/考研/待办，先读取学习 App 里的真实计划和完成状态。")
             addAuto("get_app_usage", "用户提到学习或写作业，需要判断是否进入专注状态或被手机带跑。", """{"limit":5}""")
             addAuto("control_music", "用户提到学习时，当前音乐状态可能影响专注。", """{"action":"get_now_playing"}""")
             addAuto("get_battery_info", "学习陪伴前顺手确认电量，避免中途断开。")
@@ -192,12 +201,17 @@ object ProactiveToolPlanner {
         "八点", "七点", "六点", "九点", "十点", "7点", "8点", "9点", "10点"
     )
 
+    private val STUDY_PLAN_WORDS = setOf(
+        "考研计划", "今日计划", "今天计划", "学习计划", "今日待办", "今天待办", "待办",
+        "番茄钟", "番茄", "夸夸值", "完成了", "划掉", "打钩", "学什么", "今天学"
+    )
+
     private val MEAL_WORDS = setOf(
         "吃饭", "没吃饭", "还没吃", "晚饭", "午饭", "早饭", "早餐", "午餐", "晚餐", "点外卖", "弄点吃的"
     )
 
     private val STUDY_WORDS = setOf(
-        "学习", "写作业", "作业", "复习", "背书", "刷题", "自习", "看书", "去学", "先不聊"
+        "学习", "写作业", "作业", "复习", "背书", "刷题", "自习", "看书", "去学", "先不聊", "考研"
     )
 
     private val MUSIC_WORDS = setOf(

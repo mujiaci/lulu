@@ -20,6 +20,9 @@ fun List<Tool>.selectRelevantToolsForPrompt(messages: List<UIMessage>): List<Too
     val selected = filter { tool ->
         val name = tool.name.removePrefix("mcp__").lowercase()
         val description = tool.description.lowercase()
+        if (isStudyAppPlanQuery(recentText) && name.contains("calendar") && !isExplicitCalendarQuery(recentText)) {
+            return@filter false
+        }
         name in defaultPromptToolNames ||
             recentText.contains(name) ||
             recentText.contains(name.replace('_', ' ')) ||
@@ -44,6 +47,8 @@ private fun List<Tool>.keepDefaultPromptTools(): List<Tool> {
 }
 
 private fun matchesToolIntent(name: String, text: String): Boolean = when {
+    name == "today_study_plan" ->
+        isStudyAppPlanQuery(text)
     name.contains("search") || name.contains("scrape") || name.contains("web") ->
         text.hasAny("搜", "查", "最新", "新闻", "网页", "网址", "链接", "浏览", "资料", "小红书", "google", "http")
     name.contains("weather") ->
@@ -82,6 +87,36 @@ private fun matchesToolIntent(name: String, text: String): Boolean = when {
 }
 
 private fun String.hasAny(vararg needles: String): Boolean = needles.any { contains(it) }
+
+private fun isStudyAppPlanQuery(text: String): Boolean =
+    text.hasAny(
+        "考研",
+        "学习计划",
+        "今日计划",
+        "今天计划",
+        "明日计划",
+        "明天计划",
+        "今日任务",
+        "今天任务",
+        "明日任务",
+        "明天任务",
+        "今日待办",
+        "今天待办",
+        "待办",
+        "划掉",
+        "打钩",
+        "完成",
+        "番茄钟",
+        "番茄",
+        "夸夸值",
+        "碎片",
+        "抽卡",
+        "学习 app",
+        "学习app",
+    )
+
+private fun isExplicitCalendarQuery(text: String): Boolean =
+    text.hasAny("系统日历", "手机日历", "日历", "会议", "课表")
 
 fun Tool.withHumanLikeToolPrompt(): Tool {
     val guidance = humanLikeToolGuidance(name)
@@ -123,7 +158,10 @@ internal fun humanLikeToolGuidance(toolName: String): String {
             "问通知、未读、消息打扰时使用。"
 
         name.contains("time") || name.contains("calendar") ->
-            "问时间、日期、日程、计划时使用；融入语气。"
+            "问手机系统时间、日期、日程或日历时使用；学习 App 的今日计划不要用它。"
+
+        name == "today_study_plan" ->
+            "问考研计划、学习待办、完成/划掉任务、番茄钟、夸夸值时使用；这是学习 App 本地记录。"
 
         name.contains("camera") ->
             "仅在用户允许或明确要看环境时使用。"

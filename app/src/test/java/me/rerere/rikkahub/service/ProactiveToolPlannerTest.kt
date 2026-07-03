@@ -98,4 +98,15 @@ class ProactiveToolPlannerTest {
         assertTrue(plan.any { it.toolName == "get_app_usage" })
         assertTrue(plan.any { it.toolName == "control_music" })
     }
+
+    @Test
+    fun `today study plan should prefer study store tool over calendar`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "今天我的考研计划是什么，待办还剩哪些？",
+            availableToolNames = setOf("today_study_plan", "calendar_tool", "get_app_usage"),
+        )
+
+        assertTrue(plan.any { it.toolName == "today_study_plan" && it.autoExecutable })
+        assertFalse(plan.any { it.toolName == "calendar_tool" && it.autoExecutable })
+    }
 }

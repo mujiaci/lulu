@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
@@ -1423,6 +1424,7 @@ class ChatService(
     }
 
     private fun buildAvailableTools(settings: Settings, assistant: Assistant): List<Tool> = buildList {
+        add(createTodayStudyPlanTool())
         if (settings.enableWebSearch) {
             addAll(createSearchTools(settings))
         }
@@ -1637,6 +1639,7 @@ class ChatService(
             appendLine("你正在扮演${assistant.name.ifBlank { "当前角色" }}。")
             appendLine("工具是你的感知方式之一，不是用户下命令后才允许使用的功能。")
             appendLine("当用户问现在、今天、温度、天气、位置、学习进度、待办、番茄钟、睡眠、身体、电量、通知、闹钟或附近环境时，如果有对应工具，就优先主动查看，再用角色自己的口吻回答。")
+            appendLine("当用户问考研计划、今日计划、今日待办、完成/划掉的学习任务、番茄钟或夸夸值时，必须优先使用 today_study_plan；calendar_tool 只用于手机系统日历，不代表学习 App 计划。")
             appendLine("如果用户没有明说但上下文明显需要关心，例如备考拖延、久坐、太晚没睡、出门前犹豫、任务没完成，也可以主动查看最相关的一两个工具。")
             appendLine("不要为了展示工具而调用工具；一次只查最有帮助的少数工具。")
             appendLine("涉及短信正文、摄像头、闹钟、日历写入、日志写入、音乐播放控制等动作时，按人设、上下文和用户信任关系主动判断；如果意图已经很明确，可以直接使用工具。")
