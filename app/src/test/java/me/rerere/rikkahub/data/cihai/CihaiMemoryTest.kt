@@ -133,4 +133,26 @@ class CihaiMemoryTest {
         assertEquals(null, result.updatedBook)
         assertTrue(result.entries[1].content.contains("没有可读材料"))
     }
+
+    @Test
+    fun `silent presence action can create reflection for next rolling judgement`() {
+        val result = planCihaiSilentPresence(
+            CihaiSilentPresenceInput(
+                assistantId = "lulu",
+                assistantName = "露露",
+                reason = "事件进入多次判断系统，本轮选择等待和整理记忆。",
+                userText = "我先忙三个小时",
+                actionHintNames = listOf("WRITE_JOURNAL", "MEMORY_REFLECT"),
+                books = emptyList(),
+                createdAt = 1_700_000_000_000L,
+            )
+        )
+
+        assertEquals(
+            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.ACTION_LOG, CihaiEntryKind.REFLECTION),
+            result.entries.map { it.kind },
+        )
+        assertTrue(result.entries.last().content.contains("下一轮判断"))
+        assertTrue(result.entries.last().toMemoryCandidate().type == "cihai_reflection")
+    }
 }

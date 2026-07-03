@@ -290,7 +290,7 @@ class MemoryBankService(
         conversationId: String?,
         createdAt: Long = System.currentTimeMillis(),
     ): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
-        candidates
+        val saved = candidates
             .map { it.normalized() }
             .filter { it.content.isNotBlank() }
             .map { candidate ->
@@ -302,6 +302,8 @@ class MemoryBankService(
                 val id = memoryBankDAO.insertMemory(entity).toInt()
                 entity.copy(id = id)
             }
+        learnRecallCooccurrence(saved)
+        saved
     }
 
     suspend fun getProcessedSourceNodeIds(

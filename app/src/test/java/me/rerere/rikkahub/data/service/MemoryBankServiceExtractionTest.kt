@@ -53,6 +53,41 @@ class MemoryBankServiceExtractionTest {
     }
 
     @Test
+    fun `save extracted memory batch links cooccurring memories into graph`() = runBlocking {
+        val dao = RecordingMemoryBankDAO()
+        val service = MemoryBankService(
+            memoryBankDAO = dao,
+            okHttpClient = null,
+            context = null,
+        )
+
+        val saved = service.saveExtractedMemories(
+            candidates = listOf(
+                AffectiveMemoryCandidate(
+                    type = "cihai_journal",
+                    content = "Lulu decided not to disturb and wrote down her concern.",
+                    importance = 3,
+                    embeddingText = "silent judgement concern",
+                ),
+                AffectiveMemoryCandidate(
+                    type = "cihai_action",
+                    content = "Lulu waited, read context, and prepared the next judgement.",
+                    importance = 3,
+                    embeddingText = "silent action next judgement",
+                ),
+            ),
+            assistantId = "assistant-1",
+            conversationId = null,
+            createdAt = 1234L,
+        )
+
+        assertEquals(listOf(100, 101), saved.map { it.id })
+        assertEquals(setOf(100 to 101, 101 to 100), dao.reinforcedGraphEdges.map { it.sourceId to it.targetId }.toSet())
+        assertTrue(dao.relatedMemoryUpdates[100]!!.contains("101"))
+        assertTrue(dao.relatedMemoryUpdates[101]!!.contains("100"))
+    }
+
+    @Test
     fun `build recall context marks injected memories as recalled`() = runBlocking {
         val dao = RecordingMemoryBankDAO(
             assistantMemories = listOf(

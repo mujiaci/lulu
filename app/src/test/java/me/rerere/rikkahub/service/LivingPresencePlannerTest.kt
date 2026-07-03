@@ -45,4 +45,19 @@ class LivingPresencePlannerTest {
         assertTrue(plans.first().reason.contains("ReAct"))
         assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceAction.WRITE_JOURNAL.name })
     }
+    @Test
+    fun `rolling judgement reason names full loop and memory reflection option`() {
+        val plans = LivingPresencePlanner.planRollingJudgments(
+            input = LivingPresenceInput(
+                assistantName = "Lulu",
+                userText = "I need to be busy for a while",
+                assistantText = "I will stay here and check later.",
+            ),
+            nowMillis = 1_700_000_000_000L,
+        )
+
+        assertTrue(plans.first().reason.contains("RollingJudgmentLoop"))
+        assertTrue(plans.first().reason.contains("graph memory"))
+        assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceAction.MEMORY_REFLECT.name })
+    }
 }

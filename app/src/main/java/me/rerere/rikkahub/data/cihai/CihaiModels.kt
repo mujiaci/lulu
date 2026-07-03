@@ -150,11 +150,28 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
         emotion = "克制、照看、继续判断",
         createdAt = input.createdAt + 1,
     )
+    val reflection = if (CIHAI_ACTION_MEMORY_REFLECT in normalizedHints) {
+        CihaiEntry(
+            assistantId = input.assistantId,
+            kind = CihaiEntryKind.REFLECTION,
+            title = "${input.assistantName.ifBlank { "角色" }} 的下一轮判断沉淀",
+            content = buildString {
+                append("本轮 RollingJudgmentLoop 的结果：事件进入后，我先做 BDI 判断，再用 ReAct 决定不立刻开口。\n")
+                append("我把原始记录留在辞海，把心迹/行动/阅读送入向量记忆，并让同一批记忆进入图谱共现关系。\n")
+                append("下一轮判断要重新看用户是否回来、任务/身体/学习状态是否变化，再决定发消息、查工具、等待、阅读或继续沉淀。")
+            },
+            emotion = "复盘、收束、准备下一轮",
+            createdAt = input.createdAt + 3,
+        )
+    } else {
+        null
+    }
     return CihaiSilentPresenceResult(
         entries = buildList {
             add(journal)
             add(actionLog)
             reading?.entry?.let(::add)
+            reflection?.let(::add)
         },
         updatedBook = reading?.updatedBook,
     )
@@ -195,6 +212,7 @@ fun CihaiBook.readNextReflection(nowMillis: Long = System.currentTimeMillis()): 
 private const val READING_EXCERPT_LENGTH = 700
 private const val CIHAI_ACTION_WRITE_JOURNAL = "WRITE_JOURNAL"
 private const val CIHAI_ACTION_READ_BOOK = "READ_BOOK"
+private const val CIHAI_ACTION_MEMORY_REFLECT = "MEMORY_REFLECT"
 
 fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
     val kindName = when (kind) {

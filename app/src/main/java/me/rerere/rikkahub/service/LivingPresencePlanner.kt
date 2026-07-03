@@ -51,10 +51,11 @@ object LivingPresencePlanner {
         profile: RollingProfile,
         index: Int,
     ): String = buildString {
-        append("${input.assistantName.ifBlank { "角色" }}的滚动判断 #${index + 1}：")
+        append("${input.assistantName.ifBlank { "角色" }}的滚动判断#${index + 1}：")
         append(profile.reason)
-        append(" 这一步采用 BDI 判断信念/欲望/意图，用 ReAct 先想、必要时看工具、再决定是否开口。")
-        append(" 如果用户明显在忙，可以选择等待、写日志、阅读用户给的材料或做记忆沉淀，而不是机械追问。")
+        append(" RollingJudgmentLoop: event enters -> BDI beliefs/desires/intentions -> ReAct think/check/decide -> action pool.")
+        append(" Action pool includes message, tool check, wait, write journal, read, memory reflection.")
+        append(" Cihai records heart trace/action/reading/reflection, then memory keeps raw record, vector memory, graph memory, study state, and schedules the next judgement.")
         append(" 生成时必须重新观察当前状态，不要把这段 reason 当成预写消息。")
     }
 
@@ -70,6 +71,13 @@ object LivingPresencePlanner {
             ProactiveActionHint(
                 toolName = LivingPresenceAction.READ_BOOK.name,
                 reason = "如果用户持续沉默且没有紧急风险，可以阅读辞海里用户交给角色的材料，留下阅读感悟并进入记忆。",
+                autoExecutable = false,
+            )
+        )
+        add(
+            ProactiveActionHint(
+                toolName = LivingPresenceAction.MEMORY_REFLECT.name,
+                reason = "把本轮 BDI/ReAct 判断、辞海记录、向量记忆和图谱记忆整理成沉淀，供下一轮判断复用。",
                 autoExecutable = false,
             )
         )
