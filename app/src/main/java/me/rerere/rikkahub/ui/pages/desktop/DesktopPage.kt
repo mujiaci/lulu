@@ -193,6 +193,27 @@ fun ChatRoomsPage() {
 @Composable
 fun UserProfilePage() {
     val settings = LocalSettings.current
+    val settingsStore = koinInject<SettingsStore>()
+    val scope = rememberCoroutineScope()
+
+    fun updateProfile(
+        nickname: String? = null,
+        profile: String? = null,
+        appearance: String? = null,
+    ) {
+        scope.launch {
+            settingsStore.update { current ->
+                current.copy(
+                    displaySetting = current.displaySetting.copy(
+                        userNickname = nickname ?: current.displaySetting.userNickname,
+                        userProfile = profile ?: current.displaySetting.userProfile,
+                        userAppearancePrompt = appearance ?: current.displaySetting.userAppearancePrompt,
+                    )
+                )
+            }
+        }
+    }
+
     Scaffold(containerColor = CustomColors.topBarColors.containerColor) { padding ->
         Column(
             modifier = Modifier.fillMaxSize().padding(padding).padding(24.dp),
@@ -213,14 +234,38 @@ fun UserProfilePage() {
             Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
                 ) {
-                    Text("昵称", style = MaterialTheme.typography.labelMedium)
-                    Text(settings.displaySetting.userNickname.ifBlank { "还没有设置昵称" })
-                    Text("资料", style = MaterialTheme.typography.labelMedium)
+                    OutlinedTextField(
+                        value = settings.displaySetting.userNickname,
+                        onValueChange = { updateProfile(nickname = it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        label = { Text("我的昵称") },
+                        supportingText = { Text("角色会用这个名字称呼你。") },
+                    )
+                    OutlinedTextField(
+                        value = settings.displaySetting.userProfile,
+                        onValueChange = { updateProfile(profile = it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 4,
+                        maxLines = 8,
+                        label = { Text("我的个人资料") },
+                        supportingText = { Text("可以写身份、目标、偏好、身体状态、学习习惯。") },
+                    )
+                    OutlinedTextField(
+                        value = settings.displaySetting.userAppearancePrompt,
+                        onValueChange = { updateProfile(appearance = it) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        maxLines = 6,
+                        label = { Text("我的外貌 / 互动生图参考") },
+                        supportingText = { Text("星愿馆互动图和聊天稳定设定会使用这里。") },
+                    )
                     Text(
-                        text = "这里先放个人资料入口，后面可以继续加生日、目标、偏好、健康摘要。",
+                        text = "这里保存的是用户资料层。每次聊天会作为稳定资料注入，不需要再去设置页找。",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                     )
                 }
             }
