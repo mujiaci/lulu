@@ -320,7 +320,7 @@ object RollingJudgmentLoop {
         restrained: Boolean,
         nowMillis: Long,
     ): EmotionSnapshot {
-        val base = intent.emotion
+        val base = intent.emotion.decayedUntil(nowMillis)
         val concernDelta = when {
             intent.kind == LivingIntentKind.HEALTH_SAFETY && LivingAction.MESSAGE !in actions -> 1
             intent.kind == LivingIntentKind.DEADLINE -> 1
@@ -355,6 +355,20 @@ object RollingJudgmentLoop {
             relief = (base.relief + reliefDelta).coerceIn(0, 10),
             lastChangedAt = nowMillis,
             label = label,
+        )
+    }
+
+    private fun EmotionSnapshot.decayedUntil(nowMillis: Long): EmotionSnapshot {
+        val changedAt = lastChangedAt ?: return this
+        val elapsedHours = ((nowMillis - changedAt) / (60L * MINUTE_MILLIS)).coerceAtLeast(0L).toInt()
+        if (elapsedHours <= 0) return this
+        val emotionalDecay = elapsedHours.coerceAtMost(4)
+        val reliefDecay = elapsedHours.coerceAtMost(2)
+        return copy(
+            concern = (concern - emotionalDecay).coerceAtLeast(0),
+            tension = (tension - emotionalDecay).coerceAtLeast(0),
+            disappointment = (disappointment - emotionalDecay).coerceAtLeast(0),
+            relief = (relief - reliefDecay).coerceAtLeast(0),
         )
     }
 

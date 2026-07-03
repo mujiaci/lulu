@@ -51,6 +51,7 @@ import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
+import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
@@ -98,6 +99,7 @@ import me.rerere.rikkahub.service.LivingIntentKind
 import me.rerere.rikkahub.service.LivingJudgmentModelInput
 import me.rerere.rikkahub.service.LivingJudgmentModelPlanner
 import me.rerere.rikkahub.service.LivingObservation
+import me.rerere.rikkahub.service.LivingObservationToolRunner
 import me.rerere.rikkahub.service.LuluIntent
 import me.rerere.rikkahub.service.LuluIntentInput
 import me.rerere.rikkahub.service.LuluIntentModelPlanner
@@ -915,6 +917,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 // 构建工具列表（与 ChatService 保持一致）
                 val tools = buildTools(settings, assistant, model, historyMessages)
+                val observationTools = buildAllTools(settings, assistant)
                 val nowMillis = System.currentTimeMillis()
                 val dueLivingIntent = livingPresenceStore.nextDueIntent(
                     assistantId = assistantUuid.toString(),
@@ -923,7 +926,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val livingPresenceObservation = dueLivingIntent?.let { intent ->
                     buildLivingPresenceRuntimeObservation(
                         intent = intent,
-                        tools = tools,
+                        tools = observationTools,
                         historyMessages = historyMessages,
                         minutesSinceLastChat = minutesSinceLastChat,
                         nowMillis = nowMillis,
@@ -1252,7 +1255,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         return START_NOT_STICKY
     }
 
-    private fun buildLivingPresenceRuntimeObservation(
+    private suspend fun buildLivingPresenceRuntimeObservation(
         intent: LivingIntent,
         tools: List<Tool>,
         historyMessages: List<UIMessage>,
@@ -1265,6 +1268,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             availableToolNames.any { available -> available == requested || available.contains(requested) }
         }
         val missingRequestedTools = request.requestedTools - availableRequestedTools.toSet()
+        val toolObservationResults = observeRequestedToolsForLivingPresence(
+            intent = intent,
+            tools = tools,
+            requestedToolNames = request.requestedTools,
+        )
         val studyState = studyStore.state.value
         val openTasks: List<StudyTask> = studyState.tasks.filter { task -> !task.done }
         val doneTaskCount: Int = studyState.tasks.count { task -> task.done }
@@ -1278,6 +1286,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             add("available_tool_count=${availableToolNames.size}")
             addAll(availableRequestedTools.map { "available_tool=$it" })
             addAll(missingRequestedTools.map { "missing_tool=$it" })
+            addAll(toolObservationResults)
             minutesSinceLastChat?.let { add("minutes_since_last_chat=$it") }
             add("study_tasks_open=${openTasks.size}")
             add("study_tasks_done=$doneTaskCount")
@@ -1292,6 +1301,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             append("requested_tools=${request.requestedTools.joinToString(", ").ifBlank { "none" }}; ")
             append("available_requested_tools=${availableRequestedTools.joinToString(", ").ifBlank { "none" }}; ")
             append("missing_requested_tools=${missingRequestedTools.joinToString(", ").ifBlank { "none" }}; ")
+            append("tool_observations=${toolObservationResults.joinToString(" | ").ifBlank { "none" }}; ")
             append("minutes_since_last_chat=${minutesSinceLastChat ?: "unknown"}; ")
             append("study_tasks_open=${openTasks.size}; study_tasks_done=$doneTaskCount")
             if (openTasks.isNotEmpty()) {
@@ -1311,6 +1321,27 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             signals = signals,
             createdAt = nowMillis,
         )
+    }
+
+    private suspend fun observeRequestedToolsForLivingPresence(
+        intent: LivingIntent,
+        tools: List<Tool>,
+        requestedToolNames: List<String>,
+    ): List<String> {
+        val toolsByName = tools.associateBy { it.name.removePrefix("mcp__") }
+        return requestedToolNames
+            .distinct()
+            .filter { LivingObservationToolRunner.canAutoObserve(it) }
+            .map { requested ->
+                val tool = toolsByName[requested] ?: return@map "tool_result[$requested]=unavailable"
+                runCatching {
+                    val args = LivingObservationToolRunner.argumentsFor(tool.name, intent.kind)
+                    val outputs = tool.execute(args).filterIsInstance<UIMessagePart.Text>().map { it.text }
+                    LivingObservationToolRunner.formatResult(tool.name, outputs)
+                }.getOrElse { error ->
+                    LivingObservationToolRunner.formatFailure(tool.name, error)
+                }
+            }
     }
 
     private fun batterySignal(): String? {
@@ -1493,15 +1524,26 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         assistant: Assistant,
         model: Model,
         messages: List<UIMessage>,
+    ): List<Tool> =
+        buildAllTools(settings, assistant)
+            .deduplicateByToolName()
+            .selectRelevantToolsForPrompt(messages)
+            .withHumanLikeToolPrompts()
+
+    private fun buildAllTools(
+        settings: Settings,
+        assistant: Assistant,
     ): List<Tool> {
         return buildList {
+            add(createTodayStudyPlanTool())
+
             // 搜索工具
             if (settings.enableWebSearch) {
                 addAll(createSearchTools(settings))
             }
             
             // 本地工具
-addAll(localTools.getTools(assistant.localTools))
+            addAll(localTools.getTools(assistant.localTools))
             
             // 系统工具（位置、通知、日历、闹钟、相机）
             val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
@@ -1540,7 +1582,6 @@ addAll(localTools.getTools(assistant.localTools))
             addAll(pluginToolProvider.getTools())
         }
             .deduplicateByToolName()
-            .selectRelevantToolsForPrompt(messages)
             .withHumanLikeToolPrompts()
     }
 

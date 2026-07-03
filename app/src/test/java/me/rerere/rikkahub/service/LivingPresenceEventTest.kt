@@ -95,6 +95,33 @@ class LivingPresenceEventTest {
     }
 
     @Test
+    fun `extractor treats plain call me at clock time as wake target`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "9点叫我一下",
+            assistantText = "我记住。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.WAKE_UP, event.kind)
+        assertTrue(event.targetAtMillis != null)
+        assertTrue(event.rawSignals.any { it.startsWith("time_signal=") })
+    }
+
+    @Test
+    fun `extractor treats remind me at clock time as wake target`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "晚上六点提醒我继续背书",
+            assistantText = "好，到点我会来。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.WAKE_UP, event.kind)
+        assertTrue(event.targetAtMillis != null)
+    }
+
+    @Test
     fun `extractor keeps relative busy duration as time signal without turning it into wake event`() {
         val event = LivingPresenceEventExtractor.extract(
             assistantName = "露露",

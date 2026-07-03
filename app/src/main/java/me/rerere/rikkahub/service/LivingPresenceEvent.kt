@@ -185,7 +185,7 @@ object LivingPresenceEventExtractor {
         }
         val millis = target.atZone(zone).toInstant().toEpochMilli()
         val isDeadline = text.containsAny(DEADLINE_WORDS) || text.contains("前") || text.contains("之前")
-        val isWake = text.containsAny(WAKE_WORDS)
+        val isWake = text.containsAny(WAKE_WORDS) || text.containsAny(REMINDER_WORDS)
         val raw = "time_signal=${timeMatch.value.trim()}@${target}"
         return when {
             isDeadline -> ParsedTimeSignal(deadlineAtMillis = millis, rawSignal = raw)
@@ -206,7 +206,7 @@ object LivingPresenceEventExtractor {
         }.coerceAtLeast(1L)
         val millis = nowMillis + delayMinutes * 60_000L
         val isDeadline = text.containsAny(DEADLINE_WORDS) || text.contains("前") || text.contains("之前")
-        val isWake = text.containsAny(WAKE_WORDS) || text.contains("提醒")
+        val isWake = text.containsAny(WAKE_WORDS) || text.containsAny(REMINDER_WORDS)
         val raw = "relative_time_signal=${timeMatch.value.trim()}@+${delayMinutes}min"
         return when {
             isDeadline -> ParsedTimeSignal(deadlineAtMillis = millis, rawSignal = raw)
@@ -254,6 +254,7 @@ object LivingPresenceEventExtractor {
     private val STUDY_WORDS = setOf("学习", "复习", "背书", "刷题", "写作业", "自习", "看书", "专业课", "考研")
     private val DEADLINE_WORDS = setOf("ddl", "截止", "交", "提交", "今晚", "今天之前", "点前", "之前完成")
     private val WAKE_WORDS = setOf("起床", "叫醒", "闹钟", "醒来")
+    private val REMINDER_WORDS = setOf("叫我", "提醒我", "催我", "到点叫", "到时候叫")
 }
 
 object LivingBeliefStore {

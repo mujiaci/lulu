@@ -252,6 +252,34 @@ class RollingJudgmentLoopTest {
         assertTrue(decision.updatedIntent.emotion.label.contains("忍住"))
     }
 
+    @Test
+    fun `emotion state decays across long quiet gaps before new deltas`() {
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantName = "露露",
+            userText = "我先忙一下",
+            assistantText = "好，我在这里等你。",
+            nowMillis = NOW,
+        ).copy(
+            emotion = EmotionSnapshot(
+                concern = 8,
+                attachment = 8,
+                restraint = 8,
+                label = "很紧张",
+                tension = 8,
+                disappointment = 6,
+                relief = 4,
+                lastChangedAt = NOW,
+            ),
+            nextEvaluateAt = NOW + 180 * MINUTE,
+        )
+
+        val decision = RollingJudgmentLoop.evaluate(intent, nowMillis = NOW + 180 * MINUTE)
+
+        assertTrue(decision.updatedIntent.emotion.tension < intent.emotion.tension)
+        assertTrue(decision.updatedIntent.emotion.disappointment < intent.emotion.disappointment)
+        assertTrue(decision.updatedIntent.emotion.relief < intent.emotion.relief)
+    }
+
     private companion object {
         const val NOW = 1_700_000_000_000L
         const val MINUTE = 60_000L
