@@ -106,7 +106,9 @@ class StudyVM(
                 if (schedule.isEmpty()) {
                     error("主 API 没有返回可读取的时间表，请再点一次生成。")
                 }
-                store.set(StudyRules.saveGeneratedSchedule(currentState, date, schedule))
+                store.update { current ->
+                    StudyRules.saveGeneratedSchedule(current, date, schedule)
+                }
                 _effects.tryEmit(StudyEffect.Message("今日计划表已生成"))
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -149,26 +151,36 @@ class StudyVM(
 
     fun draw(count: Int) {
         viewModelScope.launch {
-            val result = StudyRules.draw(state.value, count, Random.Default)
-            if (result.results.isEmpty()) {
-                _effects.tryEmit(StudyEffect.Message("夸夸值或抽卡券不够"))
-                store.set(result.state)
+            var revealItems: List<StudyDrawReveal> = emptyList()
+            var message: String? = null
+            var shouldUpdateStarWish = false
+            var nextStarWishState = starWishStore.state.value
+            store.update { current ->
+                val result = StudyRules.draw(current, count, Random.Default)
+                if (result.results.isEmpty()) {
+                    message = "夸夸值或抽卡券不够"
+                    return@update result.state
+                }
+                var nextStudyState = result.state
+                nextStarWishState = starWishStore.state.value
+                revealItems = result.results.map { drawResult ->
+                    if (drawResult.rarity == StudyRarity.Rainbow) {
+                        val unlock = StarWishRules.unlockNextVideo(nextStarWishState, nextStudyState, Random.Default)
+                        nextStudyState = unlock.studyState
+                        nextStarWishState = unlock.starWishState
+                        shouldUpdateStarWish = true
+                        StudyDrawReveal(drawResult, unlock.video)
+                    } else {
+                        StudyDrawReveal(drawResult)
+                    }
+                }
+                nextStudyState
+            }
+            message?.let {
+                _effects.tryEmit(StudyEffect.Message(it))
                 return@launch
             }
-            var nextStudyState = result.state
-            var nextStarWishState = starWishStore.state.value
-            val revealItems = result.results.map { drawResult ->
-                if (drawResult.rarity == StudyRarity.Rainbow) {
-                    val unlock = StarWishRules.unlockNextVideo(nextStarWishState, nextStudyState, Random.Default)
-                    nextStudyState = unlock.studyState
-                    nextStarWishState = unlock.starWishState
-                    StudyDrawReveal(drawResult, unlock.video)
-                } else {
-                    StudyDrawReveal(drawResult)
-                }
-            }
-            store.set(nextStudyState)
-            if (nextStarWishState != starWishStore.state.value) {
+            if (shouldUpdateStarWish && nextStarWishState != starWishStore.state.value) {
                 starWishStore.update { nextStarWishState }
             }
             _effects.tryEmit(StudyEffect.DrawResults(revealItems))
@@ -243,7 +255,7 @@ class StudyVM(
 
     private fun reduce(transform: (StudyState) -> StudyState) {
         viewModelScope.launch {
-            store.set(transform(state.value))
+            store.update(transform)
         }
     }
 

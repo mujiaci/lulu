@@ -148,25 +148,31 @@ class StarWishVM(
     fun unlockNextVideoOrPlayRandom() {
         viewModelScope.launch {
             val currentStarWish = state.value
-            val currentStudy = studyState.value
             val visibleVideos = StarWishRules.allVideos(currentStarWish.customVideos)
                 .filterNot { it.id in currentStarWish.hiddenVideoIds }
             val hasLockedVideo = visibleVideos.any { it.id !in currentStarWish.unlockedVideoIds }
-            val result = StarWishRules.unlockNextVideo(currentStarWish, currentStudy, Random.Default)
+            var result = StarWishRules.unlockNextVideo(currentStarWish, studyState.value, Random.Default)
             val video = result.video
             if (video == null) {
                 _videoMessage.tryEmit(if (visibleVideos.isEmpty()) "先上传或内置视频后再解锁" else "还需要 1 个视频碎片")
                 return@launch
             }
             if (result.consumedFragment) {
-                studyStore.set(result.studyState)
+                studyStore.update { currentStudy ->
+                    result = StarWishRules.unlockNextVideo(currentStarWish, currentStudy, Random.Default)
+                    result.studyState
+                }
+                if (!result.consumedFragment || result.video == null) {
+                    _videoMessage.tryEmit("还需要 1 个视频碎片")
+                    return@launch
+                }
                 store.update { result.starWishState }
-                _videoMessage.tryEmit("已解锁：${video.title}")
+                _videoMessage.tryEmit("已解锁：${result.video!!.title}")
             } else if (hasLockedVideo) {
                 _videoMessage.tryEmit("还需要 1 个视频碎片")
                 return@launch
             }
-            _videoPlayback.emit(video)
+            _videoPlayback.emit(result.video ?: video)
         }
     }
 

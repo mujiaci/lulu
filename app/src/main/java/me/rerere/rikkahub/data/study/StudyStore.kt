@@ -36,7 +36,7 @@ class StudyStore(
         scope.launch {
             context.studyDataStore.edit { prefs ->
                 val current = readState(prefs) ?: return@edit
-                val migrated = current.ensureToday().preserveOfficialEconomy()
+                val migrated = current.ensureToday().preserveOfficialEconomy().grantDataLossCompensation()
                 if (migrated != current) {
                     prefs.writeState(migrated)
                 }
@@ -51,7 +51,7 @@ class StudyStore(
         .catch { emit(StudyState(today = LocalDate.now().toString())) }
         .map {
             StudyRules.refreshShopIfNeeded(
-                it.ensureToday().preserveOfficialEconomy(),
+                it.ensureToday().preserveOfficialEconomy().grantDataLossCompensation(),
                 LocalDate.now(),
                 Random.Default,
             )
@@ -60,15 +60,15 @@ class StudyStore(
 
     suspend fun update(transform: (StudyState) -> StudyState) {
         context.studyDataStore.edit { prefs ->
-            val current = readState(prefs) ?: return@edit
-            val migrated = current.ensureToday().preserveOfficialEconomy()
-            prefs.writeState(transform(migrated))
+            val current = readState(prefs) ?: StudyState(today = LocalDate.now().toString())
+            val migrated = current.ensureToday().preserveOfficialEconomy().grantDataLossCompensation()
+            prefs.writeState(transform(migrated).preserveOfficialEconomy().grantDataLossCompensation())
         }
     }
 
     suspend fun set(state: StudyState) {
         context.studyDataStore.edit { prefs ->
-            prefs.writeState(state)
+            prefs.writeState(state.preserveOfficialEconomy().grantDataLossCompensation())
         }
     }
 
@@ -107,3 +107,6 @@ private fun StudyState.preserveOfficialEconomy(): StudyState {
         copy(internalTestGrantVersion = StudyRules.OFFICIAL_ECONOMY_RESET_VERSION)
     }
 }
+
+private fun StudyState.grantDataLossCompensation(): StudyState =
+    StudyRules.grantDataLossCompensation(this)

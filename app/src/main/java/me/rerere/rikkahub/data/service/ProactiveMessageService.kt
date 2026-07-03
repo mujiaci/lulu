@@ -87,7 +87,9 @@ import me.rerere.rikkahub.data.model.thoughtHistory
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.study.ExamStudyPlan
+import me.rerere.rikkahub.data.study.StudyScheduleBlock
 import me.rerere.rikkahub.data.study.StudyStore
+import me.rerere.rikkahub.data.study.StudyTask
 import me.rerere.rikkahub.data.study.StudyTaskSource
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.LivingAction
@@ -1263,11 +1265,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
         val missingRequestedTools = request.requestedTools - availableRequestedTools.toSet()
         val studyState = studyStore.state.value
-        val openTasks = studyState.tasks.filterNot { it.done }
-        val doneTaskCount = studyState.tasks.count { it.done }
-        val todaySchedule = runCatching {
+        val openTasks: List<StudyTask> = studyState.tasks.filter { task -> !task.done }
+        val doneTaskCount: Int = studyState.tasks.count { task -> task.done }
+        val todaySchedule: List<StudyScheduleBlock> = runCatching {
             ExamStudyPlan.todaySchedule(LocalDate.now()).take(3)
-        }.getOrDefault(emptyList())
+        }.getOrDefault(emptyList<StudyScheduleBlock>())
         val lastUserText = historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
         val signals = buildList {
             addAll(request.signals)

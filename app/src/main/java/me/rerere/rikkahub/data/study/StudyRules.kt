@@ -9,6 +9,7 @@ object StudyRules {
     const val DISCOUNT_SINGLE_DRAW_COST = 50
     const val TEN_DRAW_COST = 400
     const val OFFICIAL_ECONOMY_RESET_VERSION = 2
+    const val DATA_LOSS_COMPENSATION_VERSION = 3
     const val NORMAL_FRAGMENTS_PER_OUTFIT = 10
     private const val OVERFLOW_NORMAL_FRAGMENT_KUDOS = 100
     private const val INTERNAL_TEST_GRANT_VERSION = 1
@@ -134,15 +135,40 @@ object StudyRules {
         )
     }
 
+    fun grantDataLossCompensation(state: StudyState): StudyState {
+        if (state.internalTestGrantVersion >= DATA_LOSS_COMPENSATION_VERSION) return state
+        val reward = StudyReward(tenDrawTickets = 1, title = "数据保护补偿：十连抽券 x1")
+        return state.copy(
+            wallet = state.wallet.add(reward),
+            internalTestGrantVersion = DATA_LOSS_COMPENSATION_VERSION,
+            recentEvents = state.recentEvents.addEvent(
+                StudyEventType.Fragment,
+                "数据保护补偿",
+                "十连抽券 x1；之后更新会继续保留夸夸值、碎片、待办完成和番茄记录",
+            ),
+        )
+    }
+
     fun syncPlanTasks(state: StudyState, date: LocalDate = LocalDate.now()): StudyState {
         val dateText = date.toString()
         val plan = ExamStudyPlan.todayPlan(date)
         val manualTasks = state.tasks.filter { it.source != StudyTaskSource.Plan }
+        val existingPlanTasksById = state.tasks
+            .filter { it.source == StudyTaskSource.Plan }
+            .associateBy { it.id }
+        val existingPlanTasksByTitle = state.tasks
+            .filter { it.source == StudyTaskSource.Plan }
+            .associateBy { it.title }
         val planTasks = plan?.tasks?.mapIndexed { index, task ->
+            val id = "plan-$dateText-$index"
+            val title = "${task.kind.label}｜${task.title}"
+            val existing = existingPlanTasksById[id] ?: existingPlanTasksByTitle[title]
             StudyTask(
-                id = "plan-$dateText-$index",
-                title = "${task.kind.label}｜${task.title}",
-                createdAt = date.toEpochDay(),
+                id = id,
+                title = title,
+                done = existing?.done ?: false,
+                createdAt = existing?.createdAt ?: date.toEpochDay(),
+                completedAt = existing?.completedAt,
                 source = StudyTaskSource.Plan,
             )
         }.orEmpty()

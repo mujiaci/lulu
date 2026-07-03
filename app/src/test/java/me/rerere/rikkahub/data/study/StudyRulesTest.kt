@@ -123,7 +123,7 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `economy reset clears test currency fragments tickets and shop state once`() {
+    fun `official economy marker never clears local study assets`() {
         val state = StudyState(
             wallet = StudyWallet(kudos = 999, totalKudosEarned = 1_500, singleDrawTickets = 3, tenDrawTickets = 2),
             inventory = StudyInventory(
@@ -148,23 +148,23 @@ class StudyRulesTest {
         val reset = StudyRules.resetEconomyForOfficialStart(state)
         val duplicate = StudyRules.resetEconomyForOfficialStart(reset)
 
-        assertEquals(0, reset.wallet.kudos)
-        assertEquals(0, reset.wallet.totalKudosEarned)
-        assertEquals(0, reset.wallet.singleDrawTickets)
-        assertEquals(0, reset.wallet.tenDrawTickets)
-        assertTrue(reset.inventory.normalFragments.isEmpty())
-        assertTrue(reset.inventory.rareFragments.isEmpty())
-        assertEquals(0, reset.inventory.epicFragments)
-        assertEquals(0, reset.inventory.specialStoryFragments)
-        assertEquals(0, reset.inventory.universalNormalFragments)
-        assertEquals(0, reset.inventory.universalRareFragments)
-        assertEquals(0, reset.inventory.universalEpicFragments)
-        assertTrue(reset.inventory.unlockedOutfits.isEmpty())
-        assertTrue(reset.inventory.unopenedMysteryBoxes.isEmpty())
-        assertTrue(reset.claimedLevelRewards.isEmpty())
-        assertTrue(reset.claimedAchievementIds.isEmpty())
-        assertEquals(null, reset.shopDate)
-        assertTrue(reset.shopItems.isEmpty())
+        assertEquals(999, reset.wallet.kudos)
+        assertEquals(1_500, reset.wallet.totalKudosEarned)
+        assertEquals(3, reset.wallet.singleDrawTickets)
+        assertEquals(2, reset.wallet.tenDrawTickets)
+        assertEquals(4, reset.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
+        assertEquals(2, reset.inventory.rareFragments.getValue("rare:any"))
+        assertEquals(3, reset.inventory.epicFragments)
+        assertEquals(2, reset.inventory.specialStoryFragments)
+        assertEquals(5, reset.inventory.universalNormalFragments)
+        assertEquals(4, reset.inventory.universalRareFragments)
+        assertEquals(1, reset.inventory.universalEpicFragments)
+        assertTrue(reset.inventory.unlockedOutfits.contains("星穹图书馆"))
+        assertEquals(1, reset.inventory.unopenedMysteryBoxes.size)
+        assertTrue(reset.claimedLevelRewards.containsAll(setOf(1, 2)))
+        assertTrue(reset.claimedAchievementIds.contains("warm_start"))
+        assertEquals("2026-07-02", reset.shopDate)
+        assertEquals(1, reset.shopItems.size)
         assertEquals(StudyRules.OFFICIAL_ECONOMY_RESET_VERSION, reset.internalTestGrantVersion)
         assertEquals(reset, duplicate)
     }
@@ -258,6 +258,64 @@ class StudyRulesTest {
 
         assertTrue(synced.tasks.any { it.title.contains("刑法1入口") })
         assertFalse(synced.generatedSchedules.containsKey(date.toString()))
+    }
+
+    @Test
+    fun `syncing changed plan tasks preserves completed plan records by stable id`() {
+        val date = LocalDate.of(2026, 7, 3)
+        val completedAt = 1_700_000_123_000L
+        val state = StudyState(
+            today = date.toString(),
+            activePlanDate = date.toString(),
+            wallet = StudyWallet(kudos = 320, totalKudosEarned = 900, tenDrawTickets = 2),
+            inventory = StudyInventory(normalFragments = mapOf("normal:星穹图书馆:专属碎片" to 4)),
+            stats = StudyStats(totalPomodoros = 5, totalTasksCompleted = 8, totalStudyMinutes = 125),
+            tasks = listOf(
+                StudyTask(
+                    id = "plan-${date}-0",
+                    title = "旧计划｜今天完全休息",
+                    done = true,
+                    completedAt = completedAt,
+                    source = StudyTaskSource.Plan,
+                ),
+            ),
+        )
+
+        val synced = StudyRules.syncPlanTasks(state, date)
+        val firstPlanTask = synced.tasks.first { it.id == "plan-${date}-0" }
+
+        assertTrue(firstPlanTask.done)
+        assertEquals(completedAt, firstPlanTask.completedAt)
+        assertEquals(320, synced.wallet.kudos)
+        assertEquals(2, synced.wallet.tenDrawTickets)
+        assertEquals(4, synced.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
+        assertEquals(5, synced.stats.totalPomodoros)
+    }
+
+    @Test
+    fun `data loss compensation grants one ten draw ticket once without clearing study assets`() {
+        val state = StudyState(
+            wallet = StudyWallet(kudos = 123, totalKudosEarned = 456, singleDrawTickets = 1),
+            inventory = StudyInventory(
+                normalFragments = mapOf("normal:星穹图书馆:专属碎片" to 2),
+                epicFragments = 1,
+            ),
+            stats = StudyStats(totalPomodoros = 3, totalTasksCompleted = 4, totalStudyMinutes = 75),
+            internalTestGrantVersion = StudyRules.OFFICIAL_ECONOMY_RESET_VERSION,
+        )
+
+        val compensated = StudyRules.grantDataLossCompensation(state)
+        val duplicate = StudyRules.grantDataLossCompensation(compensated)
+
+        assertEquals(123, compensated.wallet.kudos)
+        assertEquals(456, compensated.wallet.totalKudosEarned)
+        assertEquals(1, compensated.wallet.singleDrawTickets)
+        assertEquals(1, compensated.wallet.tenDrawTickets)
+        assertEquals(2, compensated.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
+        assertEquals(1, compensated.inventory.epicFragments)
+        assertEquals(3, compensated.stats.totalPomodoros)
+        assertEquals(StudyRules.DATA_LOSS_COMPENSATION_VERSION, compensated.internalTestGrantVersion)
+        assertEquals(compensated, duplicate)
     }
 
     @Test
