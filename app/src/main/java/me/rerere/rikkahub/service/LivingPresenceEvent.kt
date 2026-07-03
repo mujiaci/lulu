@@ -78,6 +78,7 @@ object LivingPresenceEventExtractor {
             text.containsAny(STUDY_WORDS) -> LivingPresenceEventKind.STUDY_FOCUS
             else -> LivingPresenceEventKind.ORDINARY_SILENCE
         }
+        val hasExtractedTime = hasTimeSignal(text) || effectiveTargetAt != null || effectiveDeadlineAt != null
         return LivingPresenceEvent(
             kind = kind,
             assistantId = assistantId,
@@ -85,7 +86,7 @@ object LivingPresenceEventExtractor {
             userText = userText,
             assistantText = assistantText,
             rawSignals = rawSignals(kind, text, parsedTime.rawSignal),
-            apiPlan = buildApiPlan(kind, hasTimeSignal = hasTimeSignal(text) || effectiveTargetAt != null || effectiveDeadlineAt != null),
+            apiPlan = buildApiPlan(kind, hasTimeSignal = hasExtractedTime),
             createdAt = nowMillis,
             targetAtMillis = effectiveTargetAt,
             deadlineAtMillis = effectiveDeadlineAt,
@@ -135,11 +136,18 @@ object LivingPresenceEventExtractor {
     }.distinct()
 
     private fun hasTimeSignal(text: String): Boolean =
-        text.contains(Regex("[\\d一二两三四五六七八九十]+\\s*(点|:|：|min|分钟|小时|h)")) ||
-            listOf("今晚", "今天", "明天", "ddl", "截止", "到点").any { text.contains(it) }
+        text.contains(Regex("[\\d一二两三四五六七八九十]+\\s*(点|:|：|min|分钟|分|个小时|小时|h)")) ||
+            listOf("今晚", "明早", "明晚", "今天", "明天", "ddl", "截止", "到点", "提醒").any { text.contains(it) }
 
     private fun parseTimeSignal(text: String, nowMillis: Long): ParsedTimeSignal {
-        val timeMatch = Regex("""(今天|明天|后天|今晚)?\s*(早上|上午|中午|下午|晚上|夜里|凌晨)?\s*([0-9一二两三四五六七八九十]{1,3})\s*(?::|：|点)\s*([0-9一二两三四五六七八九十]{1,2}|半)?""")
+        parseRelativeTimeSignal(text, nowMillis).takeUnless { it.isEmpty() }?.let { return it }
+        val absoluteTimeRegex = Regex(
+            """(今天|明天|后天|今晚|明早|明晚)?\s*""" +
+                """(早上|上午|中午|下午|晚上|夜里|凌晨)?\s*""" +
+                """([0-9一二两三四五六七八九十]{1,3})\s*(?::|：|点)\s*""" +
+                """([0-9一二两三四五六七八九十]{1,2}|半)?"""
+        )
+        val timeMatch = absoluteTimeRegex
             .find(text)
             ?: return ParsedTimeSignal()
         val dateWord = timeMatch.groupValues[1]
@@ -153,7 +161,9 @@ object LivingPresenceEventExtractor {
             else -> 0
         }
         var hour = hourBase
-        if ((period == "下午" || period == "晚上" || period == "夜里" || dateWord == "今晚") && hour in 1..11) {
+        val isEvening = period == "下午" || period == "晚上" || period == "夜里" ||
+            dateWord == "今晚" || dateWord == "明晚"
+        if (isEvening && hour in 1..11) {
             hour += 12
         }
         if (period == "中午" && hour in 1..10) {
@@ -163,7 +173,7 @@ object LivingPresenceEventExtractor {
         val zone = ZoneId.systemDefault()
         val now = LocalDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), zone)
         val dayOffset = when (dateWord) {
-            "明天" -> 1L
+            "明天", "明早", "明晚" -> 1L
             "后天" -> 2L
             else -> 0L
         }
@@ -177,6 +187,27 @@ object LivingPresenceEventExtractor {
         val isDeadline = text.containsAny(DEADLINE_WORDS) || text.contains("前") || text.contains("之前")
         val isWake = text.containsAny(WAKE_WORDS)
         val raw = "time_signal=${timeMatch.value.trim()}@${target}"
+        return when {
+            isDeadline -> ParsedTimeSignal(deadlineAtMillis = millis, rawSignal = raw)
+            isWake -> ParsedTimeSignal(targetAtMillis = millis, rawSignal = raw)
+            else -> ParsedTimeSignal(rawSignal = raw)
+        }
+    }
+
+    private fun parseRelativeTimeSignal(text: String, nowMillis: Long): ParsedTimeSignal {
+        val timeMatch = Regex("""([0-9一二两三四五六七八九十]{1,3})\s*(个小时|小时|分钟|分|min|h)\s*(后|以后|之后)?""")
+            .find(text)
+            ?: return ParsedTimeSignal()
+        val amount = parseChineseNumber(timeMatch.groupValues[1]) ?: return ParsedTimeSignal()
+        val unit = timeMatch.groupValues[2]
+        val delayMinutes = when (unit) {
+            "个小时", "小时", "h" -> amount * 60L
+            else -> amount.toLong()
+        }.coerceAtLeast(1L)
+        val millis = nowMillis + delayMinutes * 60_000L
+        val isDeadline = text.containsAny(DEADLINE_WORDS) || text.contains("前") || text.contains("之前")
+        val isWake = text.containsAny(WAKE_WORDS) || text.contains("提醒")
+        val raw = "relative_time_signal=${timeMatch.value.trim()}@+${delayMinutes}min"
         return when {
             isDeadline -> ParsedTimeSignal(deadlineAtMillis = millis, rawSignal = raw)
             isWake -> ParsedTimeSignal(targetAtMillis = millis, rawSignal = raw)
@@ -215,7 +246,9 @@ object LivingPresenceEventExtractor {
         val targetAtMillis: Long? = null,
         val deadlineAtMillis: Long? = null,
         val rawSignal: String? = null,
-    )
+    ) {
+        fun isEmpty(): Boolean = targetAtMillis == null && deadlineAtMillis == null && rawSignal == null
+    }
 
     private val HEALTH_WORDS = setOf("肚子", "胃", "头", "肚子疼", "肚子痛", "胃疼", "胃痛", "难受", "不舒服", "头疼", "头痛", "疼", "痛")
     private val STUDY_WORDS = setOf("学习", "复习", "背书", "刷题", "写作业", "自习", "看书", "专业课", "考研")

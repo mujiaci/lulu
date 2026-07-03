@@ -55,6 +55,10 @@ data class EmotionSnapshot(
     val attachment: Int,
     val restraint: Int,
     val label: String,
+    val tension: Int = 0,
+    val disappointment: Int = 0,
+    val relief: Int = 0,
+    val lastChangedAt: Long? = null,
 )
 
 @Serializable
@@ -171,7 +175,7 @@ object RollingJudgmentLoop {
         val nextSilentCount = intent.silentEvaluationCount + 1
         val restrained = intent.spokenCount > 0 && intent.lastSpokenAt != null
         val observation = externalObservation ?: observe(intent, nowMillis)
-        val actions = when {
+        val ruleActions = when {
             restrained -> listOf(
                 LivingAction.WAIT,
                 LivingAction.JOURNAL_WRITE,
@@ -190,13 +194,17 @@ object RollingJudgmentLoop {
             )
         }.filter { it in intent.allowedActions || it == LivingAction.SCHEDULE_NEXT_TICK }
 
+        val actions = actionsFromStructuredTrace(
+            trace = externalJudgmentTrace,
+            allowedActions = intent.allowedActions,
+        ) ?: ruleActions
         val thought = structuredThought(intent, observation, restrained)
         val trace = externalJudgmentTrace?.copy(
             source = LivingJudgmentSource.MAIN_API_STRUCTURED_JUDGMENT,
             createdAt = nowMillis,
         ) ?: buildJudgmentTrace(intent, observation, actions, thought, nowMillis)
         val nextEvaluateAt = nowMillis + nextDelayMinutes(intent, nextSilentCount) * MINUTE_MILLIS
-        val evolvedEmotion = evolveEmotion(intent, actions, restrained)
+        val evolvedEmotion = evolveEmotion(intent, actions, restrained, nowMillis)
         val updated = intent.copy(
             lastEvaluatedAt = nowMillis,
             silentEvaluationCount = nextSilentCount,
@@ -233,10 +241,18 @@ object RollingJudgmentLoop {
             add("silent_round=${intent.silentEvaluationCount + 1}")
             add("spoken_count=${intent.spokenCount}")
             add("status=${intent.status.name.lowercase()}")
-            intent.expectedUserReplyAt?.let { add("expected_reply_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}") }
-            intent.targetAtMillis?.let { add("target_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}") }
-            intent.deadlineAtMillis?.let { add("deadline_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}") }
-            intent.lastSpokenAt?.let { add("minutes_since_spoken=${((nowMillis - it) / MINUTE_MILLIS).coerceAtLeast(0)}") }
+            intent.expectedUserReplyAt?.let {
+                add("expected_reply_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}")
+            }
+            intent.targetAtMillis?.let {
+                add("target_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}")
+            }
+            intent.deadlineAtMillis?.let {
+                add("deadline_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}")
+            }
+            intent.lastSpokenAt?.let {
+                add("minutes_since_spoken=${((nowMillis - it) / MINUTE_MILLIS).coerceAtLeast(0)}")
+            }
         }
         val summary = buildString {
             append("Observation: 本轮先固定读取可用线索，再判断。")
@@ -301,6 +317,7 @@ object RollingJudgmentLoop {
         intent: LivingIntent,
         actions: List<LivingAction>,
         restrained: Boolean,
+        nowMillis: Long,
     ): EmotionSnapshot {
         val base = intent.emotion
         val concernDelta = when {
@@ -311,6 +328,15 @@ object RollingJudgmentLoop {
         }
         val restraintDelta = if (restrained || LivingAction.JOURNAL_WRITE in actions) 1 else 0
         val attachmentDelta = if (intent.silentEvaluationCount >= 2) 1 else 0
+        val tensionDelta = when {
+            intent.kind == LivingIntentKind.HEALTH_SAFETY -> 1
+            intent.kind == LivingIntentKind.DEADLINE -> 1
+            restrained && intent.silentEvaluationCount >= 2 -> 1
+            LivingAction.MESSAGE in actions -> 0
+            else -> -1
+        }
+        val disappointmentDelta = if (restrained && intent.silentEvaluationCount >= 1) 1 else 0
+        val reliefDelta = if (LivingAction.MESSAGE in actions && intent.kind != LivingIntentKind.HEALTH_SAFETY) 1 else 0
         val label = when {
             restrained -> "惦记、忍住、继续观察"
             intent.kind == LivingIntentKind.HEALTH_SAFETY -> "担心、贴近、准备确认"
@@ -323,8 +349,32 @@ object RollingJudgmentLoop {
             concern = (base.concern + concernDelta).coerceIn(0, 10),
             attachment = (base.attachment + attachmentDelta).coerceIn(0, 10),
             restraint = (base.restraint + restraintDelta).coerceIn(0, 10),
+            tension = (base.tension + tensionDelta).coerceIn(0, 10),
+            disappointment = (base.disappointment + disappointmentDelta).coerceIn(0, 10),
+            relief = (base.relief + reliefDelta).coerceIn(0, 10),
+            lastChangedAt = nowMillis,
             label = label,
         )
+    }
+
+    private fun actionsFromStructuredTrace(
+        trace: LivingJudgmentTrace?,
+        allowedActions: List<LivingAction>,
+    ): List<LivingAction>? {
+        val raw = trace?.action?.takeIf { it.isNotBlank() } ?: return null
+        val parsed = LivingAction.entries.filter { action ->
+            raw.contains(action.name, ignoreCase = true)
+        }.filter { it in allowedActions || it == LivingAction.SCHEDULE_NEXT_TICK }
+        return parsed
+            .takeIf { it.isNotEmpty() }
+            ?.let { actions ->
+                if (LivingAction.SCHEDULE_NEXT_TICK in actions) {
+                    actions
+                } else {
+                    actions + LivingAction.SCHEDULE_NEXT_TICK
+                }
+            }
+            ?.distinct()
     }
 
     private fun updateCapabilityRequests(
@@ -335,7 +385,9 @@ object RollingJudgmentLoop {
         if (intent.kind != LivingIntentKind.HEALTH_SAFETY && intent.kind != LivingIntentKind.WAKE_UP) {
             return intent.capabilityRequests
         }
-        val missingHealthSignal = observation.requestedTools.any { it.contains("gadgetbridge") || it.contains("health") }
+        val missingHealthSignal = observation.requestedTools.any {
+            it.contains("gadgetbridge") || it.contains("health")
+        }
         if (!missingHealthSignal) return intent.capabilityRequests
         val request = LivingCapabilityRequest(
             capability = "health_or_wearable_status",

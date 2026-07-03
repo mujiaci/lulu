@@ -165,6 +165,62 @@ class RollingJudgmentLoopTest {
         assertEquals("Do not message now.", decision.updatedIntent.lastJudgmentTrace?.decision)
     }
 
+    @Test
+    fun `main api structured action can choose restraint from allowed action pool`() {
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantName = "露露",
+            userText = "我现在肚子好痛",
+            assistantText = "先坐下，我会确认你安全。",
+            nowMillis = NOW,
+        )
+        val trace = LivingJudgmentTrace(
+            source = LivingJudgmentSource.MAIN_API_READY_CONTRACT,
+            belief = "She may be resting after saying her stomach hurts.",
+            desire = "Care without making panic.",
+            intention = "Check quietly first and write down the concern.",
+            thought = "A message is not the only caring action.",
+            action = "TOOL_CHECK, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            observation = "Battery and app usage are available; health data is missing.",
+            decision = "Do not send another message yet.",
+            createdAt = NOW,
+        )
+
+        val decision = RollingJudgmentLoop.evaluate(
+            intent = intent,
+            nowMillis = NOW + 5 * MINUTE,
+            externalJudgmentTrace = trace,
+        )
+
+        assertEquals(
+            listOf(LivingAction.TOOL_CHECK, LivingAction.JOURNAL_WRITE, LivingAction.SCHEDULE_NEXT_TICK),
+            decision.actions,
+        )
+        assertTrue(LivingAction.MESSAGE !in decision.actions)
+        assertEquals("Do not send another message yet.", decision.judgmentTrace?.decision)
+    }
+
+    @Test
+    fun `emotion state accumulates across restrained silent evaluations`() {
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantName = "露露",
+            userText = "我先忙一会儿",
+            assistantText = "好，我在这里等你。",
+            nowMillis = NOW,
+        ).copy(
+            spokenCount = 1,
+            lastSpokenAt = NOW + 10 * MINUTE,
+            silentEvaluationCount = 2,
+            nextEvaluateAt = NOW + 60 * MINUTE,
+        )
+
+        val decision = RollingJudgmentLoop.evaluate(intent, nowMillis = NOW + 60 * MINUTE)
+
+        assertTrue(decision.updatedIntent.emotion.disappointment > intent.emotion.disappointment)
+        assertTrue(decision.updatedIntent.emotion.tension >= intent.emotion.tension)
+        assertEquals(NOW + 60 * MINUTE, decision.updatedIntent.emotion.lastChangedAt)
+        assertTrue(decision.updatedIntent.emotion.label.contains("忍住"))
+    }
+
     private companion object {
         const val NOW = 1_700_000_000_000L
         const val MINUTE = 60_000L

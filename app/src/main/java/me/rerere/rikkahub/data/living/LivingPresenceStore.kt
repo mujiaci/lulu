@@ -18,8 +18,8 @@ import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.service.LivingBeliefStore
 import me.rerere.rikkahub.service.LivingIntent
-import me.rerere.rikkahub.service.LivingIntentKind
 import me.rerere.rikkahub.service.LivingIntentStatus
+import me.rerere.rikkahub.service.LivingIntentReturnClassifier
 import me.rerere.rikkahub.service.LivingJudgmentTrace
 import me.rerere.rikkahub.service.LivingObservation
 import me.rerere.rikkahub.service.LivingPresenceEvent
@@ -94,11 +94,14 @@ class LivingPresenceStore(
         if (userText.isBlank()) return
         update { current ->
             val updated = current.activeIntents.map { intent ->
-                if (intent.matchesAssistant(assistantId) && intent.shouldCompleteOnUserReturn(userText)) {
+                if (
+                    intent.matchesAssistant(assistantId) &&
+                    LivingIntentReturnClassifier.shouldCompleteOnUserReturn(intent, userText, nowMillis)
+                ) {
                     intent.copy(
                         status = LivingIntentStatus.COMPLETED,
                         lastEvaluatedAt = nowMillis,
-                        completedReason = completeReason(intent, userText),
+                        completedReason = LivingIntentReturnClassifier.completeReason(intent, userText, nowMillis),
                         nextEvaluateAt = nowMillis,
                     )
                 } else {
@@ -183,58 +186,6 @@ class LivingPresenceStore(
 
     private fun LivingIntent.matchesAssistant(assistantId: String): Boolean =
         this.assistantId.isBlank() || this.assistantId == assistantId
-
-    private fun LivingIntent.shouldCompleteOnUserReturn(userText: String): Boolean {
-        val text = userText.lowercase()
-        val hasBeenActivelyHeld = spokenCount > 0 || silentEvaluationCount > 0 || lastEvaluatedAt != null
-        return when (kind) {
-            LivingIntentKind.ORDINARY_SILENCE -> hasBeenActivelyHeld
-            LivingIntentKind.HEALTH_SAFETY -> hasBeenActivelyHeld && text.containsAny(
-                "没事",
-                "好多了",
-                "不疼",
-                "不痛",
-                "吃药",
-                "回来了",
-                "还好",
-                "好了",
-            )
-            LivingIntentKind.STUDY_FOCUS -> hasBeenActivelyHeld && text.containsAny(
-                "学完",
-                "完成",
-                "做完",
-                "休息",
-                "回来了",
-                "结束",
-            )
-            LivingIntentKind.DEADLINE -> text.containsAny(
-                "完成",
-                "做完",
-                "交了",
-                "提交",
-                "搞定",
-                "弄完",
-            )
-            LivingIntentKind.WAKE_UP -> text.containsAny(
-                "醒了",
-                "起了",
-                "起来",
-                "起床了",
-            )
-        }
-    }
-
-    private fun completeReason(intent: LivingIntent, userText: String): String =
-        when (intent.kind) {
-            LivingIntentKind.ORDINARY_SILENCE -> "用户重新回来发消息，沉默回复预期结束。"
-            LivingIntentKind.HEALTH_SAFETY -> "用户反馈了身体状态：${userText.take(80)}"
-            LivingIntentKind.STUDY_FOCUS -> "用户反馈了学习/休息状态：${userText.take(80)}"
-            LivingIntentKind.DEADLINE -> "用户反馈任务完成或提交：${userText.take(80)}"
-            LivingIntentKind.WAKE_UP -> "用户反馈已经醒来或起床：${userText.take(80)}"
-        }
-
-    private fun String.containsAny(vararg words: String): Boolean =
-        words.any { contains(it) }
 
     private companion object {
         const val ACTIVE_LIMIT = 60

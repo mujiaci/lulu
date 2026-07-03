@@ -67,6 +67,49 @@ class LivingPresenceEventTest {
     }
 
     @Test
+    fun `extractor parses relative reminder time`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "10分钟后提醒我继续背书",
+            assistantText = "我会记着。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.WAKE_UP, event.kind)
+        assertEquals(NOW + 10 * MINUTE, event.targetAtMillis)
+        assertTrue(event.rawSignals.any { it.contains("relative_time_signal=10分钟后") })
+    }
+
+    @Test
+    fun `extractor parses compact tomorrow morning wake phrase`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "明早九点叫我起床",
+            assistantText = "我会提前惦记。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.WAKE_UP, event.kind)
+        assertTrue(event.targetAtMillis != null)
+        assertTrue(event.rawSignals.any { it.contains("明早九点") })
+    }
+
+    @Test
+    fun `extractor keeps relative busy duration as time signal without turning it into wake event`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "我要忙三个小时，回来再说",
+            assistantText = "好，我会自己判断。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.ORDINARY_SILENCE, event.kind)
+        assertEquals(null, event.targetAtMillis)
+        assertTrue(event.rawSignals.any { it.contains("relative_time_signal=三个小时") })
+        assertTrue(event.apiPlan.secondaryApiTasks.contains(LivingApiTask.TIME_EXTRACTION))
+    }
+
+    @Test
     fun `belief store merges similar open event instead of creating duplicate intent`() {
         val first = LivingPresenceEventExtractor.extract(
             assistantName = "露露",
