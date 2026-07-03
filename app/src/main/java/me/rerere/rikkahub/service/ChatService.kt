@@ -1311,9 +1311,10 @@ class ChatService(
                 )
                 runCatching {
                     memoryBankService.processPendingVectors()
+                    memoryBankService.runAutoMaintenanceIfDue()
                 }.onFailure { error ->
                     if (error is CancellationException) throw error
-                    Log.w(TAG, "Memory vectorization failed after extraction for conversation=$conversationId", error)
+                    Log.w(TAG, "Memory maintenance failed after extraction for conversation=$conversationId", error)
                 }
                 Logging.log(
                     TAG,

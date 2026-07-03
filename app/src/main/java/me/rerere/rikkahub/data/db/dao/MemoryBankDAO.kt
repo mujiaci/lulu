@@ -78,9 +78,6 @@ interface MemoryBankDAO {
     @Query("SELECT COUNT(*) FROM memory_bank WHERE type = :type")
     suspend fun getCountByType(type: String): Int
 
-    @Query("SELECT COUNT(*) FROM memory_bank WHERE type = 'phase_summary' OR type = 'daily_summary'")
-    suspend fun getSummaryCount(): Int
-
     @Query("SELECT COUNT(*) FROM memory_bank WHERE vector_status = :status")
     suspend fun getCountByVectorStatus(status: String): Int
 

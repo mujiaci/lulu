@@ -34,6 +34,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.service.DailySummaryService
 import me.rerere.rikkahub.data.service.DeviceEventTrackingService
+import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.SupabaseSyncService
 import me.rerere.rikkahub.service.WebServerService
@@ -112,6 +113,9 @@ class RikkaHubApp : Application() {
         // Reschedule daily_cron alarm if plugins need it
         rescheduleDailyCronIfEnabled()
 
+        // Run due memory maintenance in the background.
+        runMemoryMaintenanceIfDue()
+
         // Increment launch count
         incrementLaunchCount()
 
@@ -178,6 +182,16 @@ class RikkaHubApp : Application() {
 
     private fun rescheduleDailyCronIfEnabled() {
         DailySummaryService.rescheduleIfEnabled(this)
+    }
+
+    private fun runMemoryMaintenanceIfDue() {
+        get<AppScope>().launch(Dispatchers.IO) {
+            runCatching {
+                get<MemoryBankService>().runAutoMaintenanceIfDue()
+            }.onFailure {
+                Log.e(TAG, "runMemoryMaintenanceIfDue failed", it)
+            }
+        }
     }
 
     private fun startWebServerIfEnabled() {

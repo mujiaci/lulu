@@ -46,6 +46,10 @@ internal fun applyTimeReminder(
     if (messages.isEmpty()) return emptyList()
 
     val result = mutableListOf<UIMessage>()
+    val messageTimeContext = buildMessageTimeContextMessage(messages)
+    if (messageTimeContext != null) {
+        result.add(messageTimeContext)
+    }
     val timeZone = TimeZone.currentSystemDefault()
     val lastUserIndex = messages.indexOfLast { it.role == MessageRole.USER }
     var previousUserInstant: Instant? = null
@@ -80,6 +84,32 @@ internal fun applyTimeReminder(
     }
 
     return result
+}
+
+private fun buildMessageTimeContextMessage(messages: List<UIMessage>): UIMessage? {
+    val chatMessages = messages.filter { it.role != MessageRole.SYSTEM }
+    if (chatMessages.isEmpty()) return null
+
+    val zoneId = ZoneId.systemDefault()
+    val content = buildString {
+        appendLine("<message_time_context>")
+        appendLine("These timestamps belong to the current chat context in this request. Rows match the non-system messages in order; use them to understand when each visible chat message was sent.")
+        chatMessages.forEachIndexed { index, message ->
+            val sentAt = message.createdAt.toInstant(TimeZone.currentSystemDefault())
+                .toJavaInstant()
+                .atZone(zoneId)
+                .toLocalDateTime()
+            val finishedAt = message.finishedAt?.toInstant(TimeZone.currentSystemDefault())
+                ?.toJavaInstant()
+                ?.atZone(zoneId)
+                ?.toLocalDateTime()
+            append("[${index + 1}] ${message.role.name} sent_at=$sentAt")
+            if (finishedAt != null) append(" finished_at=$finishedAt")
+            appendLine()
+        }
+        append("</message_time_context>")
+    }
+    return UIMessage.system(content)
 }
 
 private fun buildTimeReminderMessage(

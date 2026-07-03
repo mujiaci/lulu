@@ -18,11 +18,13 @@ import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 private const val MEMORY_DUPLICATE_VECTOR_THRESHOLD = 0.85
+private const val LIGHT_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
+private const val HEAVY_MAINTENANCE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
+private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
+private const val LAST_LIGHT_MAINTENANCE_KEY = "last_light_maintenance_at"
+private const val LAST_HEAVY_MAINTENANCE_KEY = "last_heavy_maintenance_at"
 
 class MemoryBankService(
     private val memoryBankDAO: MemoryBankDAO,
@@ -34,7 +36,6 @@ class MemoryBankService(
     data class MemoryStats(
         val total: Int = 0,
         val messageCount: Int = 0,
-        val summaryCount: Int = 0,
         val manualCount: Int = 0,
         val vectorizedCount: Int = 0,
         val pendingCount: Int = 0,
@@ -45,6 +46,9 @@ class MemoryBankService(
     data class MaintenanceResult(
         val deprecatedDuplicateCount: Int = 0,
     )
+
+    private var lastLightMaintenanceAt: Long = 0L
+    private var lastHeavyMaintenanceAt: Long = 0L
 
     val recallCount: Int = 5
 
@@ -63,7 +67,6 @@ class MemoryBankService(
         } else {
             memoryBankDAO.getCountByType("message")
         }
-        val summaryCount = memoryBankDAO.getSummaryCount()
         val manualCount = if (assistantId != null) {
             memoryBankDAO.getCountByAssistantAndType(assistantId, "manual")
         } else {
@@ -92,7 +95,6 @@ class MemoryBankService(
         MemoryStats(
             total = total,
             messageCount = messageCount,
-            summaryCount = summaryCount,
             manualCount = manualCount,
             vectorizedCount = vectorizedCount,
             pendingCount = pendingCount,
@@ -100,26 +102,6 @@ class MemoryBankService(
             deprecatedCount = deprecatedCount,
         )
     }
-
-    suspend fun getTodayPhaseSummaries(assistantId: String? = null): List<MemoryBankEntity> =
-        withContext(Dispatchers.IO) {
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            if (assistantId != null) {
-                memoryBankDAO.getMemoriesByAssistantTypeAndDateGroup(assistantId, "phase_summary", today)
-            } else {
-                memoryBankDAO.getMemoriesByTypeAndDateGroup("phase_summary", today)
-            }
-        }
-
-    suspend fun getDailySummaries(assistantId: String? = null): List<MemoryBankEntity> =
-        withContext(Dispatchers.IO) {
-            val today = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-            if (assistantId != null) {
-                memoryBankDAO.getMemoriesByAssistantTypeAndDateGroup(assistantId, "daily_summary", today)
-            } else {
-                memoryBankDAO.getMemoriesByTypeAndDateGroup("daily_summary", today)
-            }
-        }
 
     suspend fun searchMemories(
         keyword: String = "",
@@ -184,6 +166,7 @@ class MemoryBankService(
     }
 
     suspend fun runLightMaintenance(limit: Int = 200): MaintenanceResult = withContext(Dispatchers.IO) {
+        processPendingVectors()
         val memories = memoryBankDAO.getRecentMemories(limit)
             .filter { !it.deprecated && it.content.isNotBlank() }
         val deprecated = selectNearDuplicateMemoriesForDeprecation(memories)
@@ -197,6 +180,44 @@ class MemoryBankService(
             )
         }
         MaintenanceResult(deprecatedDuplicateCount = deprecated.size)
+    }
+
+    suspend fun runHeavyMaintenance(limit: Int = 800): MaintenanceResult = withContext(Dispatchers.IO) {
+        processPendingVectors()
+        val memories = memoryBankDAO.getRecentMemories(limit)
+            .filter { !it.deprecated && it.content.isNotBlank() }
+        val deprecated = selectNearDuplicateMemoriesForDeprecation(memories)
+        val now = System.currentTimeMillis()
+        deprecated.forEach { duplicate ->
+            memoryBankDAO.markMemoryDeprecated(
+                id = duplicate.deprecated.id,
+                deprecatedReason = "weekly_near_duplicate:${duplicate.keep.id}",
+                supersededByMemoryId = duplicate.keep.id.toString(),
+                correctedAt = now,
+            )
+        }
+        MaintenanceResult(deprecatedDuplicateCount = deprecated.size)
+    }
+
+    suspend fun runAutoMaintenanceIfDue(now: Long = System.currentTimeMillis()) {
+        val prefs = context?.getSharedPreferences(MAINTENANCE_PREFS_NAME, Context.MODE_PRIVATE)
+        val lastLight = prefs?.getLong(LAST_LIGHT_MAINTENANCE_KEY, 0L) ?: lastLightMaintenanceAt
+        val lastHeavy = prefs?.getLong(LAST_HEAVY_MAINTENANCE_KEY, 0L) ?: lastHeavyMaintenanceAt
+
+        if (lastLight == 0L || now - lastLight >= LIGHT_MAINTENANCE_INTERVAL_MS) {
+            lastLightMaintenanceAt = now
+            prefs?.edit()?.putLong(LAST_LIGHT_MAINTENANCE_KEY, now)?.apply()
+            runLightMaintenance()
+        }
+
+        if (lastHeavy == 0L) {
+            lastHeavyMaintenanceAt = now
+            prefs?.edit()?.putLong(LAST_HEAVY_MAINTENANCE_KEY, now)?.apply()
+        } else if (now - lastHeavy >= HEAVY_MAINTENANCE_INTERVAL_MS) {
+            lastHeavyMaintenanceAt = now
+            prefs?.edit()?.putLong(LAST_HEAVY_MAINTENANCE_KEY, now)?.apply()
+            runHeavyMaintenance()
+        }
     }
 
     suspend fun processPendingVectors() {
@@ -310,8 +331,6 @@ class MemoryBankService(
                 addAll(memoryBankDAO.getPinnedRecallMemories(3))
                 addAll(memoryBankDAO.getImportantRecallMemories(minImportance = 4, limit = 5))
             }
-            addAll(getTodayPhaseSummaries(assistantId).take(4))
-            addAll(getDailySummaries(assistantId).take(4))
             if (assistantId != null) {
                 addAll(memoryBankDAO.getMemoriesByAssistantAndTypeLimit(assistantId, "manual", 8))
                 addAll(memoryBankDAO.getMemoriesByAssistantAndTypeLimit(assistantId, "message", 12))
@@ -629,7 +648,6 @@ private fun MemoryBankEntity.recallSectionTitle(): String = when (memoryKind ?: 
     "promise" -> "未完成承诺"
     "relationship" -> "关系变化"
     "user_preference", "manual" -> "长期印象"
-    "phase_summary", "daily_summary" -> "当前相关回忆"
     else -> "当前相关回忆"
 }
 

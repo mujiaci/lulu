@@ -1,4 +1,4 @@
-﻿<?xml version='1.0' encoding='UTF-8'?>
+<?xml version='1.0' encoding='UTF-8'?>
 <resources>
   <string name="about_page_github">Github</string>
   <string name="about_page_license">授權條款</string>
@@ -14,7 +14,6 @@
   <string name="assistant_detail_extensions_desc">管理提示注入、背景知識庫與技能</string>
   <string name="assistant_detail_local_tools_desc">啟用本機工具如 JavaScript 引擎</string>
   <string name="assistant_detail_mcp_desc">為角色設定 MCP 伺服器工具</string>
-  <string name="assistant_detail_memory_desc">管理角色舊版記憶與近期聊天參考</string>
   <string name="assistant_detail_prompt_desc">設定系統提示、訊息範本與正規表示式規則</string>
   <string name="assistant_detail_request_desc">設定自訂請求標頭與主體參數</string>
   <string name="assistant_extensions_page_empty_lorebooks">尚無可用的 lorebook，請在 Prompts 中建立</string>
@@ -98,8 +97,6 @@
   <string name="assistant_page_max_tokens_no_limit">無限制</string>
   <string name="assistant_page_max_tokens_no_token_limit">無Token限制</string>
   <string name="assistant_page_memory">記憶</string>
-  <string name="assistant_page_memory_count">記憶: %d</string>
-  <string name="assistant_page_memory_desc">舊版角色記憶。新的情感/向量記憶在記憶庫管理；這裡主要保留給舊資料與相容性。</string>
   <string name="assistant_page_message_template">聊天內容模板</string>
   <string name="assistant_page_message_template_desc">控制聊天訊息在發送給LLM之前的內容格式，通常不需要修改</string>
   <string name="assistant_page_message_template_missing_message">範本未包含 {{ message }}，使用者訊息將不會被傳送</string>
@@ -132,7 +129,6 @@
   <string name="assistant_page_tab_extensions">擴充功能</string>
   <string name="assistant_page_tab_local_tools">本地工具</string>
   <string name="assistant_page_tab_mcp">MCP</string>
-  <string name="assistant_page_tab_memory">記憶</string>
   <string name="assistant_page_tab_prompt">人設</string>
   <string name="assistant_page_tab_request">自定義請求</string>
   <string name="assistant_page_tags">標籤</string>

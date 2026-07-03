@@ -26,12 +26,6 @@ class MemoryBankVM(
     private val _memories = MutableStateFlow<List<MemoryBankEntity>>(emptyList())
     val memories: StateFlow<List<MemoryBankEntity>> = _memories.asStateFlow()
 
-    private val _todayPhaseSummaries = MutableStateFlow<List<MemoryBankEntity>>(emptyList())
-    val todayPhaseSummaries: StateFlow<List<MemoryBankEntity>> = _todayPhaseSummaries.asStateFlow()
-
-    private val _dailySummaries = MutableStateFlow<List<MemoryBankEntity>>(emptyList())
-    val dailySummaries: StateFlow<List<MemoryBankEntity>> = _dailySummaries.asStateFlow()
-
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -71,22 +65,12 @@ class MemoryBankVM(
                 val selectedType = _selectedType.value
                 val assistantId = _selectedAssistantId.value
 
-                if (selectedType.isEmpty()) {
-                    // No type filter: show today's phase summaries + daily summaries (diaries)
-                    _todayPhaseSummaries.value = memoryBankService.getTodayPhaseSummaries(assistantId)
-                    _dailySummaries.value = memoryBankService.getDailySummaries(assistantId)
-                    _memories.value = emptyList()
-                } else {
-                    // Type filter active: show matching memories in list
-                    _memories.value = memoryBankService.searchMemories(
-                        keyword = _searchQuery.value,
-                        type = selectedType,
-                        limit = 100,
-                        assistantId = assistantId,
-                    )
-                    _todayPhaseSummaries.value = emptyList()
-                    _dailySummaries.value = emptyList()
-                }
+                _memories.value = memoryBankService.searchMemories(
+                    keyword = _searchQuery.value,
+                    type = selectedType,
+                    limit = 100,
+                    assistantId = assistantId,
+                )
             } finally {
                 _loading.value = false
             }

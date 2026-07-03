@@ -40,7 +40,6 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.utils.applyPlaceholders
 import java.util.Locale
 import kotlin.time.Clock
@@ -58,7 +57,6 @@ class GenerationHandler(
     private val context: Context,
     private val providerManager: ProviderManager,
     private val json: Json,
-    private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
 ) {
     fun generateText(
@@ -340,11 +338,6 @@ class GenerationHandler(
             } else {
                 assistant.systemPrompt
             }
-        val recentChatsPrompt = if (assistant.enableRecentChatsReference) {
-            buildRecentChatsPrompt(assistant, conversationRepo)
-        } else {
-            ""
-        }
         val toolSystemPrompts = tools.map { tool -> tool.name to tool.systemPrompt(model, messages) }
         val skipReplyPrompt = if (assistant.allowSkipReply) {
             "## Skip Reply\n" +
@@ -355,12 +348,6 @@ class GenerationHandler(
         val system = buildString {
             if (effectiveSystemPrompt.isNotBlank()) {
                 append(effectiveSystemPrompt)
-            }
-
-            // Recent chat reference is optional. Vector memory is injected before this handler.
-            if (recentChatsPrompt.isNotBlank()) {
-                appendLine()
-                append(recentChatsPrompt)
             }
 
             // Tool prompts
@@ -401,7 +388,6 @@ class GenerationHandler(
         )
         val breakdown = buildGenerationTokenBreakdown(
             effectiveSystemPrompt = effectiveSystemPrompt,
-            recentChatsPrompt = recentChatsPrompt,
             toolSystemPrompts = toolSystemPrompts,
             pluginPromptInjections = pluginPromptInjections,
             skipReplyPrompt = skipReplyPrompt,
@@ -502,7 +488,6 @@ class GenerationHandler(
 
     private fun buildGenerationTokenBreakdown(
         effectiveSystemPrompt: String,
-        recentChatsPrompt: String,
         toolSystemPrompts: List<Pair<String, String>>,
         pluginPromptInjections: List<String>,
         skipReplyPrompt: String,
@@ -567,12 +552,6 @@ class GenerationHandler(
                 estimatedTokens = estimateTokens(effectiveSystemPrompt),
                 messageCount = if (effectiveSystemPrompt.isBlank()) 0 else 1,
                 charCount = effectiveSystemPrompt.length,
-            ),
-            GenerationTokenSection(
-                label = "近期会话引用",
-                estimatedTokens = estimateTokens(recentChatsPrompt),
-                messageCount = if (recentChatsPrompt.isBlank()) 0 else 1,
-                charCount = recentChatsPrompt.length,
             ),
             GenerationTokenSection(
                 label = "工具定义/schema",

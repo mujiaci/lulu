@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -19,11 +18,9 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.data.files.SkillMetadata
 import me.rerere.rikkahub.data.model.Assistant
-import me.rerere.rikkahub.data.model.AssistantMemory
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Tag
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.voicecall.VoiceCallRepository
 import kotlin.uuid.Uuid
@@ -33,7 +30,6 @@ private const val TAG = "AssistantDetailVM"
 class AssistantDetailVM(
     private val id: String,
     private val settingsStore: SettingsStore,
-    private val memoryRepository: MemoryRepository,
     private val conversationRepository: ConversationRepository,
     private val memoryBankService: MemoryBankService,
     private val voiceCallRepository: VoiceCallRepository,
@@ -67,18 +63,6 @@ class AssistantDetailVM(
             settings.assistants.find { it.id == assistantId } ?: Assistant()
         }.stateIn(
             scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = Assistant()
-        )
-
-    val memories = assistant
-        .flatMapLatest { currentAssistant ->
-            if (currentAssistant.useGlobalMemory) {
-                memoryRepository.getGlobalMemoriesFlow()
-            } else {
-                memoryRepository.getMemoriesOfAssistantFlow(assistantId.toString())
-            }
-        }
-        .stateIn(
-            scope = viewModelScope, started = SharingStarted.Eagerly, initialValue = emptyList()
         )
 
     val providers = settingsStore
@@ -173,37 +157,10 @@ class AssistantDetailVM(
         }
     }
 
-    fun addMemory(memory: AssistantMemory) {
-        viewModelScope.launch {
-            val memoryAssistantId = if (assistant.value.useGlobalMemory) {
-                MemoryRepository.GLOBAL_MEMORY_ID
-            } else {
-                assistantId.toString()
-            }
-            memoryRepository.addMemory(
-                assistantId = memoryAssistantId,
-                content = memory.content
-            )
-        }
-    }
-
-    fun updateMemory(memory: AssistantMemory) {
-        viewModelScope.launch {
-            memoryRepository.updateContent(id = memory.id, content = memory.content)
-        }
-    }
-
-    fun deleteMemory(memory: AssistantMemory) {
-        viewModelScope.launch {
-            memoryRepository.deleteMemory(id = memory.id)
-        }
-    }
-
     fun clearAssistantHistory() {
         viewModelScope.launch(Dispatchers.IO) {
             val assistantIdString = assistantId.toString()
             conversationRepository.deleteConversationOfAssistant(assistantId)
-            memoryRepository.deleteMemoriesOfAssistant(assistantIdString)
             memoryBankService.deleteMemoriesByAssistant(assistantIdString)
             voiceCallRepository.deleteSessionsByAssistant(assistantIdString)
         }

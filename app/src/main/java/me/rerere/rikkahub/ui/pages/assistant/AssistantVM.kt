@@ -13,11 +13,9 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.repository.ConversationRepository
-import me.rerere.rikkahub.data.repository.MemoryRepository
 
 class AssistantVM(
     private val settingsStore: SettingsStore,
-    private val memoryRepository: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val filesManager: FilesManager,
 ) : ViewModel() {
@@ -51,7 +49,6 @@ class AssistantVM(
                     assistants = settings.assistants.filter { it.id != assistant.id }
                 )
             )
-            memoryRepository.deleteMemoriesOfAssistant(assistant.id.toString())
             conversationRepo.deleteConversationOfAssistant(assistant.id)
         }
     }
@@ -83,10 +80,4 @@ class AssistantVM(
         }
     }
 
-    fun getMemories(assistant: Assistant) =
-        if (assistant.useGlobalMemory) {
-            memoryRepository.getGlobalMemoriesFlow()
-        } else {
-            memoryRepository.getMemoriesOfAssistantFlow(assistant.id.toString())
-        }
 }

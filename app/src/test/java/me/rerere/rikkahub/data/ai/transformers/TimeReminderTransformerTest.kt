@@ -31,6 +31,11 @@ class TimeReminderTransformerTest {
     private fun getMessageText(msg: UIMessage): String =
         msg.parts.filterIsInstance<UIMessagePart.Text>().joinToString("") { it.text }
 
+    private fun withoutMessageTimeContext(messages: List<UIMessage>): List<UIMessage> {
+        assertTrue(getMessageText(messages.first()).contains("<message_time_context>"))
+        return messages.drop(1)
+    }
+
     @Test
     fun `single user message should inject current request time`() {
         val messages = listOf(userMessage("Hello", LocalDateTime(2026, 2, 22, 10, 0, 0)))
@@ -39,9 +44,10 @@ class TimeReminderTransformerTest {
             requestInstant = instantOf(LocalDateTime(2026, 2, 22, 10, 5, 0))
         )
 
-        assertEquals(2, result.size)
-        assertTrue(getMessageText(result[0]).contains("Current real time for this request"))
-        assertEquals("Hello", getMessageText(result[1]))
+        val timeline = withoutMessageTimeContext(result)
+        assertEquals(2, timeline.size)
+        assertTrue(getMessageText(timeline[0]).contains("Current real time for this request"))
+        assertEquals("Hello", getMessageText(timeline[1]))
     }
 
     @Test
@@ -56,9 +62,10 @@ class TimeReminderTransformerTest {
             requestInstant = instantOf(LocalDateTime(2026, 2, 22, 10, 30, 5))
         )
 
-        assertEquals(4, result.size)
-        assertTrue(getMessageText(result[2]).contains("Current real time for this request"))
-        assertEquals("World", getMessageText(result[3]))
+        val timeline = withoutMessageTimeContext(result)
+        assertEquals(4, timeline.size)
+        assertTrue(getMessageText(timeline[2]).contains("Current real time for this request"))
+        assertEquals("World", getMessageText(timeline[3]))
     }
 
     @Test
@@ -73,10 +80,11 @@ class TimeReminderTransformerTest {
             requestInstant = instantOf(LocalDateTime(2026, 2, 22, 2, 0, 3))
         )
 
-        val injected = getMessageText(result[2])
+        val timeline = withoutMessageTimeContext(result)
+        val injected = getMessageText(timeline[2])
         assertTrue(injected.contains("Current real time for this request"))
         assertTrue(injected.contains("1 h since last user message"))
-        assertEquals("Two o'clock", getMessageText(result[3]))
+        assertEquals("Two o'clock", getMessageText(timeline[3]))
     }
 
     @Test
@@ -91,14 +99,15 @@ class TimeReminderTransformerTest {
             requestInstant = instantOf(LocalDateTime(2026, 2, 22, 10, 0, 5))
         )
 
-        assertEquals(5, result.size)
-        assertEquals("Msg 1", getMessageText(result[0]))
-        assertTrue(getMessageText(result[1]).contains("<time_reminder>"))
-        assertTrue(getMessageText(result[1]).contains("1 d since last user message"))
-        assertEquals("Msg 2", getMessageText(result[2]))
-        assertTrue(getMessageText(result[3]).contains("Current real time for this request"))
-        assertTrue(getMessageText(result[3]).contains("1 d since last user message"))
-        assertEquals("Msg 3", getMessageText(result[4]))
+        val timeline = withoutMessageTimeContext(result)
+        assertEquals(5, timeline.size)
+        assertEquals("Msg 1", getMessageText(timeline[0]))
+        assertTrue(getMessageText(timeline[1]).contains("<time_reminder>"))
+        assertTrue(getMessageText(timeline[1]).contains("1 d since last user message"))
+        assertEquals("Msg 2", getMessageText(timeline[2]))
+        assertTrue(getMessageText(timeline[3]).contains("Current real time for this request"))
+        assertTrue(getMessageText(timeline[3]).contains("1 d since last user message"))
+        assertEquals("Msg 3", getMessageText(timeline[4]))
     }
 
     @Test
@@ -113,10 +122,11 @@ class TimeReminderTransformerTest {
             includeHistoricalGaps = false,
         )
 
-        assertEquals(3, result.size)
-        assertEquals("Msg 1", getMessageText(result[0]))
-        assertTrue(getMessageText(result[1]).contains("Current real time for this request"))
-        assertEquals("Msg 2", getMessageText(result[2]))
+        val timeline = withoutMessageTimeContext(result)
+        assertEquals(3, timeline.size)
+        assertEquals("Msg 1", getMessageText(timeline[0]))
+        assertTrue(getMessageText(timeline[1]).contains("Current real time for this request"))
+        assertEquals("Msg 2", getMessageText(timeline[2]))
     }
 
     @Test

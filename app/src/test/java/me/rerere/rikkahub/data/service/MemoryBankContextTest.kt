@@ -63,7 +63,7 @@ class MemoryBankContextTest {
     }
 
     @Test
-    fun `build memory context groups legacy memory types for natural recall`() {
+    fun `build memory context treats legacy summary buckets as ordinary stale records only`() {
         val memories = listOf(
             MemoryBankEntity(content = "今天上午她说论文写不下去了", type = "phase_summary", createdAt = 300L),
             MemoryBankEntity(content = "她最近在准备考研", type = "daily_summary", createdAt = 200L),
@@ -76,6 +76,8 @@ class MemoryBankContextTest {
         assertTrue(context.contains("当前相关回忆"))
         assertTrue(context.contains("长期印象"))
         assertTrue(context.contains("她不喜欢太硬的打卡提醒"))
+        assertTrue(!context.contains("今天上午她说论文写不下去了"))
+        assertTrue(!context.contains("她最近在准备考研"))
         assertTrue(context.contains("不要逐条复述"))
     }
 

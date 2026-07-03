@@ -72,8 +72,6 @@ fun MemoryBankPage(
 ) {
     val vm: MemoryBankVM = koinViewModel()
     val memories by vm.memories.collectAsStateWithLifecycle()
-    val todayPhaseSummaries by vm.todayPhaseSummaries.collectAsStateWithLifecycle()
-    val dailySummaries by vm.dailySummaries.collectAsStateWithLifecycle()
     val searchQuery by vm.searchQuery.collectAsStateWithLifecycle()
     val selectedType by vm.selectedType.collectAsStateWithLifecycle()
     val selectedAssistantId by vm.selectedAssistantId.collectAsStateWithLifecycle()
@@ -193,107 +191,41 @@ fun MemoryBankPage(
 
             item { Spacer(modifier = Modifier.height(8.dp)) }
 
-            // 搜索栏 (only when type filter is active)
-            if (selectedType.isNotEmpty()) {
-                item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = { vm.setSearchQuery(it) },
-                        modifier = Modifier.fillMaxWidth(),
-                        placeholder = { Text("搜索记忆...") },
-                        leadingIcon = {
-                            Icon(HugeIcons.Search01, contentDescription = null)
-                        },
-                        singleLine = true,
-                    )
-                }
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { vm.setSearchQuery(it) },
+                    modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text("搜索记忆...") },
+                    leadingIcon = {
+                        Icon(HugeIcons.Search01, contentDescription = null)
+                    },
+                    singleLine = true,
+                )
             }
 
-            // Default view: today's phase summaries + daily summaries
-            if (selectedType.isEmpty()) {
-                // 今日阶段总结
-                if (todayPhaseSummaries.isNotEmpty()) {
-                    item {
-                        Text(
-                            "今日阶段总结",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                    items(todayPhaseSummaries, key = { it.id }) { memory ->
-                        MemoryCard(
-                            memory = memory,
-                            assistantLabels = assistantLabels,
-                            onDelete = { showDeleteDialog = memory },
-                            onOpenSource = onOpenSource,
-                            onEdit = { editMemory = memory },
-                            onTogglePinned = { vm.setPinned(memory, !memory.pinned) },
-                            onCorrect = { correctionMemory = memory },
-                        )
-                    }
-                }
+            items(memories, key = { it.id }) { memory ->
+                MemoryCard(
+                    memory = memory,
+                    assistantLabels = assistantLabels,
+                    onDelete = { showDeleteDialog = memory },
+                    onOpenSource = onOpenSource,
+                    onEdit = { editMemory = memory },
+                    onTogglePinned = { vm.setPinned(memory, !memory.pinned) },
+                    onCorrect = { correctionMemory = memory },
+                )
+            }
 
-                item { Spacer(modifier = Modifier.height(8.dp)) }
-
-                // 每日总结（日记）
-                if (dailySummaries.isNotEmpty()) {
-                    item {
-                        Text(
-                            "日记",
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.secondary,
-                        )
-                    }
-                    items(dailySummaries, key = { it.id }) { memory ->
-                        DiaryCard(
-                            memory = memory,
-                            assistantLabels = assistantLabels,
-                            onDelete = { showDeleteDialog = memory },
-                            onOpenSource = onOpenSource,
-                            onEdit = { editMemory = memory },
-                            onTogglePinned = { vm.setPinned(memory, !memory.pinned) },
-                            onCorrect = { correctionMemory = memory },
-                        )
-                    }
-                }
-
-                if (todayPhaseSummaries.isEmpty() && dailySummaries.isEmpty() && !loading) {
-                    item {
-                        Text(
-                            text = "暂无总结数据",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            } else {
-                // Type filter active: show filtered memories list
-                items(memories, key = { it.id }) { memory ->
-                    MemoryCard(
-                        memory = memory,
-                        assistantLabels = assistantLabels,
-                        onDelete = { showDeleteDialog = memory },
-                        onOpenSource = onOpenSource,
-                        onEdit = { editMemory = memory },
-                        onTogglePinned = { vm.setPinned(memory, !memory.pinned) },
-                        onCorrect = { correctionMemory = memory },
+            if (memories.isEmpty() && !loading) {
+                item {
+                    Text(
+                        text = "暂无记忆数据",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-
-                if (memories.isEmpty() && !loading) {
-                    item {
-                        Text(
-                            text = "暂无数据",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
                 }
             }
         }
@@ -583,8 +515,8 @@ private fun StatsRow(stats: MemoryBankService.MemoryStats) {
     ) {
         StatCard("总计", stats.total, Modifier.weight(1f))
         StatCard("消息", stats.messageCount, Modifier.weight(1f))
-        StatCard("总结", stats.summaryCount, Modifier.weight(1f))
         StatCard("手动", stats.manualCount, Modifier.weight(1f))
+        StatCard("失效", stats.deprecatedCount, Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant)
     }
     Row(
         modifier = Modifier
@@ -595,7 +527,6 @@ private fun StatsRow(stats: MemoryBankService.MemoryStats) {
         StatCard("已向量化", stats.vectorizedCount, Modifier.weight(1f), MaterialTheme.colorScheme.primaryContainer)
         StatCard("待处理", stats.pendingCount, Modifier.weight(1f), MaterialTheme.colorScheme.tertiaryContainer)
         StatCard("失败", stats.failedCount, Modifier.weight(1f), MaterialTheme.colorScheme.errorContainer)
-        StatCard("失效", stats.deprecatedCount, Modifier.weight(1f), MaterialTheme.colorScheme.surfaceVariant)
     }
 }
 
@@ -611,7 +542,7 @@ private fun MemoryBankLegend() {
             verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
             Text("按钮：重建向量索引 / 处理待向量化 / 轻量维护合并重复 / 刷新列表", style = MaterialTheme.typography.bodySmall)
-            Text("分类：阶段总结和日记来自自动总结；消息来自对话抽取；手动是你或插件主动保存的记忆；失效是被替换或废弃的旧记忆。", style = MaterialTheme.typography.bodySmall)
+            Text("分类：消息来自对话抽取；手动是你或插件主动保存的记忆；失效是被替换或废弃的旧记忆。", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -666,9 +597,7 @@ private fun TypeFilterRow(
     onTypeSelected: (String) -> Unit,
 ) {
     val types = listOf(
-        "" to "总结视图",
-        "phase_summary" to "阶段总结",
-        "daily_summary" to "日记",
+        "" to "全部",
         "message" to "消息",
         "manual" to "手动",
         "deprecated" to "失效",
@@ -722,8 +651,6 @@ private fun MemoryCard(
                     Surface(
                         color = when (memory.type) {
                             "message" -> MaterialTheme.colorScheme.primaryContainer
-                            "phase_summary" -> MaterialTheme.colorScheme.secondaryContainer
-                            "daily_summary" -> MaterialTheme.colorScheme.tertiaryContainer
                             "manual" -> MaterialTheme.colorScheme.inversePrimary
                             else -> MaterialTheme.colorScheme.surfaceVariant
                         },
@@ -732,8 +659,6 @@ private fun MemoryCard(
                         Text(
                             text = when (memory.type) {
                                 "message" -> "消息"
-                                "phase_summary" -> "阶段总结"
-                                "daily_summary" -> "日记"
                                 "manual" -> "手动"
                                 else -> memory.type
                             },
@@ -804,8 +729,6 @@ private fun MemoryCard(
                 Text(
                     text = memory.content,
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis,
                 )
 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -895,112 +818,6 @@ private fun MemoryMetaInfo(memory: MemoryBankEntity) {
 
 private fun formatShortTime(timestamp: Long): String =
     SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(Date(timestamp))
-
-@Composable
-private fun DiaryCard(
-    memory: MemoryBankEntity,
-    assistantLabels: Map<String, String>,
-    onDelete: () -> Unit,
-    onOpenSource: (conversationId: String, nodeId: String?) -> Unit,
-    onEdit: () -> Unit,
-    onTogglePinned: () -> Unit,
-    onCorrect: () -> Unit,
-) {
-    val sourceNodeId = remember(memory.sourceMessageNodeIdsJson) { memory.firstSourceNodeId() }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.Top,
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    val dateStr = remember(memory.dateGroup) {
-                        memory.dateGroup ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-                            .format(Date(memory.createdAt))
-                    }
-                    Text(
-                        text = dateStr,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-
-                    if (memory.assistantId != null) {
-                        Text(
-                            text = assistantLabels[memory.assistantId] ?: memory.assistantId.shortAssistantId(),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                        )
-                    }
-
-                    if (memory.vectorStatus == "done") {
-                        Icon(
-                            HugeIcons.Database02,
-                            contentDescription = "已向量化",
-                            modifier = Modifier.size(14.dp),
-                            tint = MaterialTheme.colorScheme.primary,
-                        )
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = memory.content,
-                    style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 10,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (memory.conversationId != null) {
-                    TextButton(onClick = { onOpenSource(memory.conversationId, sourceNodeId) }) {
-                        Text("原文")
-                    }
-                }
-                TextButton(onClick = onTogglePinned) {
-                    Text(if (memory.pinned) "取消置顶" else "置顶")
-                }
-                if (!memory.deprecated) {
-                    TextButton(onClick = onCorrect) {
-                        Text("修正")
-                    }
-                }
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        HugeIcons.PencilEdit01,
-                        contentDescription = "编辑",
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-                IconButton(
-                    onClick = onDelete,
-                    modifier = Modifier.size(32.dp)
-                ) {
-                    Icon(
-                        HugeIcons.Delete02,
-                        contentDescription = "删除",
-                        modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.error,
-                    )
-                }
-            }
-        }
-    }
-}
 
 private fun MemoryBankEntity.firstSourceNodeId(): String? =
     runCatching {
