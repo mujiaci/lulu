@@ -100,6 +100,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.files.FilesManager
+import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
@@ -370,6 +371,7 @@ class ChatService(
     private val pluginToolProvider: PluginToolProvider,
     private val pluginLoader: PluginLoader,
     private val luluPerceptionCollector: LuluPerceptionCollector,
+    private val livingPresenceStore: LivingPresenceStore,
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
@@ -1098,6 +1100,15 @@ class ChatService(
                 assistantName = assistant.name,
                 userText = lastUserText,
                 assistantText = lastAssistantText,
+            )
+            livingPresenceStore.mergeEvent(
+                LivingPresenceEventExtractor.extract(
+                    assistantId = assistant.id.toString(),
+                    assistantName = assistant.name,
+                    userText = lastUserText,
+                    assistantText = lastAssistantText,
+                    nowMillis = System.currentTimeMillis(),
+                )
             )
             val scheduledPlan = scheduledPlans.firstOrNull()
             settingsStore.update { currentSettings ->

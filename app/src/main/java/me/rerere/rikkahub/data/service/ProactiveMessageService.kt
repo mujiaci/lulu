@@ -77,6 +77,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
+import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Conversation
@@ -88,12 +89,15 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.study.StudyStore
 import me.rerere.rikkahub.data.study.StudyTaskSource
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.LivingAction
+import me.rerere.rikkahub.service.LivingIntentKind
 import me.rerere.rikkahub.service.LuluIntent
 import me.rerere.rikkahub.service.LuluIntentInput
 import me.rerere.rikkahub.service.LuluIntentModelPlanner
 import me.rerere.rikkahub.service.LuluIntentPlan
 import me.rerere.rikkahub.service.LuluIntentPlanner
 import me.rerere.rikkahub.service.LivingPresenceAction
+import me.rerere.rikkahub.service.RollingJudgmentDecision
 import me.rerere.rikkahub.service.ProactiveReminderPlan
 import me.rerere.rikkahub.service.toProactiveReminderPlan
 import me.rerere.rikkahub.utils.sendNotification
@@ -769,6 +773,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val json: Json by inject()
     private val chatService: ChatService by inject()
     private val cihaiService: CihaiService by inject()
+    private val livingPresenceStore: LivingPresenceStore by inject()
     private val proactiveMessageService = ProactiveMessageService()
 
     companion object {
@@ -900,8 +905,46 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 // 构建工具列表（与 ChatService 保持一致）
                 val tools = buildTools(settings, assistant, model, historyMessages)
+                val livingPresenceDecision = livingPresenceStore.evaluateDueIntent(
+                    assistantId = assistantUuid.toString(),
+                    nowMillis = System.currentTimeMillis(),
+                )
+                if (livingPresenceDecision?.shouldResolveSilently() == true) {
+                    Log.d(TAG, "LivingPresence decision resolved silently: ${livingPresenceDecision.thought}")
+                    runCatching {
+                        cihaiService.recordSilentPresenceAction(
+                            assistantId = assistantUuid.toString(),
+                            assistantName = assistant.name,
+                            reason = livingPresenceDecision.toTargetedReason(assistant.name),
+                            userText = historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
+                            actionHintNames = livingPresenceDecision.toCihaiActionHints(),
+                        )
+                    }.onFailure { error ->
+                        Log.w(ProactiveMessageService.TAG, "Failed to record LivingPresence silent judgment", error)
+                    }
+                    val hasQueuedTargeted = if (isTargetedTrigger) {
+                        ProactiveMessageService.popCurrentTargetedAndScheduleNext(
+                            context = this@ProactiveMessageTriggerService,
+                            setting = proactiveSetting,
+                        )
+                    } else {
+                        false
+                    }
+                    val scheduledLivingPresence = !hasQueuedTargeted &&
+                        scheduleNextLivingPresenceTick(proactiveSetting, assistant.name, livingPresenceDecision)
+                    if (!hasQueuedTargeted && !scheduledLivingPresence) {
+                        ProactiveMessageService.scheduleNext(
+                            context = this@ProactiveMessageTriggerService,
+                            settings = settings,
+                            minutesSinceLastChat = minutesSinceLastChat,
+                            assistantId = assistantUuid,
+                        )
+                    }
+                    stopSelf()
+                    return@launch
+                }
 
-                val autonomousPlan = if (isTargetedTrigger) {
+                val autonomousPlan = if (isTargetedTrigger || livingPresenceDecision != null) {
                     null
                 } else {
                     buildAutonomousIntentPlan(
@@ -952,8 +995,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
 
-                val effectiveTargetedReason = targetedReason ?: autonomousPlan?.toImmediateReason(assistant.name)
-                val effectiveTargetedKind = targetedKind ?: autonomousPlan
+                val effectiveTargetedReason = targetedReason
+                    ?: livingPresenceDecision?.toTargetedReason(assistant.name)
+                    ?: autonomousPlan?.toImmediateReason(assistant.name)
+                val effectiveTargetedKind = targetedKind
+                    ?: livingPresenceDecision?.updatedIntent?.kind?.toTargetedKind()
+                    ?: autonomousPlan
                     ?.takeIf { it.shouldMessageNow }
                     ?.intent
                     ?.name
@@ -1101,6 +1148,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     saveProactiveMessage(
                         settings, assistant, conversationId, conversation
                     )
+                    livingPresenceDecision?.let { decision ->
+                        livingPresenceStore.markIntentSpoken(
+                            intentId = decision.updatedIntent.id,
+                            nowMillis = System.currentTimeMillis(),
+                        )
+                    }
                     if (isTargetedTrigger) {
                         settingsStore.update { currentSettings ->
                             currentSettings.markTargetedProactiveThoughtExpressed(
@@ -1112,21 +1165,28 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                 }
 
-                if (isTargetedTrigger) {
-                    val hasNextTargeted = ProactiveMessageService.popCurrentTargetedAndScheduleNext(
+                val hasNextTargeted = if (isTargetedTrigger) {
+                    ProactiveMessageService.popCurrentTargetedAndScheduleNext(
                         context = this@ProactiveMessageTriggerService,
                         setting = proactiveSetting,
                     )
-                    if (!hasNextTargeted) {
-                        ProactiveMessageService.scheduleNext(
-                            context = this@ProactiveMessageTriggerService,
-                            settings = settings,
-                            minutesSinceLastChat = 0L,
-                            assistantId = assistantUuid,
-                        )
-                    }
+                } else {
+                    false
                 }
-                if (!isTargetedTrigger) {
+                val scheduledLivingPresence = if (!hasNextTargeted) {
+                    livingPresenceDecision?.let { scheduleNextLivingPresenceTick(proactiveSetting, assistant.name, it) } == true
+                } else {
+                    false
+                }
+                if (isTargetedTrigger && !hasNextTargeted && !scheduledLivingPresence) {
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        minutesSinceLastChat = 0L,
+                        assistantId = assistantUuid,
+                    )
+                }
+                if (!isTargetedTrigger && !scheduledLivingPresence) {
                     ProactiveMessageService.scheduleNext(
                         context = this@ProactiveMessageTriggerService,
                         settings = settings,
@@ -1142,6 +1202,59 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
         }
         return START_NOT_STICKY
+    }
+
+    private fun RollingJudgmentDecision.shouldResolveSilently(): Boolean =
+        LivingAction.MESSAGE !in actions && updatedIntent.spokenCount > 0
+
+    private fun RollingJudgmentDecision.toTargetedReason(assistantName: String): String = buildString {
+        appendLine("${assistantName.ifBlank { "当前角色" }} 的 Living Presence OS 下一轮判断。")
+        appendLine("RollingJudgmentLoop: BDI 信念/欲望/意图 -> ReAct 思考/行动/观察 -> 再决定。")
+        appendLine("Belief: ${updatedIntent.belief}")
+        appendLine("Desire: ${updatedIntent.desire}")
+        appendLine("Intention: ${updatedIntent.intention}")
+        appendLine("Hypotheses: ${updatedIntent.hypotheses.joinToString(" / ")}")
+        appendLine("Emotion: ${updatedIntent.emotion.label} concern=${updatedIntent.emotion.concern} restraint=${updatedIntent.restraint}")
+        appendLine("This round thought: $thought")
+        observationRequest?.let { appendLine("Observation request: $it") }
+        appendLine("Allowed actions now: ${actions.joinToString(", ") { it.name }}")
+        appendLine("不要把这段当成预写消息；触发时重新观察、重新判断，必要时可以 [PASS] 并写露露日记。")
+    }.trim()
+
+    private fun RollingJudgmentDecision.toCihaiActionHints(): List<String> = buildList {
+        if (LivingAction.JOURNAL_WRITE in actions || LivingAction.INNER_THOUGHT in actions || LivingAction.WAIT in actions) {
+            add(LivingPresenceAction.WRITE_JOURNAL.name)
+        }
+        if (LivingAction.READ in actions) {
+            add(LivingPresenceAction.READ_BOOK.name)
+        }
+        if (LivingAction.MEMORY_UPDATE in actions) {
+            add(LivingPresenceAction.MEMORY_REFLECT.name)
+        }
+    }.ifEmpty { defaultSilentPresenceActionHints() }
+
+    private fun LivingIntentKind.toTargetedKind(): String = when (this) {
+        LivingIntentKind.STUDY_FOCUS -> "study"
+        LivingIntentKind.DEADLINE, LivingIntentKind.WAKE_UP -> "schedule"
+        LivingIntentKind.HEALTH_SAFETY, LivingIntentKind.ORDINARY_SILENCE -> "living_presence"
+    }
+
+    private fun scheduleNextLivingPresenceTick(
+        setting: ProactiveMessageSetting,
+        assistantName: String,
+        decision: RollingJudgmentDecision,
+    ): Boolean {
+        val nextEvaluateAt = decision.updatedIntent.nextEvaluateAt
+        if (nextEvaluateAt <= System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1)) return false
+        ProactiveMessageService.scheduleTargeted(
+            context = this@ProactiveMessageTriggerService,
+            setting = setting,
+            triggerAtMillis = nextEvaluateAt,
+            reason = decision.toTargetedReason(assistantName),
+            userText = decision.updatedIntent.belief.take(160),
+            kind = decision.updatedIntent.kind.toTargetedKind(),
+        )
+        return true
     }
 
     /**
@@ -1645,6 +1758,11 @@ internal fun buildTargetedProactiveSensingInstruction(
         }
         "general" -> {
             appendLine("本次目标的感知重点：先看当前时间、应用使用和电量；如果原因里提到记录/日志，可以主动写入日志。")
+        }
+        "living_presence" -> {
+            appendLine("本次目标的感知重点：这是 Living Presence OS 的下一轮滚动判断，不是随机主动消息。")
+            appendLine("先根据 BDI 信念/欲望/意图和 ReAct 观察重新决定：发消息、看工具、等待、写露露日记、阅读或沉淀记忆。")
+            appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把内心想法和行动写入露露日记并进入记忆。")
         }
         else -> when {
             reason.contains("睡") -> appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量。")

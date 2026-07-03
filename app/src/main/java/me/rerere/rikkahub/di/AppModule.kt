@@ -112,6 +112,7 @@ val appModule = module {
             pluginToolProvider = get(),
             pluginLoader = get(),
             luluPerceptionCollector = get(),
+            livingPresenceStore = get(),
         )
     }
 

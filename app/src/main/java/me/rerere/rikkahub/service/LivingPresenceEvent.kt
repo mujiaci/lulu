@@ -1,7 +1,11 @@
 package me.rerere.rikkahub.service
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 data class LivingPresenceEvent(
     val kind: LivingPresenceEventKind,
+    val assistantId: String = "",
     val assistantName: String,
     val userText: String,
     val assistantText: String,
@@ -12,6 +16,7 @@ data class LivingPresenceEvent(
     val deadlineAtMillis: Long? = null,
 )
 
+@Serializable
 enum class LivingPresenceEventKind {
     ORDINARY_SILENCE,
     HEALTH_SAFETY,
@@ -20,12 +25,14 @@ enum class LivingPresenceEventKind {
     WAKE_UP,
 }
 
+@Serializable
 data class LivingApiPlan(
     val mainApiTasks: List<LivingApiTask>,
     val secondaryApiTasks: List<LivingApiTask>,
     val ruleTasks: List<LivingApiTask>,
 )
 
+@Serializable
 enum class LivingApiTask {
     BDI_JUDGEMENT,
     EMOTION_EVALUATION,
@@ -47,6 +54,7 @@ enum class LivingApiTask {
 
 object LivingPresenceEventExtractor {
     fun extract(
+        assistantId: String = "",
         assistantName: String,
         userText: String,
         assistantText: String,
@@ -64,6 +72,7 @@ object LivingPresenceEventExtractor {
         }
         return LivingPresenceEvent(
             kind = kind,
+            assistantId = assistantId,
             assistantName = assistantName,
             userText = userText,
             assistantText = assistantText,
@@ -141,6 +150,7 @@ object LivingBeliefStore {
         if (match == null) {
             return existingIntents + RollingJudgmentLoop.createIntent(
                 assistantName = event.assistantName,
+                assistantId = event.assistantId,
                 userText = event.userText,
                 assistantText = event.assistantText,
                 nowMillis = nowMillis,

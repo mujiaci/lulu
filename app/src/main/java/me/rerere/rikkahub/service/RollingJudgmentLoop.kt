@@ -1,10 +1,13 @@
 package me.rerere.rikkahub.service
 
+import kotlinx.serialization.Serializable
 import java.util.UUID
 import kotlin.math.max
 
+@Serializable
 data class LivingIntent(
     val id: String = UUID.randomUUID().toString(),
+    val assistantId: String = "",
     val kind: LivingIntentKind,
     val belief: String,
     val desire: String,
@@ -24,6 +27,7 @@ data class LivingIntent(
     val status: LivingIntentStatus = LivingIntentStatus.ACTIVE,
 )
 
+@Serializable
 enum class LivingIntentKind {
     HEALTH_SAFETY,
     ORDINARY_SILENCE,
@@ -32,11 +36,13 @@ enum class LivingIntentKind {
     WAKE_UP,
 }
 
+@Serializable
 data class EvaluationCadence(
     val delaysMinutes: List<Long>,
     val reason: String,
 )
 
+@Serializable
 data class EmotionSnapshot(
     val concern: Int,
     val attachment: Int,
@@ -44,6 +50,7 @@ data class EmotionSnapshot(
     val label: String,
 )
 
+@Serializable
 enum class LivingAction {
     MESSAGE,
     TOOL_CHECK,
@@ -57,6 +64,7 @@ enum class LivingAction {
     ASK_CAPABILITY,
 }
 
+@Serializable
 enum class LivingIntentStatus {
     ACTIVE,
     RESTRAINED,
@@ -64,6 +72,7 @@ enum class LivingIntentStatus {
     CANCELLED,
 }
 
+@Serializable
 data class RollingJudgmentDecision(
     val updatedIntent: LivingIntent,
     val actions: List<LivingAction>,
@@ -73,6 +82,7 @@ data class RollingJudgmentDecision(
 
 object RollingJudgmentLoop {
     fun createIntent(
+        assistantId: String = "",
         assistantName: String,
         userText: String,
         assistantText: String,
@@ -85,6 +95,7 @@ object RollingJudgmentLoop {
         val hypotheses = hypothesesFor(kind)
         val emotion = emotionFor(kind)
         return LivingIntent(
+            assistantId = assistantId,
             kind = kind,
             belief = beliefFor(kind, userText, assistantText),
             desire = desireFor(kind, assistantName),
