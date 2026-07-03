@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.service
 
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -333,6 +334,51 @@ class MemoryBankContextTest {
             memories = memories,
             query = "论文大纲卡住了",
             maxItems = 1,
+        )
+
+        assertEquals(listOf(1, 2), selected.map { it.id })
+    }
+
+    @Test
+    fun `select memory recall items expands through weighted graph memory edges`() {
+        val memories = listOf(
+            MemoryBankEntity(
+                id = 1,
+                content = "用户正在写论文大纲，希望露露帮她拆成更小的步骤。",
+                memoryKind = "user_preference",
+                importance = 5,
+                createdAt = 300L,
+            ),
+            MemoryBankEntity(
+                id = 2,
+                content = "露露记得她一写论文就容易紧张，先把语气放软。",
+                memoryKind = "role_emotion",
+                importance = 1,
+                createdAt = 100L,
+            ),
+            MemoryBankEntity(
+                id = 3,
+                content = "用户喜欢雨天窝在床上聊天。",
+                memoryKind = "user_preference",
+                importance = 4,
+                createdAt = 200L,
+            ),
+        )
+
+        val selected = selectMemoryRecallItems(
+            memories = memories,
+            query = "论文大纲卡住了",
+            maxItems = 1,
+            graphEdges = listOf(
+                MemoryGraphEdgeEntity(
+                    sourceMemoryId = 1,
+                    targetMemoryId = 2,
+                    weight = 2.2,
+                    coOccurrenceCount = 4,
+                    createdAt = 10L,
+                    lastReinforcedAt = 20L,
+                ),
+            ),
         )
 
         assertEquals(listOf(1, 2), selected.map { it.id })

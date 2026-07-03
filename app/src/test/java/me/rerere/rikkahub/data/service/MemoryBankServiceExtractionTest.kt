@@ -3,6 +3,7 @@ package me.rerere.rikkahub.data.service
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -89,6 +90,8 @@ class MemoryBankServiceExtractionTest {
         assertEquals(listOf(7, 8), dao.recalledIds)
         assertEquals("""["8"]""", dao.relatedMemoryUpdates[7])
         assertEquals("""["7"]""", dao.relatedMemoryUpdates[8])
+        assertEquals(setOf(7 to 8, 8 to 7), dao.reinforcedGraphEdges.map { it.sourceId to it.targetId }.toSet())
+        assertTrue(dao.reinforcedGraphEdges.all { it.delta > 0.18 && it.maxWeight == 3.0 })
         assertTrue(dao.recalledAt > 0L)
     }
 
@@ -179,6 +182,8 @@ private class RecordingMemoryBankDAO(
     val inserted = mutableListOf<MemoryBankEntity>()
     val recalledIds = mutableListOf<Int>()
     val relatedMemoryUpdates = mutableMapOf<Int, String?>()
+    val insertedGraphEdges = mutableListOf<MemoryGraphEdgeEntity>()
+    val reinforcedGraphEdges = mutableListOf<ReinforcedGraphEdge>()
     val deprecatedUpdates = mutableListOf<DeprecatedMemoryUpdate>()
     var lastAssistantKeywordTypeSearch: AssistantKeywordTypeSearch? = null
     var recalledAt: Long = 0L
@@ -188,9 +193,16 @@ private class RecordingMemoryBankDAO(
         return (99 + inserted.size).toLong()
     }
 
+    override suspend fun insertMemoryGraphEdge(edge: MemoryGraphEdgeEntity): Long {
+        insertedGraphEdges += edge
+        return insertedGraphEdges.size.toLong()
+    }
+
     override suspend fun updateMemory(memory: MemoryBankEntity) = unsupported()
     override suspend fun deleteMemory(memory: MemoryBankEntity) = unsupported()
     override suspend fun deleteMemoryById(id: Int) = unsupported()
+    override suspend fun deleteMemoryGraphEdgesForMemory(id: Int) = unsupported()
+    override suspend fun deleteMemoryGraphEdgesForAssistant(assistantId: String) = unsupported()
     override suspend fun getMemoryById(id: Int): MemoryBankEntity? = unsupported()
     override suspend fun getAllMemories(): List<MemoryBankEntity> = unsupported()
     override suspend fun getMemoriesByType(type: String): List<MemoryBankEntity> = unsupported()
@@ -225,7 +237,6 @@ private class RecordingMemoryBankDAO(
     override suspend fun getTotalMessageCount(): Int = 0
     override suspend fun getTotalCount(): Int = 0
     override suspend fun getCountByType(type: String): Int = 0
-    override suspend fun getSummaryCount(): Int = 0
     override suspend fun getCountByVectorStatus(status: String): Int = 0
     override suspend fun getDeprecatedCount(): Int = recentMemories.count { it.deprecated }
     override suspend fun getDeprecatedCountByAssistant(assistantId: String): Int =
@@ -303,6 +314,22 @@ private class RecordingMemoryBankDAO(
         relatedMemoryUpdates[id] = relatedMemoryIdsJson
     }
 
+    override suspend fun reinforceMemoryGraphEdge(
+        sourceId: Int,
+        targetId: Int,
+        delta: Double,
+        maxWeight: Double,
+        reinforcedAt: Long,
+    ) {
+        reinforcedGraphEdges += ReinforcedGraphEdge(sourceId, targetId, delta, maxWeight, reinforcedAt)
+    }
+
+    override suspend fun getMemoryGraphEdgesFromSources(
+        sourceIds: List<Int>,
+        minWeight: Double,
+        limit: Int,
+    ): List<MemoryGraphEdgeEntity> = emptyList()
+
     override suspend fun markMemoryDeprecated(
         id: Int,
         deprecatedReason: String?,
@@ -335,6 +362,14 @@ private data class DeprecatedMemoryUpdate(
     val deprecatedReason: String?,
     val supersededByMemoryId: String?,
     val correctedAt: Long?,
+)
+
+private data class ReinforcedGraphEdge(
+    val sourceId: Int,
+    val targetId: Int,
+    val delta: Double,
+    val maxWeight: Double,
+    val reinforcedAt: Long,
 )
 
 private data class AssistantKeywordTypeSearch(

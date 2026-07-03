@@ -3,9 +3,11 @@ package me.rerere.rikkahub.data.db.dao
 import androidx.room.Dao
 import androidx.room.Delete
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 
 
 @Dao
@@ -15,6 +17,9 @@ interface MemoryBankDAO {
     @Insert
     suspend fun insertMemory(memory: MemoryBankEntity): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMemoryGraphEdge(edge: MemoryGraphEdgeEntity): Long
+
     @Update
     suspend fun updateMemory(memory: MemoryBankEntity)
 
@@ -23,6 +28,18 @@ interface MemoryBankDAO {
 
     @Query("DELETE FROM memory_bank WHERE id = :id")
     suspend fun deleteMemoryById(id: Int)
+
+    @Query("DELETE FROM memory_graph_edge WHERE source_memory_id = :id OR target_memory_id = :id")
+    suspend fun deleteMemoryGraphEdgesForMemory(id: Int)
+
+    @Query(
+        """
+        DELETE FROM memory_graph_edge
+        WHERE source_memory_id IN (SELECT id FROM memory_bank WHERE assistant_id = :assistantId)
+            OR target_memory_id IN (SELECT id FROM memory_bank WHERE assistant_id = :assistantId)
+        """
+    )
+    suspend fun deleteMemoryGraphEdgesForAssistant(assistantId: String)
 
     @Query("DELETE FROM memory_bank WHERE assistant_id = :assistantId")
     suspend fun deleteMemoriesByAssistant(assistantId: String)
@@ -153,6 +170,38 @@ interface MemoryBankDAO {
 
     @Query("UPDATE memory_bank SET related_memory_ids_json = :relatedMemoryIdsJson WHERE id = :id")
     suspend fun updateRelatedMemoryIds(id: Int, relatedMemoryIdsJson: String?)
+
+    @Query(
+        """
+        UPDATE memory_graph_edge
+        SET weight = MIN(:maxWeight, weight + :delta),
+            co_occurrence_count = co_occurrence_count + 1,
+            last_reinforced_at = :reinforcedAt
+        WHERE source_memory_id = :sourceId AND target_memory_id = :targetId
+        """
+    )
+    suspend fun reinforceMemoryGraphEdge(
+        sourceId: Int,
+        targetId: Int,
+        delta: Double,
+        maxWeight: Double,
+        reinforcedAt: Long,
+    )
+
+    @Query(
+        """
+        SELECT * FROM memory_graph_edge
+        WHERE source_memory_id IN (:sourceIds)
+            AND weight >= :minWeight
+        ORDER BY weight DESC, last_reinforced_at DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getMemoryGraphEdgesFromSources(
+        sourceIds: List<Int>,
+        minWeight: Double,
+        limit: Int,
+    ): List<MemoryGraphEdgeEntity>
 
     @Query(
         """

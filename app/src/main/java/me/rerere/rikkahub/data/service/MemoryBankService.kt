@@ -13,6 +13,7 @@ import me.rerere.ai.provider.RerankItem
 import me.rerere.ai.provider.RerankParams
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -20,6 +21,9 @@ import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
 
 private const val MEMORY_DUPLICATE_VECTOR_THRESHOLD = 0.85
+private const val MEMORY_HEBBIAN_EDGE_DELTA = 0.18
+private const val MEMORY_HEBBIAN_MAX_EDGE_WEIGHT = 3.0
+private const val MEMORY_GRAPH_MIN_RECALL_WEIGHT = 0.12
 private const val LIGHT_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
 private const val HEAVY_MAINTENANCE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
 private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
@@ -133,10 +137,12 @@ class MemoryBankService(
     }
 
     suspend fun deleteMemory(id: Int) = withContext(Dispatchers.IO) {
+        memoryBankDAO.deleteMemoryGraphEdgesForMemory(id)
         memoryBankDAO.deleteMemoryById(id)
     }
 
     suspend fun deleteMemoriesByAssistant(assistantId: String) = withContext(Dispatchers.IO) {
+        memoryBankDAO.deleteMemoryGraphEdgesForAssistant(assistantId)
         memoryBankDAO.deleteMemoriesByAssistant(assistantId)
     }
 
@@ -347,11 +353,24 @@ class MemoryBankService(
             queryVector = queryVector,
         ).take(rerankCandidateCount)
         val rerankResults = rerankRecallCandidates(query, rerankCandidates)
+        val graphEdges = memories.map { it.id }
+            .filter { it > 0 }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.let { sourceIds ->
+                memoryBankDAO.getMemoryGraphEdgesFromSources(
+                    sourceIds = sourceIds,
+                    minWeight = MEMORY_GRAPH_MIN_RECALL_WEIGHT,
+                    limit = 400,
+                )
+            }
+            .orEmpty()
         val selected = selectMemoryRecallItems(
             memories = memories,
             query = query,
             queryVector = queryVector,
             rerankCandidateCount = rerankCandidateCount,
+            graphEdges = graphEdges,
             reranker = { rerankResults },
         )
         val recalledIds = selected.map { it.id }.filter { it > 0 }
@@ -436,6 +455,7 @@ class MemoryBankService(
         val validMemories = memories.filter { it.id > 0 }
         if (validMemories.size < 2) return
         val selectedIds = validMemories.map { it.id.toString() }
+        val now = System.currentTimeMillis()
         validMemories.forEach { memory ->
             val relatedIds = (memory.relatedMemoryIds() + selectedIds)
                 .filter { it != memory.id.toString() }
@@ -448,6 +468,26 @@ class MemoryBankService(
                     relatedIds,
                 ),
             )
+            relatedIds.forEach { relatedId ->
+                val targetId = relatedId.toIntOrNull() ?: return@forEach
+                memoryBankDAO.insertMemoryGraphEdge(
+                    MemoryGraphEdgeEntity(
+                        sourceMemoryId = memory.id,
+                        targetMemoryId = targetId,
+                        weight = 0.0,
+                        coOccurrenceCount = 0,
+                        createdAt = now,
+                        lastReinforcedAt = now,
+                    )
+                )
+                memoryBankDAO.reinforceMemoryGraphEdge(
+                    sourceId = memory.id,
+                    targetId = targetId,
+                    delta = hebbianDelta(memory, validMemories.firstOrNull { it.id == targetId }),
+                    maxWeight = MEMORY_HEBBIAN_MAX_EDGE_WEIGHT,
+                    reinforcedAt = now,
+                )
+            }
         }
     }
 }
@@ -512,6 +552,7 @@ internal fun selectMemoryRecallItems(
     queryVector: List<Float> = emptyList(),
     maxItems: Int? = null,
     rerankCandidateCount: Int = 60,
+    graphEdges: List<MemoryGraphEdgeEntity> = emptyList(),
     reranker: (List<MemoryBankEntity>) -> List<MemoryRerankResult> = { emptyList() },
 ): List<MemoryBankEntity> {
     val sorted = rankMemoryRecallCandidates(memories, query, queryVector)
@@ -522,7 +563,10 @@ internal fun selectMemoryRecallItems(
         memories = candidates,
         results = runCatching { reranker(candidates) }.getOrDefault(emptyList()),
     ).take(limit)
-    return direct.expandRelatedMemories(sorted, maxRelatedItems = 1)
+    return direct
+        .expandGraphMemories(sorted, graphEdges, maxRelatedItems = 2)
+        .expandRelatedMemories(sorted, maxRelatedItems = 1)
+        .distinctBy { it.id }
 }
 
 private fun rankMemoryRecallCandidates(
@@ -569,10 +613,38 @@ private fun List<MemoryBankEntity>.expandRelatedMemories(
     return this + related
 }
 
+private fun List<MemoryBankEntity>.expandGraphMemories(
+    candidates: List<MemoryBankEntity>,
+    graphEdges: List<MemoryGraphEdgeEntity>,
+    maxRelatedItems: Int,
+): List<MemoryBankEntity> {
+    if (maxRelatedItems <= 0 || isEmpty() || graphEdges.isEmpty()) return this
+    val selectedIds = mapTo(mutableSetOf()) { it.id }
+    val candidateById = candidates.associateBy { it.id }
+    val graphRelated = graphEdges.asSequence()
+        .filter { edge -> edge.sourceMemoryId in selectedIds && edge.targetMemoryId !in selectedIds }
+        .sortedWith(
+            compareByDescending<MemoryGraphEdgeEntity> { it.weight }
+                .thenByDescending { it.lastReinforcedAt }
+        )
+        .mapNotNull { edge -> candidateById[edge.targetMemoryId] }
+        .distinctBy { it.id }
+        .take(maxRelatedItems)
+        .toList()
+    return this + graphRelated
+}
+
 private fun MemoryBankEntity.relatedMemoryIds(): List<String> =
     runCatching {
         JsonInstant.decodeFromString(ListSerializer(String.serializer()), relatedMemoryIdsJson.orEmpty())
     }.getOrDefault(emptyList())
+
+private fun hebbianDelta(source: MemoryBankEntity, target: MemoryBankEntity?): Double {
+    val sourceStrength = source.importance.coerceIn(1, 5) / 5.0 * source.confidence.coerceIn(0.0, 1.0)
+    val targetStrength = (target?.importance ?: source.importance).coerceIn(1, 5) / 5.0 *
+        (target?.confidence ?: source.confidence).coerceIn(0.0, 1.0)
+    return MEMORY_HEBBIAN_EDGE_DELTA + (sourceStrength + targetStrength) * 0.05
+}
 
 private fun List<RerankItem>.toMemoryRerankResults(): List<MemoryRerankResult> =
     map { item ->
