@@ -1,6 +1,11 @@
 package me.rerere.rikkahub.service
 
 import kotlinx.serialization.Serializable
+import java.time.Instant
+import java.time.LocalDate
+import java.time.LocalDateTime
+import java.time.LocalTime
+import java.time.ZoneId
 
 @Serializable
 data class LivingPresenceEvent(
@@ -63,10 +68,13 @@ object LivingPresenceEventExtractor {
         deadlineAtMillis: Long? = null,
     ): LivingPresenceEvent {
         val text = "$userText\n$assistantText".lowercase()
+        val parsedTime = parseTimeSignal(text, nowMillis)
+        val effectiveTargetAt = targetAtMillis ?: parsedTime.targetAtMillis
+        val effectiveDeadlineAt = deadlineAtMillis ?: parsedTime.deadlineAtMillis
         val kind = when {
-            deadlineAtMillis != null || text.containsAny(DEADLINE_WORDS) -> LivingPresenceEventKind.DEADLINE
-            targetAtMillis != null || text.containsAny(WAKE_WORDS) -> LivingPresenceEventKind.WAKE_UP
             text.containsAny(HEALTH_WORDS) -> LivingPresenceEventKind.HEALTH_SAFETY
+            effectiveDeadlineAt != null || text.containsAny(DEADLINE_WORDS) -> LivingPresenceEventKind.DEADLINE
+            effectiveTargetAt != null || text.containsAny(WAKE_WORDS) -> LivingPresenceEventKind.WAKE_UP
             text.containsAny(STUDY_WORDS) -> LivingPresenceEventKind.STUDY_FOCUS
             else -> LivingPresenceEventKind.ORDINARY_SILENCE
         }
@@ -76,11 +84,11 @@ object LivingPresenceEventExtractor {
             assistantName = assistantName,
             userText = userText,
             assistantText = assistantText,
-            rawSignals = rawSignals(kind, text),
-            apiPlan = buildApiPlan(kind, hasTimeSignal = hasTimeSignal(text) || targetAtMillis != null || deadlineAtMillis != null),
+            rawSignals = rawSignals(kind, text, parsedTime.rawSignal),
+            apiPlan = buildApiPlan(kind, hasTimeSignal = hasTimeSignal(text) || effectiveTargetAt != null || effectiveDeadlineAt != null),
             createdAt = nowMillis,
-            targetAtMillis = targetAtMillis,
-            deadlineAtMillis = deadlineAtMillis,
+            targetAtMillis = effectiveTargetAt,
+            deadlineAtMillis = effectiveDeadlineAt,
         )
     }
 
@@ -114,8 +122,9 @@ object LivingPresenceEventExtractor {
         return LivingApiPlan(mainApiTasks = main, secondaryApiTasks = secondary, ruleTasks = rules)
     }
 
-    private fun rawSignals(kind: LivingPresenceEventKind, text: String): List<String> = buildList {
+    private fun rawSignals(kind: LivingPresenceEventKind, text: String, timeSignal: String?): List<String> = buildList {
         add(kind.name.lowercase())
+        timeSignal?.let { add(it) }
         when (kind) {
             LivingPresenceEventKind.HEALTH_SAFETY -> addAll(HEALTH_WORDS.filter { text.contains(it) })
             LivingPresenceEventKind.STUDY_FOCUS -> addAll(STUDY_WORDS.filter { text.contains(it) })
@@ -126,10 +135,87 @@ object LivingPresenceEventExtractor {
     }.distinct()
 
     private fun hasTimeSignal(text: String): Boolean =
-        text.contains(Regex("\\d+\\s*(点|:|：|min|分钟|小时|h)")) ||
+        text.contains(Regex("[\\d一二两三四五六七八九十]+\\s*(点|:|：|min|分钟|小时|h)")) ||
             listOf("今晚", "今天", "明天", "ddl", "截止", "到点").any { text.contains(it) }
 
+    private fun parseTimeSignal(text: String, nowMillis: Long): ParsedTimeSignal {
+        val timeMatch = Regex("""(今天|明天|后天|今晚)?\s*(早上|上午|中午|下午|晚上|夜里|凌晨)?\s*([0-9一二两三四五六七八九十]{1,3})\s*(?::|：|点)\s*([0-9一二两三四五六七八九十]{1,2}|半)?""")
+            .find(text)
+            ?: return ParsedTimeSignal()
+        val dateWord = timeMatch.groupValues[1]
+        val period = timeMatch.groupValues[2]
+        val hourRaw = timeMatch.groupValues[3]
+        val minuteRaw = timeMatch.groupValues[4]
+        val hourBase = parseChineseNumber(hourRaw) ?: return ParsedTimeSignal()
+        val minuteBase = when {
+            minuteRaw == "半" -> 30
+            minuteRaw.isNotBlank() -> parseChineseNumber(minuteRaw) ?: 0
+            else -> 0
+        }
+        var hour = hourBase
+        if ((period == "下午" || period == "晚上" || period == "夜里" || dateWord == "今晚") && hour in 1..11) {
+            hour += 12
+        }
+        if (period == "中午" && hour in 1..10) {
+            hour += 12
+        }
+        hour = hour.coerceIn(0, 23)
+        val zone = ZoneId.systemDefault()
+        val now = LocalDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), zone)
+        val dayOffset = when (dateWord) {
+            "明天" -> 1L
+            "后天" -> 2L
+            else -> 0L
+        }
+        var targetDate = LocalDate.now(zone).plusDays(dayOffset)
+        var target = LocalDateTime.of(targetDate, LocalTime.of(hour, minuteBase.coerceIn(0, 59)))
+        if (dayOffset == 0L && target.isBefore(now.plusMinutes(1))) {
+            targetDate = targetDate.plusDays(1)
+            target = LocalDateTime.of(targetDate, LocalTime.of(hour, minuteBase.coerceIn(0, 59)))
+        }
+        val millis = target.atZone(zone).toInstant().toEpochMilli()
+        val isDeadline = text.containsAny(DEADLINE_WORDS) || text.contains("前") || text.contains("之前")
+        val isWake = text.containsAny(WAKE_WORDS)
+        val raw = "time_signal=${timeMatch.value.trim()}@${target}"
+        return when {
+            isDeadline -> ParsedTimeSignal(deadlineAtMillis = millis, rawSignal = raw)
+            isWake -> ParsedTimeSignal(targetAtMillis = millis, rawSignal = raw)
+            else -> ParsedTimeSignal(rawSignal = raw)
+        }
+    }
+
+    private fun parseChineseNumber(value: String): Int? {
+        value.toIntOrNull()?.let { return it }
+        if (value.isBlank()) return null
+        val digits = mapOf(
+            '零' to 0,
+            '一' to 1,
+            '二' to 2,
+            '两' to 2,
+            '三' to 3,
+            '四' to 4,
+            '五' to 5,
+            '六' to 6,
+            '七' to 7,
+            '八' to 8,
+            '九' to 9,
+        )
+        if ('十' !in value) {
+            return value.mapNotNull { digits[it] }.joinToString("").toIntOrNull()
+        }
+        val parts = value.split('十')
+        val tens = parts.getOrNull(0)?.takeIf { it.isNotBlank() }?.firstOrNull()?.let { digits[it] } ?: 1
+        val ones = parts.getOrNull(1)?.takeIf { it.isNotBlank() }?.firstOrNull()?.let { digits[it] } ?: 0
+        return tens * 10 + ones
+    }
+
     private fun String.containsAny(words: Set<String>): Boolean = words.any { contains(it) }
+
+    private data class ParsedTimeSignal(
+        val targetAtMillis: Long? = null,
+        val deadlineAtMillis: Long? = null,
+        val rawSignal: String? = null,
+    )
 
     private val HEALTH_WORDS = setOf("肚子", "胃", "头", "肚子疼", "肚子痛", "胃疼", "胃痛", "难受", "不舒服", "头疼", "头痛", "疼", "痛")
     private val STUDY_WORDS = setOf("学习", "复习", "背书", "刷题", "写作业", "自习", "看书", "专业课", "考研")
@@ -164,6 +250,8 @@ object LivingBeliefStore {
                 .distinct()
                 .take(8),
             lastEvaluatedAt = nowMillis,
+            targetAtMillis = event.targetAtMillis ?: match.targetAtMillis,
+            deadlineAtMillis = event.deadlineAtMillis ?: match.deadlineAtMillis,
         )
         return existingIntents.map { if (it.id == match.id) updated else it }
     }

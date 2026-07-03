@@ -102,6 +102,9 @@ class RollingJudgmentLoopTest {
         assertTrue(decision.actions.contains(LivingAction.SCHEDULE_NEXT_TICK))
         assertTrue(decision.updatedIntent.restraint > intent.restraint)
         assertEquals(1, decision.updatedIntent.silentEvaluationCount)
+        assertTrue(decision.observation?.requestedTools?.contains("get_app_usage") == true)
+        assertTrue(decision.judgmentTrace?.thought?.contains("BDI") == true)
+        assertEquals(LivingJudgmentSource.MAIN_API_READY_CONTRACT, decision.judgmentTrace?.source)
     }
 
     private companion object {

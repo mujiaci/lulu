@@ -38,6 +38,35 @@ class LivingPresenceEventTest {
     }
 
     @Test
+    fun `extractor parses chinese deadline time without explicit millis`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "这个任务晚上 6 点前要提交",
+            assistantText = "我会帮你盯一下。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.DEADLINE, event.kind)
+        assertTrue(event.deadlineAtMillis != null)
+        assertTrue(event.rawSignals.any { it.startsWith("time_signal=") })
+        assertTrue(event.apiPlan.secondaryApiTasks.contains(LivingApiTask.TIME_EXTRACTION))
+    }
+
+    @Test
+    fun `extractor parses wake time from chinese text`() {
+        val event = LivingPresenceEventExtractor.extract(
+            assistantName = "露露",
+            userText = "明天九点叫我起床",
+            assistantText = "我会记着。",
+            nowMillis = NOW,
+        )
+
+        assertEquals(LivingPresenceEventKind.WAKE_UP, event.kind)
+        assertTrue(event.targetAtMillis != null)
+        assertTrue(event.rawSignals.any { it.contains("明天九点") })
+    }
+
+    @Test
     fun `belief store merges similar open event instead of creating duplicate intent`() {
         val first = LivingPresenceEventExtractor.extract(
             assistantName = "露露",

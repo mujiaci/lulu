@@ -1217,6 +1217,21 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         appendLine("Emotion: ${updatedIntent.emotion.label} concern=${updatedIntent.emotion.concern} restraint=${updatedIntent.restraint}")
         appendLine("This round thought: $thought")
         observationRequest?.let { appendLine("Observation request: $it") }
+        observation?.let {
+            appendLine("Observation tools: ${it.requestedTools.joinToString(", ")}")
+            appendLine("Observation signals: ${it.signals.joinToString(", ")}")
+        }
+        judgmentTrace?.let {
+            appendLine("Structured BDI/ReAct trace:")
+            appendLine("Source: ${it.source}")
+            appendLine("Thought: ${it.thought}")
+            appendLine("Action: ${it.action}")
+            appendLine("Observation: ${it.observation}")
+            appendLine("Decision: ${it.decision}")
+        }
+        if (updatedIntent.capabilityRequests.isNotEmpty()) {
+            appendLine("Capability requests: ${updatedIntent.capabilityRequests.joinToString(" / ") { "${it.capability}: ${it.reason}" }}")
+        }
         appendLine("Allowed actions now: ${actions.joinToString(", ") { it.name }}")
         appendLine("不要把这段当成预写消息；触发时重新观察、重新判断，必要时可以 [PASS] 并写露露日记。")
     }.trim()

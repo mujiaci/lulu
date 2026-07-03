@@ -1101,6 +1101,11 @@ class ChatService(
                 userText = lastUserText,
                 assistantText = lastAssistantText,
             )
+            livingPresenceStore.completeReturnedIntents(
+                assistantId = assistant.id.toString(),
+                userText = lastUserText,
+                nowMillis = System.currentTimeMillis(),
+            )
             livingPresenceStore.mergeEvent(
                 LivingPresenceEventExtractor.extract(
                     assistantId = assistant.id.toString(),

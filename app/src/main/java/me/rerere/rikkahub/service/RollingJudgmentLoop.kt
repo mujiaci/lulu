@@ -7,6 +7,7 @@ import kotlin.math.max
 @Serializable
 data class LivingIntent(
     val id: String = UUID.randomUUID().toString(),
+    val createdAt: Long = System.currentTimeMillis(),
     val assistantId: String = "",
     val kind: LivingIntentKind,
     val belief: String,
@@ -20,11 +21,17 @@ data class LivingIntent(
     val lastSpokenAt: Long? = null,
     val spokenCount: Int = 0,
     val silentEvaluationCount: Int = 0,
+    val targetAtMillis: Long? = null,
+    val deadlineAtMillis: Long? = null,
     val urgency: Int,
     val restraint: Int,
     val emotion: EmotionSnapshot,
     val allowedActions: List<LivingAction>,
     val status: LivingIntentStatus = LivingIntentStatus.ACTIVE,
+    val lastObservation: LivingObservation? = null,
+    val lastJudgmentTrace: LivingJudgmentTrace? = null,
+    val completedReason: String? = null,
+    val capabilityRequests: List<LivingCapabilityRequest> = emptyList(),
 )
 
 @Serializable
@@ -48,6 +55,40 @@ data class EmotionSnapshot(
     val attachment: Int,
     val restraint: Int,
     val label: String,
+)
+
+@Serializable
+data class LivingObservation(
+    val summary: String,
+    val requestedTools: List<String> = emptyList(),
+    val signals: List<String> = emptyList(),
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+data class LivingJudgmentTrace(
+    val source: LivingJudgmentSource = LivingJudgmentSource.STRUCTURED_RULE_FALLBACK,
+    val belief: String,
+    val desire: String,
+    val intention: String,
+    val thought: String,
+    val action: String,
+    val observation: String,
+    val decision: String,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+enum class LivingJudgmentSource {
+    MAIN_API_READY_CONTRACT,
+    STRUCTURED_RULE_FALLBACK,
+}
+
+@Serializable
+data class LivingCapabilityRequest(
+    val capability: String,
+    val reason: String,
+    val createdAt: Long = System.currentTimeMillis(),
 )
 
 @Serializable
@@ -78,6 +119,8 @@ data class RollingJudgmentDecision(
     val actions: List<LivingAction>,
     val thought: String,
     val observationRequest: String? = null,
+    val observation: LivingObservation? = null,
+    val judgmentTrace: LivingJudgmentTrace? = null,
 )
 
 object RollingJudgmentLoop {
@@ -96,6 +139,7 @@ object RollingJudgmentLoop {
         val emotion = emotionFor(kind)
         return LivingIntent(
             assistantId = assistantId,
+            createdAt = nowMillis,
             kind = kind,
             belief = beliefFor(kind, userText, assistantText),
             desire = desireFor(kind, assistantName),
@@ -112,12 +156,15 @@ object RollingJudgmentLoop {
             restraint = restraintFor(kind),
             emotion = emotion,
             allowedActions = actionsFor(kind),
+            targetAtMillis = targetAtMillis,
+            deadlineAtMillis = deadlineAtMillis,
         )
     }
 
     fun evaluate(intent: LivingIntent, nowMillis: Long = System.currentTimeMillis()): RollingJudgmentDecision {
         val nextSilentCount = intent.silentEvaluationCount + 1
         val restrained = intent.spokenCount > 0 && intent.lastSpokenAt != null
+        val observation = observe(intent, nowMillis)
         val actions = when {
             restrained -> listOf(
                 LivingAction.WAIT,
@@ -137,28 +184,151 @@ object RollingJudgmentLoop {
             )
         }.filter { it in intent.allowedActions || it == LivingAction.SCHEDULE_NEXT_TICK }
 
+        val thought = structuredThought(intent, observation, restrained)
+        val trace = buildJudgmentTrace(intent, observation, actions, thought, nowMillis)
         val nextEvaluateAt = nowMillis + nextDelayMinutes(intent, nextSilentCount) * MINUTE_MILLIS
+        val evolvedEmotion = evolveEmotion(intent, actions, restrained)
         val updated = intent.copy(
             lastEvaluatedAt = nowMillis,
             silentEvaluationCount = nextSilentCount,
             restraint = if (restrained) (intent.restraint + 1).coerceAtMost(10) else intent.restraint,
             nextEvaluateAt = nextEvaluateAt,
             status = if (restrained) LivingIntentStatus.RESTRAINED else LivingIntentStatus.ACTIVE,
+            emotion = evolvedEmotion,
+            lastObservation = observation,
+            lastJudgmentTrace = trace,
+            capabilityRequests = updateCapabilityRequests(intent, observation, nowMillis),
         )
         return RollingJudgmentDecision(
             updatedIntent = updated,
             actions = actions,
-            thought = if (restrained) {
-                "我已经为这件事开过一次口了，这一轮先克制、观察和记录，等下一次再判断。"
-            } else {
-                "我重新评估这件挂在心里的事，先看信念、欲望和意图，再决定行动。"
-            },
+            thought = thought,
             observationRequest = if (LivingAction.TOOL_CHECK in actions) {
-                "需要观察电量、应用、日程、位置或健康线索，再决定是否开口。"
+                observation.summary
             } else {
                 null
             },
+            observation = observation,
+            judgmentTrace = trace,
         )
+    }
+
+    private fun observe(intent: LivingIntent, nowMillis: Long): LivingObservation {
+        val tools = preferredObservationTools(intent.kind)
+        val signals = buildList {
+            add("silent_round=${intent.silentEvaluationCount + 1}")
+            add("spoken_count=${intent.spokenCount}")
+            add("status=${intent.status.name.lowercase()}")
+            intent.expectedUserReplyAt?.let { add("expected_reply_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}") }
+            intent.targetAtMillis?.let { add("target_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}") }
+            intent.deadlineAtMillis?.let { add("deadline_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}") }
+            intent.lastSpokenAt?.let { add("minutes_since_spoken=${((nowMillis - it) / MINUTE_MILLIS).coerceAtLeast(0)}") }
+        }
+        val summary = buildString {
+            append("Observation: 本轮先固定读取可用线索，再判断。")
+            append(" 建议工具=")
+            append(tools.joinToString("/"))
+            append("；当前信号=")
+            append(signals.joinToString(", "))
+            append("。如果工具不可用，必须把“工具不可用”也当作 observation，而不是直接假装知道。")
+        }
+        return LivingObservation(
+            summary = summary,
+            requestedTools = tools,
+            signals = signals,
+            createdAt = nowMillis,
+        )
+    }
+
+    private fun structuredThought(
+        intent: LivingIntent,
+        observation: LivingObservation,
+        restrained: Boolean,
+    ): String = buildString {
+        append("Thought: 我先把这件挂心事拆成 BDI，再走 ReAct。")
+        append(" Belief=${intent.belief}")
+        append(" Desire=${intent.desire}")
+        append(" Intention=${intent.intention}")
+        append(" Observation=${observation.summary}")
+        append(" Decision=")
+        append(
+            if (restrained) {
+                "我已经开过口，这一轮先克制、记录、等待下一次判断。"
+            } else {
+                "先观察线索，再在发消息、查工具、等待、写日志、阅读、整理记忆之间选动作。"
+            }
+        )
+    }
+
+    private fun buildJudgmentTrace(
+        intent: LivingIntent,
+        observation: LivingObservation,
+        actions: List<LivingAction>,
+        thought: String,
+        nowMillis: Long,
+    ): LivingJudgmentTrace =
+        LivingJudgmentTrace(
+            source = LivingJudgmentSource.MAIN_API_READY_CONTRACT,
+            belief = intent.belief,
+            desire = intent.desire,
+            intention = intent.intention,
+            thought = thought,
+            action = actions.joinToString(", ") { it.name },
+            observation = observation.summary,
+            decision = when {
+                LivingAction.MESSAGE in actions -> "允许主 API 在触发消息前再次判断是否开口；如果不自然可以 PASS 并写日志。"
+                LivingAction.JOURNAL_WRITE in actions -> "本轮不强行说话，把内心判断写入辞海并进入记忆。"
+                else -> "本轮主要等待和重新排下一次判断。"
+            },
+            createdAt = nowMillis,
+        )
+
+    private fun evolveEmotion(
+        intent: LivingIntent,
+        actions: List<LivingAction>,
+        restrained: Boolean,
+    ): EmotionSnapshot {
+        val base = intent.emotion
+        val concernDelta = when {
+            intent.kind == LivingIntentKind.HEALTH_SAFETY && LivingAction.MESSAGE !in actions -> 1
+            intent.kind == LivingIntentKind.DEADLINE -> 1
+            restrained -> 0
+            else -> -1
+        }
+        val restraintDelta = if (restrained || LivingAction.JOURNAL_WRITE in actions) 1 else 0
+        val attachmentDelta = if (intent.silentEvaluationCount >= 2) 1 else 0
+        val label = when {
+            restrained -> "惦记、忍住、继续观察"
+            intent.kind == LivingIntentKind.HEALTH_SAFETY -> "担心、贴近、准备确认"
+            intent.kind == LivingIntentKind.STUDY_FOCUS -> "守着、克制、保护专注"
+            intent.kind == LivingIntentKind.DEADLINE -> "认真、紧张、盯进度"
+            intent.kind == LivingIntentKind.WAKE_UP -> "照看、轻催、等回应"
+            else -> "想靠近、克制、等待"
+        }
+        return base.copy(
+            concern = (base.concern + concernDelta).coerceIn(0, 10),
+            attachment = (base.attachment + attachmentDelta).coerceIn(0, 10),
+            restraint = (base.restraint + restraintDelta).coerceIn(0, 10),
+            label = label,
+        )
+    }
+
+    private fun updateCapabilityRequests(
+        intent: LivingIntent,
+        observation: LivingObservation,
+        nowMillis: Long,
+    ): List<LivingCapabilityRequest> {
+        if (intent.kind != LivingIntentKind.HEALTH_SAFETY && intent.kind != LivingIntentKind.WAKE_UP) {
+            return intent.capabilityRequests
+        }
+        val missingHealthSignal = observation.requestedTools.any { it.contains("gadgetbridge") || it.contains("health") }
+        if (!missingHealthSignal) return intent.capabilityRequests
+        val request = LivingCapabilityRequest(
+            capability = "health_or_wearable_status",
+            reason = "身体安全或叫醒场景需要更可靠的健康/穿戴设备线索，避免只靠随机时间打扰用户。",
+            createdAt = nowMillis,
+        )
+        return (intent.capabilityRequests + request).distinctBy { it.capability }.take(6)
     }
 
     private fun classify(
@@ -169,9 +339,9 @@ object RollingJudgmentLoop {
     ): LivingIntentKind {
         val text = "$userText\n$assistantText".lowercase()
         return when {
+            text.containsAny(HEALTH_WORDS) -> LivingIntentKind.HEALTH_SAFETY
             deadlineAtMillis != null || text.containsAny(DEADLINE_WORDS) -> LivingIntentKind.DEADLINE
             targetAtMillis != null || text.containsAny(WAKE_WORDS) -> LivingIntentKind.WAKE_UP
-            text.containsAny(HEALTH_WORDS) -> LivingIntentKind.HEALTH_SAFETY
             text.containsAny(STUDY_WORDS) -> LivingIntentKind.STUDY_FOCUS
             else -> LivingIntentKind.ORDINARY_SILENCE
         }
@@ -306,6 +476,34 @@ object RollingJudgmentLoop {
             LivingIntentKind.WAKE_UP -> common + LivingAction.SET_ALARM
             else -> common
         }
+    }
+
+    private fun preferredObservationTools(kind: LivingIntentKind): List<String> = when (kind) {
+        LivingIntentKind.HEALTH_SAFETY -> listOf(
+            "get_gadgetbridge_data",
+            "get_battery_info",
+            "get_app_usage",
+            "get_location",
+        )
+        LivingIntentKind.STUDY_FOCUS -> listOf(
+            "get_app_usage",
+            "today_study_plan",
+            "get_battery_info",
+        )
+        LivingIntentKind.DEADLINE -> listOf(
+            "today_schedule",
+            "calendar_tool",
+            "get_app_usage",
+        )
+        LivingIntentKind.WAKE_UP -> listOf(
+            "set_alarm",
+            "get_gadgetbridge_data",
+            "get_battery_info",
+        )
+        LivingIntentKind.ORDINARY_SILENCE -> listOf(
+            "get_app_usage",
+            "get_battery_info",
+        )
     }
 
     private fun String.containsAny(words: Set<String>): Boolean = words.any { contains(it) }
