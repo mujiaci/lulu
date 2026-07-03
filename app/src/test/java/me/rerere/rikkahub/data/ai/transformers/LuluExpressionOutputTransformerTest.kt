@@ -5,8 +5,12 @@ import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.content
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Test
@@ -119,6 +123,24 @@ class LuluExpressionOutputTransformerTest {
         assertEquals(LULU_PRESENCE_METADATA_TYPE, annotation.type)
         assertEquals("在靠近你", annotation.data["status"]?.jsonPrimitive?.content)
         assertEquals("我有点担心，但不想把你逼得更累。", annotation.data["inner_voice"]?.jsonPrimitive?.content)
+    }
+
+    @Test
+    fun `metadata annotation serializes without discriminator conflict`() {
+        val json = Json { ignoreUnknownKeys = true }
+        val annotation: UIMessageAnnotation = UIMessageAnnotation.Metadata(
+            type = LULU_PRESENCE_METADATA_TYPE,
+            data = buildJsonObject {
+                put("status", "waiting")
+            },
+        )
+
+        val encoded = json.encodeToString(annotation)
+        val decoded = json.decodeFromString<UIMessageAnnotation>(encoded)
+
+        val metadata = decoded as UIMessageAnnotation.Metadata
+        assertEquals(LULU_PRESENCE_METADATA_TYPE, metadata.type)
+        assertEquals("waiting", metadata.data["status"]?.jsonPrimitive?.content)
     }
 
     private fun assistantMessage(text: String) = UIMessage(
