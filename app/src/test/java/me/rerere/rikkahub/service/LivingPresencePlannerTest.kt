@@ -6,23 +6,20 @@ import org.junit.Test
 
 class LivingPresencePlannerTest {
     @Test
-    fun `ordinary silence creates multiple rolling judgement checkpoints`() {
+    fun `ordinary return does not create speakable rolling reminders`() {
         val now = 1_700_000_000_000L
 
         val plans = LivingPresencePlanner.planRollingJudgments(
             input = LivingPresenceInput(
                 assistantName = "露露",
-                userText = "我先去处理点事",
-                assistantText = "好，我在这里等你。",
+                userText = "我回来了",
+                assistantText = "欢迎回来。",
                 preferredToolNames = listOf("get_app_usage", "get_battery_info"),
             ),
             nowMillis = now,
         )
 
-        assertEquals(listOf(10L, 25L, 60L, 120L), plans.map { (it.triggerAtMillis - now) / 60_000L })
-        assertTrue(plans.all { it.reason.contains("RollingJudgmentLoop") })
-        assertTrue(plans.any { it.reason.contains("write journal") })
-        assertTrue(plans.any { it.reason.contains("read") })
+        assertEquals(emptyList<ProactiveReminderPlan>(), plans)
     }
 
     @Test

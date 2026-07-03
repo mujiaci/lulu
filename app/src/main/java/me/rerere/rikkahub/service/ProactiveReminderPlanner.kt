@@ -20,6 +20,12 @@ fun LuluIntentPlan.toProactiveReminderPlan(
 ): ProactiveReminderPlan? {
     val delay = delayMinutes ?: if (shouldMessageNow) 1 else return null
     if (delay <= 0) return null
+    if (
+        intent == LuluIntent.CHECK_CONTEXT &&
+        !shouldScheduleFollowUpForUserTurn(userText = userText, reason = reason, delayMinutes = delay)
+    ) {
+        return null
+    }
     val kind = when (intent) {
         LuluIntent.CARE_REMINDER -> when {
             reason.contains("吃") -> ProactiveReminderKind.MEAL

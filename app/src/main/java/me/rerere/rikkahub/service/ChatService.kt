@@ -1180,7 +1180,13 @@ class ChatService(
         userText: String,
         assistantText: String,
     ): List<ProactiveReminderPlan> {
-        val fromFollowUps = plan.followUps.map { followUp ->
+        val fromFollowUps = plan.followUps.filter { followUp ->
+            shouldScheduleFollowUpForUserTurn(
+                userText = userText,
+                reason = followUp.reason,
+                delayMinutes = followUp.delayMinutes,
+            )
+        }.map { followUp ->
             ProactiveReminderPlan(
                 triggerAtMillis = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(followUp.delayMinutes.toLong()),
                 kind = followUp.kind.toProactiveReminderKind(),
@@ -1583,6 +1589,9 @@ class ChatService(
         plan: LuluChatTurnPlan,
     ) {
         val delayMinutes = plan.followUpDelayMinutes ?: return
+        if (!plan.shouldScheduleFollowUpForUserTurn(latestUserText)) {
+            return
+        }
         val cooldownKey = "${latestUserText.take(48)}:$delayMinutes"
         val now = Instant.now()
         val lastScheduled = chatTurnFollowUpCooldowns[cooldownKey]

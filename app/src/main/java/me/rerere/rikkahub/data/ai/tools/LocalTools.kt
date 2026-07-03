@@ -22,6 +22,7 @@ import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.cihai.CihaiService
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.service.LocalTimeContextFormatter
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
 import org.koin.core.context.GlobalContext
@@ -163,6 +164,10 @@ class LocalTools(private val context: Context) {
                     put("weekday_index", weekday.value)
                     put("date", date.toString())
                     put("time", time.toString())
+                    put("time_24h", time.toString())
+                    put("period_zh", LocalTimeContextFormatter.periodLabel(now.hour))
+                    put("local_time_text", LocalTimeContextFormatter.format(nowMillis = now.toInstant().toEpochMilli(), zoneId = now.zone))
+                    put("time_instruction", "Use time_24h as 24-hour local time. 00:00-04:59 is 凌晨, not 下午.")
                     put("datetime", now.withNano(0).toString())
                     put("timezone", now.zone.id)
                     put("utc_offset", now.offset.id)

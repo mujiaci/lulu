@@ -532,8 +532,7 @@ class ProactiveMessageService : KoinComponent {
 
         // Current time
         val currentTime = java.lang.System.currentTimeMillis()
-        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-        sb.appendLine("当前时间: ${sdf.format(java.util.Date(currentTime))}")
+        sb.appendLine(me.rerere.rikkahub.service.LocalTimeContextFormatter.format(currentTime))
 
         // Study plan context
         try {
@@ -697,6 +696,7 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，最终消息只输出纯文本")
         sb.appendLine("- 可以为了判断用户状态主动调用工具，例如时间、位置、应用使用、电量、健康、通知、短信、当前音乐、闹钟、日历或日志。")
         sb.appendLine("- 工具调用要符合角色当下目的：比如催睡就优先看时间、电量、应用使用；确认上课就优先看时间、位置、应用使用。")
+        sb.appendLine("- 涉及时间时必须以“当前本地时间”的 24 小时制为准，00:00-04:59 是凌晨，不能说成下午或中午。")
         sb.appendLine("- 如果工具能帮你更像真人一样判断用户状态，就大胆用；最终说出口的话仍然要自然，不要暴露工具细节。")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
         sb.appendLine("- 表达要有身体感：可以自然带 0-1 个简短表情、一个轻动作或贴近感，例如轻轻敲门、探头、靠近、压低声音，但不要写成舞台剧。")

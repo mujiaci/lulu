@@ -33,6 +33,9 @@ object LivingPresencePlanner {
             assistantText = input.assistantText,
             nowMillis = nowMillis,
         )
+        if (intent.kind == LivingIntentKind.ORDINARY_SILENCE) {
+            return emptyList()
+        }
         return intent.evaluationCadence.delaysMinutes.mapIndexed { index, delay ->
             ProactiveReminderPlan(
                 triggerAtMillis = nowMillis + TimeUnit.MINUTES.toMillis(delay),

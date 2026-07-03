@@ -117,6 +117,7 @@ object LuluIntentModelPlanner {
         appendLine("toolRequests 最多 5 个；toolName 只能从 availableTools 中选。")
         appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 表示系统可在回复前直接执行。")
         appendLine("followUpDelayMinutes 可以是 null；如果她决定稍后主动找用户，填 1 到 1440 的分钟数。")
+        appendLine("不要给普通回来、普通闲聊、无风险沉默安排固定 5 分钟 follow-up；只有身体不适、明确提醒/DDL/起床、学习承诺、吃饭睡觉照看这类语义才安排后续主动消息。")
         appendLine("RollingJudgmentLoop contract: event enters -> BDI believes/wants/intends -> ReAct thinks/checks/decides -> action pool chooses message/tool/wait/journal/read/memory reflection -> Cihai records heart trace/action/reading/reflection -> memory keeps raw record/vector memory/graph memory/study state -> schedule the next judgement.")
         appendLine("<persona>")
         appendLine(input.assistantPersona.take(2000))
@@ -254,6 +255,31 @@ data class LuluChatTurnPlan(
     val expressionGuidance: String? = null,
 )
 
+fun LuluChatTurnPlan.shouldScheduleFollowUpForUserTurn(userText: String): Boolean =
+    shouldScheduleFollowUpForUserTurn(
+        userText = userText,
+        reason = followUpReason,
+        delayMinutes = followUpDelayMinutes,
+    )
+
+fun shouldScheduleFollowUpForUserTurn(
+    userText: String,
+    reason: String?,
+    delayMinutes: Int?,
+): Boolean {
+    if (delayMinutes == null || delayMinutes <= 0) return false
+    val combined = "$userText\n${reason.orEmpty()}".lowercase()
+    val highValue = combined.hasAny(FOLLOW_UP_HEALTH_WORDS) ||
+        combined.hasAny(FOLLOW_UP_TIME_WORDS) ||
+        combined.hasAny(FOLLOW_UP_STUDY_WORDS) ||
+        combined.hasAny(FOLLOW_UP_CARE_WORDS)
+    if (!highValue) return false
+    val ordinaryReturn = userText.lowercase().hasAny(FOLLOW_UP_RETURN_WORDS)
+    return !ordinaryReturn || userText.lowercase().hasAny(FOLLOW_UP_HEALTH_WORDS) ||
+        userText.lowercase().hasAny(FOLLOW_UP_STUDY_WORDS) ||
+        userText.lowercase().hasAny(FOLLOW_UP_TIME_WORDS)
+}
+
 data class LuluFollowUpPlan(
     val delayMinutes: Int,
     val reason: String,
@@ -296,3 +322,15 @@ private fun String.extractJsonPayload(): String {
         trimmed
     }
 }
+
+private fun String.hasAny(words: Set<String>): Boolean = words.any { contains(it) }
+
+private val FOLLOW_UP_RETURN_WORDS = setOf("回来了", "回来啦", "回来咯", "我回", "刚回来", "到了", "到啦", "我在")
+private val FOLLOW_UP_HEALTH_WORDS = setOf("肚子", "胃", "头疼", "头痛", "疼", "痛", "难受", "不舒服", "发烧", "药")
+private val FOLLOW_UP_TIME_WORDS = setOf(
+    "提醒", "叫我", "催我", "闹钟", "起床", "ddl", "截止", "点前", "之前完成", "到时候", "分钟后", "小时后"
+)
+private val FOLLOW_UP_STUDY_WORDS = setOf(
+    "学习", "写作业", "作业", "复习", "背书", "刷题", "专业课", "考研", "番茄", "待办", "任务"
+)
+private val FOLLOW_UP_CARE_WORDS = setOf("睡", "晚安", "困", "吃饭", "没吃", "午饭", "晚饭", "早饭")

@@ -195,4 +195,59 @@ class LuluIntentPlannerTest {
         assertEquals(listOf("a", "b", "c", "d", "e"), plan.toolRequests.map { it.toolName })
         assertEquals(24 * 60, plan.followUpDelayMinutes)
     }
+
+    @Test
+    fun `chat turn follow up rejects ordinary return even when model asks for five minutes`() {
+        val plan = LuluChatTurnPlan(
+            followUpDelayMinutes = 5,
+            followUpReason = "五分钟后确认他还在不在",
+        )
+
+        assertFalse(plan.shouldScheduleFollowUpForUserTurn("我回来了"))
+    }
+
+    @Test
+    fun `check context plan does not become reminder after ordinary return`() {
+        val plan = LuluIntentPlan(
+            intent = LuluIntent.CHECK_CONTEXT,
+            shouldMessageNow = false,
+            delayMinutes = 10,
+            toolNames = listOf("get_app_usage"),
+            reason = "露露需要结合人设和当前感知，再决定要不要靠近。",
+            tone = "轻一点",
+        )
+
+        assertEquals(null, plan.toProactiveReminderPlan(userText = "我回来了", nowMillis = 1_700_000_000_000L))
+    }
+
+    @Test
+    fun `chat turn follow up keeps explicit safety or study follow ups`() {
+        val health = LuluChatTurnPlan(
+            followUpDelayMinutes = 5,
+            followUpReason = "确认肚子疼有没有好一点",
+        )
+        val study = LuluChatTurnPlan(
+            followUpDelayMinutes = 45,
+            followUpReason = "确认专业课有没有开始",
+        )
+
+        assertTrue(health.shouldScheduleFollowUpForUserTurn("我肚子好疼"))
+        assertTrue(study.shouldScheduleFollowUpForUserTurn("我去学习了，先不聊"))
+    }
+
+    @Test
+    fun `local time context labels midnight as late night in twenty four hour format`() {
+        val zone = java.time.ZoneId.of("Asia/Shanghai")
+        val nowMillis = java.time.LocalDateTime.of(2026, 7, 4, 0, 20)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val text = LocalTimeContextFormatter.format(nowMillis = nowMillis, zoneId = zone)
+
+        assertTrue(text.contains("00:20"))
+        assertTrue(text.contains("凌晨"))
+        assertTrue(text.contains("24小时制"))
+        assertFalse(text.contains("下午"))
+    }
 }
