@@ -27,12 +27,14 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun partialChapterLessonDoesNotScheduleFullChapterPractice() {
+    fun partialChapterLessonDoesNotScheduleSeparatePractice() {
         val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 4))
         val titles = plan?.tasks.orEmpty().joinToString("\n") { it.title }
 
-        assertTrue(titles.contains("已学内容小测"))
-        assertTrue(titles.contains("不做整章章节题"))
+        assertTrue(titles.contains("不单独安排题目"))
+        assertTrue(titles.contains("课上例题算在听课里"))
+        assertFalse(titles.contains("已学内容小测"))
+        assertFalse(titles.contains("例题回忆"))
         assertFalse(titles.contains("做 8-10 题"))
         assertFalse(titles.contains("章节题 5 道"))
     }
@@ -55,6 +57,7 @@ class ExamStudyPlanTest {
         assertTrue(text.contains("法理学不重听"))
         assertTrue(text.contains("第一轮背诵"))
         assertTrue(text.contains("不是只看目录"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("单纯看框架不算"))
     }
 
     @Test
@@ -93,7 +96,8 @@ class ExamStudyPlanTest {
         assertTrue(prompt.contains("不背单词 120 个"))
         assertTrue(prompt.contains("写论文 50分钟"))
         assertTrue(prompt.contains("9点起床，23点睡觉"))
-        assertTrue(prompt.contains("未听完整章前不要安排整章章节题"))
+        assertTrue(prompt.contains("这一章没有结束前不要单独安排题目"))
+        assertTrue(prompt.contains("单纯看框架不算"))
     }
 
     @Test
