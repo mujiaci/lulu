@@ -108,7 +108,6 @@ class ProactiveMessageService : KoinComponent {
     private val conversationRepository: ConversationRepository by inject()
     private val studyStore: StudyStore by inject()
     private val cihaiStore: CihaiStore by inject()
-    private val cihaiService: CihaiService by inject()
 
     companion object {
         const val TAG = "ProactiveMessageService"
@@ -768,6 +767,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val pluginToolProvider: PluginToolProvider by inject()
     private val json: Json by inject()
     private val chatService: ChatService by inject()
+    private val cihaiService: CihaiService by inject()
     private val proactiveMessageService = ProactiveMessageService()
 
     companion object {
