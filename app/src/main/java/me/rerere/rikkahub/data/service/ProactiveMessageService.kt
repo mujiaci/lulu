@@ -783,6 +783,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val chatService: ChatService by inject()
     private val cihaiService: CihaiService by inject()
     private val livingPresenceStore: LivingPresenceStore by inject()
+    private val studyStore: StudyStore by inject()
     private val proactiveMessageService = ProactiveMessageService()
 
     companion object {
