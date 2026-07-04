@@ -49,6 +49,7 @@ import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
+import me.rerere.rikkahub.data.ai.tools.SystemToolOption
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
@@ -1265,7 +1266,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val request = RollingJudgmentLoop.buildObservationRequest(intent, nowMillis)
         val availableToolNames = tools.map { it.name }.toSet()
         val availableRequestedTools = request.requestedTools.filter { requested ->
-            availableToolNames.any { available -> available == requested || available.contains(requested) }
+            val resolved = LivingObservationToolRunner.resolveToolName(requested)
+            availableToolNames.any { available ->
+                available == requested || available == resolved || available.removePrefix("mcp__") == resolved
+            }
         }
         val missingRequestedTools = request.requestedTools - availableRequestedTools.toSet()
         val toolObservationResults = observeRequestedToolsForLivingPresence(
@@ -1331,15 +1335,16 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         val toolsByName = tools.associateBy { it.name.removePrefix("mcp__") }
         return requestedToolNames
             .distinct()
-            .filter { LivingObservationToolRunner.canAutoObserve(it) }
+            .filter { LivingObservationToolRunner.canAutoObserve(it, intent) }
             .map { requested ->
-                val tool = toolsByName[requested] ?: return@map "tool_result[$requested]=unavailable"
+                val resolvedToolName = LivingObservationToolRunner.resolveToolName(requested)
+                val tool = toolsByName[resolvedToolName] ?: return@map "tool_result[$requested]=unavailable"
                 runCatching {
-                    val args = LivingObservationToolRunner.argumentsFor(tool.name, intent.kind)
+                    val args = LivingObservationToolRunner.argumentsFor(requested, intent)
                     val outputs = tool.execute(args).filterIsInstance<UIMessagePart.Text>().map { it.text }
-                    LivingObservationToolRunner.formatResult(tool.name, outputs)
+                    LivingObservationToolRunner.formatResult(requested, outputs)
                 }.getOrElse { error ->
-                    LivingObservationToolRunner.formatFailure(tool.name, error)
+                    LivingObservationToolRunner.formatFailure(requested, error)
                 }
             }
     }
@@ -1358,32 +1363,18 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         LivingAction.MESSAGE !in actions && updatedIntent.spokenCount > 0
 
     private fun RollingJudgmentDecision.toTargetedReason(assistantName: String): String = buildString {
-        appendLine("${assistantName.ifBlank { "当前角色" }} 的 Living Presence OS 下一轮判断。")
-        appendLine("RollingJudgmentLoop: BDI 信念/欲望/意图 -> ReAct 思考/行动/观察 -> 再决定。")
-        appendLine("Belief: ${updatedIntent.belief}")
-        appendLine("Desire: ${updatedIntent.desire}")
-        appendLine("Intention: ${updatedIntent.intention}")
-        appendLine("Hypotheses: ${updatedIntent.hypotheses.joinToString(" / ")}")
-        appendLine("Emotion: ${updatedIntent.emotion.label} concern=${updatedIntent.emotion.concern} restraint=${updatedIntent.restraint}")
-        appendLine("This round thought: $thought")
-        observationRequest?.let { appendLine("Observation request: $it") }
-        observation?.let {
-            appendLine("Observation tools: ${it.requestedTools.joinToString(", ")}")
-            appendLine("Observation signals: ${it.signals.joinToString(", ")}")
+        appendLine("${assistantName.ifBlank { "当前角色" }}正在重新判断一件挂念的事。")
+        appendLine("当前信念：${updatedIntent.belief}")
+        appendLine("当前愿望：${updatedIntent.desire}")
+        appendLine("当前打算：${updatedIntent.intention}")
+        judgmentTrace?.thought?.takeIf { it.isNotBlank() }?.let {
+            appendLine("没说出口的想法：$it")
+        } ?: appendLine("没说出口的想法：$thought")
+        judgmentTrace?.decision?.takeIf { it.isNotBlank() }?.let {
+            appendLine("这轮决定：$it")
         }
-        judgmentTrace?.let {
-            appendLine("Structured BDI/ReAct trace:")
-            appendLine("Source: ${it.source}")
-            appendLine("Thought: ${it.thought}")
-            appendLine("Action: ${it.action}")
-            appendLine("Observation: ${it.observation}")
-            appendLine("Decision: ${it.decision}")
-        }
-        if (updatedIntent.capabilityRequests.isNotEmpty()) {
-            appendLine("Capability requests: ${updatedIntent.capabilityRequests.joinToString(" / ") { "${it.capability}: ${it.reason}" }}")
-        }
-        appendLine("Allowed actions now: ${actions.joinToString(", ") { it.name }}")
-        appendLine("不要把这段当成预写消息；触发时重新观察、重新判断，必要时可以 [PASS] 并写露露日记。")
+        appendLine("情绪底色：${updatedIntent.emotion.label}，克制程度 ${updatedIntent.restraint}/10。")
+        appendLine("下一次触发时必须重新看上下文、重新判断。可以自然开口，也可以 [PASS]，不要复述这段内部记录。")
     }.trim()
 
     private fun RollingJudgmentDecision.toCihaiActionHints(): List<String> = buildList {
@@ -1392,9 +1383,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
         if (LivingAction.READ in actions) {
             add(LivingPresenceAction.READ_BOOK.name)
-        }
-        if (LivingAction.MEMORY_UPDATE in actions) {
-            add(LivingPresenceAction.MEMORY_REFLECT.name)
         }
     }.ifEmpty { defaultSilentPresenceActionHints() }
 
@@ -1551,6 +1539,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val systemTools = SystemTools(this@ProactiveMessageTriggerService, settings)
                 addAll(systemTools.getTools(systemToolsOptions))
             }
+            addAll(buildLivingPresenceObservationTools(settings, systemToolsOptions))
             
             // Skill 工具
             if (assistant.enabledSkills.isNotEmpty()) {
@@ -1583,6 +1572,27 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
             .deduplicateByToolName()
             .withHumanLikeToolPrompts()
+    }
+
+    private fun buildLivingPresenceObservationTools(
+        settings: Settings,
+        enabledSystemTools: Set<SystemToolOption>,
+    ): List<Tool> {
+        val needed = mutableSetOf(
+            SystemToolOption.AppUsage,
+            SystemToolOption.Battery,
+            SystemToolOption.Alarm,
+        )
+        if (settings.systemToolsSetting.gadgetbridgeEnabled) {
+            needed += SystemToolOption.Gadgetbridge
+        }
+        if (settings.systemToolsSetting.locationAccess) {
+            needed += SystemToolOption.Location
+            needed += SystemToolOption.Weather
+        }
+        val extras = needed - enabledSystemTools
+        if (extras.isEmpty()) return emptyList()
+        return SystemTools(this@ProactiveMessageTriggerService, settings).getTools(extras)
     }
 
     private suspend fun buildAutonomousIntentPlan(
@@ -1906,7 +1916,6 @@ internal fun Settings.markTargetedProactiveThoughtExpressed(
 private fun defaultSilentPresenceActionHints(): List<String> = listOf(
     LivingPresenceAction.WRITE_JOURNAL.name,
     LivingPresenceAction.READ_BOOK.name,
-    LivingPresenceAction.MEMORY_REFLECT.name,
 )
 
 internal fun buildTargetedProactiveSensingInstruction(

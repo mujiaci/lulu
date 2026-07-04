@@ -79,6 +79,7 @@ import me.rerere.rikkahub.data.voicecall.VoiceCallRole
 import me.rerere.rikkahub.data.voicecall.VoiceCallSession
 import me.rerere.rikkahub.data.voicecall.VoiceCallStatus
 import me.rerere.rikkahub.data.voicecall.hasUserFacingContent
+import me.rerere.rikkahub.data.ai.transformers.sanitizeLuluVisibleExpression
 import me.rerere.rikkahub.ui.components.ui.FloatingWindow
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.components.message.extractSpeakableRoleText
@@ -147,7 +148,7 @@ fun VoiceCallPage(
         val updated = repository.appendLine(current, line)
         session = updated
         if (speak) {
-            val speakableText = line.text.extractSpeakableRoleText()
+            val speakableText = line.text.cleanRoleLineForUser().extractSpeakableRoleText()
             if (speakableText.isBlank()) {
                 assistantTurnInProgress = false
             } else {
@@ -307,7 +308,7 @@ fun VoiceCallPage(
                 if (stage != CallStage.Active || !sleepMode) return@launch
                 val segment = segments[index % segments.size]
                 saveAssistantSleepLine(segment)
-                segment.extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
+                segment.cleanRoleLineForUser().extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
                     tts.speak(it, flushCalled = true, providerOverride = ttsProvider)
                 }
                 waitForTtsPlayback(tts)
@@ -427,7 +428,7 @@ fun VoiceCallPage(
                 session = currentSession,
                 onStartCall = { startCall() },
                 onReplay = { line ->
-                    line.text.extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
+                    line.text.cleanRoleLineForUser().extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
                         scope.launch { speakInSegments(tts, it, ttsProvider) }
                     }
                 },
@@ -681,8 +682,11 @@ private fun TranscriptLine(
     onReplay: () -> Unit,
 ) {
     val isUser = line.role == VoiceCallRole.User
-    val segments = remember(line.text, line.role) {
-        if (line.role == VoiceCallRole.Assistant) line.text.splitIntoVisualBubbles() else emptyList()
+    val displayText = remember(line.text, line.role) {
+        if (line.role == VoiceCallRole.Assistant) line.text.cleanRoleLineForUser() else line.text
+    }
+    val segments = remember(displayText, line.role) {
+        if (line.role == VoiceCallRole.Assistant) displayText.splitIntoVisualBubbles() else emptyList()
     }
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -701,7 +705,7 @@ private fun TranscriptLine(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            if (!isUser && line.replayable && line.text.isNotBlank()) {
+            if (!isUser && line.replayable && displayText.isNotBlank()) {
                 IconButton(onClick = onReplay, modifier = Modifier.size(34.dp)) {
                     Icon(HugeIcons.PlayCircle, contentDescription = null)
                 }
@@ -712,7 +716,7 @@ private fun TranscriptLine(
                         TranscriptSegmentBubble(text = segment, isUser = false)
                     }
                 } else {
-                    TranscriptSegmentBubble(text = line.text, isUser = isUser)
+                    TranscriptSegmentBubble(text = displayText, isUser = isUser)
                 }
             }
         }
@@ -955,6 +959,20 @@ private fun buildVoiceCallOpeningPrompt(assistantName: String): String =
 
 private const val VOICE_CALL_REPLY_PROMPT =
     "请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"
+
+private fun String.cleanRoleLineForUser(): String =
+    sanitizeLuluVisibleExpression(this)
+        .lineSequence()
+        .map { it.trim() }
+        .filter { line ->
+            line.isNotBlank() &&
+                !line.startsWith("inner_voice", ignoreCase = true) &&
+                !line.startsWith("inner voice", ignoreCase = true) &&
+                !line.startsWith("description", ignoreCase = true) &&
+                !line.startsWith("thought", ignoreCase = true)
+        }
+        .joinToString("\n")
+        .trim()
 
 
 private fun formatTime(value: Long): String {

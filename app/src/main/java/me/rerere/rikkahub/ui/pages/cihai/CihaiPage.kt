@@ -15,11 +15,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Tab
@@ -30,23 +28,18 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
-import me.rerere.rikkahub.data.cihai.CihaiBook
 import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
-import me.rerere.rikkahub.data.cihai.CihaiService
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -59,10 +52,7 @@ import java.util.Locale
 fun CihaiPage(onBack: () -> Unit) {
     val settings = LocalSettings.current
     val store = koinInject<CihaiStore>()
-    val service = koinInject<CihaiService>()
-    val livingPresenceStore = koinInject<LivingPresenceStore>()
     val state by store.state.collectAsState()
-    val livingPresenceState by livingPresenceStore.state.collectAsState()
     val scope = rememberCoroutineScope()
     val fallbackAssistant = settings.getCurrentAssistant()
     val selectedAssistantId = state.selectedAssistantId
@@ -70,18 +60,10 @@ fun CihaiPage(onBack: () -> Unit) {
         ?: fallbackAssistant.id.toString()
     val selectedAssistant = settings.assistants.firstOrNull { it.id.toString() == selectedAssistantId }
         ?: fallbackAssistant
-    val livingIntentCards = remember(livingPresenceState.activeIntents, selectedAssistantId) {
-        buildLivingIntentCards(
-            intents = livingPresenceState.activeIntents,
-            selectedAssistantId = selectedAssistantId,
-        )
-    }
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = listOf(
         CihaiEntryKind.INNER_JOURNAL,
         CihaiEntryKind.ACTION_LOG,
-        CihaiEntryKind.READING_NOTE,
-        CihaiEntryKind.REFLECTION,
     )
 
     LaunchedEffect(selectedAssistantId) {
@@ -118,7 +100,7 @@ fun CihaiPage(onBack: () -> Unit) {
                 )
             }
             Text(
-                text = "露露和其他角色没说出口的话、行动记录、阅读感悟和反思总结都会在这里留下来，并进入向量记忆和图谱记忆。",
+                text = "这里只放角色没有说出口的心声，以及她在后台做出的行动选择。阅读已经挪到独立入口。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -161,39 +143,6 @@ fun CihaiPage(onBack: () -> Unit) {
                 contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (livingIntentCards.isNotEmpty()) {
-                    item {
-                        LivingIntentPanel(cards = livingIntentCards)
-                    }
-                }
-                item {
-                    CihaiComposer(
-                        assistantId = selectedAssistantId,
-                        kind = tabs[selectedTab],
-                        service = service,
-                    )
-                }
-                if (tabs[selectedTab] == CihaiEntryKind.READING_NOTE) {
-                    item {
-                        ReadingImportCard(
-                            assistantId = selectedAssistantId,
-                            service = service,
-                        )
-                    }
-                    items(
-                        state.books.filter { it.assistantId == selectedAssistantId },
-                        key = { it.id },
-                    ) { book ->
-                        BookCard(
-                            book = book,
-                            onRead = {
-                                scope.launch {
-                                    service.readBookAndRemember(book)
-                                }
-                            },
-                        )
-                    }
-                }
                 items(
                     state.entries.filter {
                         it.assistantId == selectedAssistantId && it.kind == tabs[selectedTab]
@@ -201,89 +150,6 @@ fun CihaiPage(onBack: () -> Unit) {
                     key = { it.id },
                 ) { entry ->
                     EntryCard(entry)
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun LivingIntentPanel(cards: List<LivingIntentCardModel>) {
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("挂在心里的事", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text(
-                    text = "这些不是随机主动消息，而是角色正在滚动判断、克制、观察和等待的事件。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            cards.forEach { card ->
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(7.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                text = card.title,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color = MaterialTheme.colorScheme.secondaryContainer,
-                            ) {
-                                Text(
-                                    text = card.statusText,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                                )
-                            }
-                        }
-                        Text(
-                            text = card.nextEvaluateText,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(card.bdiLine, style = MaterialTheme.typography.bodySmall)
-                        Text(
-                            text = card.hypothesesLine,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = card.cadenceLine,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = "${card.countLine}\n${card.emotionLine}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        card.capabilityLine?.let { capabilityLine ->
-                            Text(
-                                text = capabilityLine,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.tertiary,
-                            )
-                        }
-                    }
                 }
             }
         }
@@ -308,134 +174,12 @@ private fun AssistantSelector(
 }
 
 @Composable
-private fun CihaiComposer(
-    assistantId: String,
-    kind: CihaiEntryKind,
-    service: CihaiService,
-) {
-    val scope = rememberCoroutineScope()
-    var title by remember(kind, assistantId) { mutableStateOf(defaultTitle(kind)) }
-    var content by remember(kind, assistantId) { mutableStateOf("") }
-    var emotion by remember(kind, assistantId) { mutableStateOf("") }
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("新增${kind.label}", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("标题") },
-            )
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                maxLines = 7,
-                label = { Text("内容") },
-            )
-            OutlinedTextField(
-                value = emotion,
-                onValueChange = { emotion = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("情绪 / 心理状态") },
-            )
-            Button(
-                onClick = {
-                    val entry = CihaiEntry(
-                        assistantId = assistantId,
-                        kind = kind,
-                        title = title,
-                        content = content,
-                        emotion = emotion,
-                    )
-                    scope.launch {
-                        service.addEntryAndRemember(entry)
-                        content = ""
-                        emotion = ""
-                    }
-                },
-                enabled = content.isNotBlank(),
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Text("写入日记")
-            }
-        }
-    }
-}
-
-@Composable
-private fun ReadingImportCard(
-    assistantId: String,
-    service: CihaiService,
-) {
-    val scope = rememberCoroutineScope()
-    var title by remember(assistantId) { mutableStateOf("") }
-    var content by remember(assistantId) { mutableStateOf("") }
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Text("阅读材料", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            OutlinedTextField(
-                value = title,
-                onValueChange = { title = it },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
-                label = { Text("书名 / 文章名") },
-            )
-            OutlinedTextField(
-                value = content,
-                onValueChange = { content = it },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                maxLines = 8,
-                label = { Text("粘贴内容") },
-            )
-            Button(
-                onClick = {
-                    scope.launch {
-                        service.addBook(
-                            CihaiBook(
-                                assistantId = assistantId,
-                                title = title,
-                                content = content,
-                            )
-                        )
-                        service.addEntryAndRemember(
-                            CihaiEntry(
-                                assistantId = assistantId,
-                                kind = CihaiEntryKind.READING_NOTE,
-                                title = "收到阅读材料：《$title》",
-                                content = "我把《$title》放进辞海阅读室。用户不在的时候，我可以阅读它、写感悟，并把理解沉淀进记忆。",
-                                sourceTitle = title,
-                            )
-                        )
-                        title = ""
-                        content = ""
-                    }
-                },
-                enabled = title.isNotBlank() && content.isNotBlank(),
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Text("放入阅读")
-            }
-        }
-    }
-}
-
-@Composable
 private fun EntryCard(entry: CihaiEntry) {
+    val displayBody = remember(entry.content, entry.kind) { entry.displayBody() }
     Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(entry.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
@@ -451,7 +195,17 @@ private fun EntryCard(entry: CihaiEntry) {
                     )
                 }
             }
-            Text(entry.content, style = MaterialTheme.typography.bodyMedium)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = displayBody,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.padding(12.dp),
+                )
+            }
             if (entry.emotion.isNotBlank()) {
                 Text(
                     text = "情绪：${entry.emotion}",
@@ -468,44 +222,46 @@ private fun EntryCard(entry: CihaiEntry) {
     }
 }
 
-@Composable
-private fun BookCard(
-    book: CihaiBook,
-    onRead: () -> Unit,
-) {
-    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(book.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text(
-                text = book.content.take(140),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = "进度 ${book.progressPercent}% · ${formatTime(book.createdAt)}",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Button(
-                onClick = onRead,
-                enabled = book.progressPercent < 100,
-                modifier = Modifier.align(Alignment.End),
-            ) {
-                Text(if (book.progressPercent < 100) "读一段" else "已读完")
-            }
-        }
-    }
-}
-
-private fun defaultTitle(kind: CihaiEntryKind): String = when (kind) {
-    CihaiEntryKind.INNER_JOURNAL -> "没说出口的话"
-    CihaiEntryKind.ACTION_LOG -> "我刚刚做了什么"
-    CihaiEntryKind.READING_NOTE -> "阅读感悟"
-    CihaiEntryKind.REFLECTION -> "这次我学到的事"
-}
-
 private fun formatTime(timestamp: Long): String =
     SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(timestamp))
+
+private fun CihaiEntry.displayBody(): String {
+    val raw = content.trim()
+    val thought = raw.extractTraceSection("Thought:", "Action:")
+    val decision = raw.extractTraceSection("Decision:", "Capability requests:")
+    val intention = raw.extractTraceSection("Intention=", "Observation=")
+    return when (kind) {
+        CihaiEntryKind.INNER_JOURNAL -> thought.ifBlank { raw }.cleanTraceForUser()
+        CihaiEntryKind.ACTION_LOG -> buildList {
+            intention.cleanTraceForUser().takeIf { it.isNotBlank() }?.let { add("我想做的是：$it") }
+            decision.cleanTraceForUser().takeIf { it.isNotBlank() }?.let { add("这次决定：$it") }
+            if (isEmpty()) add(raw.cleanTraceForUser())
+        }.joinToString("\n\n")
+        else -> raw.cleanTraceForUser()
+    }.ifBlank { "这条记录还没有可展示的内容。" }
+}
+
+private fun String.extractTraceSection(start: String, end: String): String {
+    val startIndex = indexOf(start, ignoreCase = true)
+    if (startIndex < 0) return ""
+    val bodyStart = startIndex + start.length
+    val endIndex = indexOf(end, startIndex = bodyStart, ignoreCase = true).takeIf { it >= 0 } ?: length
+    return substring(bodyStart, endIndex).trim()
+}
+
+private fun String.cleanTraceForUser(): String =
+    lineSequence()
+        .map { it.trim() }
+        .filter { line ->
+            line.isNotBlank() &&
+                !line.startsWith("Structured BDI/ReAct trace", ignoreCase = true) &&
+                !line.startsWith("Source:", ignoreCase = true) &&
+                !line.startsWith("Action:", ignoreCase = true) &&
+                !line.startsWith("Observation:", ignoreCase = true) &&
+                !line.startsWith("Capability requests:", ignoreCase = true) &&
+                !line.startsWith("Allowed actions:", ignoreCase = true)
+        }
+        .joinToString("\n")
+        .replace(Regex("""\b(get_[a-z_]+|set_alarm|today_schedule|today_study_plan)\b"""), "")
+        .replace(Regex("""\s{2,}"""), " ")
+        .trim()

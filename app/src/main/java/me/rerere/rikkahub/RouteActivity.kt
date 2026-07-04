@@ -87,6 +87,7 @@ import me.rerere.rikkahub.ui.pages.assistant.detail.AssistantRequestPage
 import me.rerere.rikkahub.ui.pages.backup.BackupPage
 import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.cihai.CihaiPage
+import me.rerere.rikkahub.ui.pages.cihai.CihaiReadingPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.desktop.ChatRoomsPage
 import me.rerere.rikkahub.ui.pages.desktop.DesktopPage
@@ -389,6 +390,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.Cihai> {
                                 CihaiPage(onBack = { backStack.removeLastOrNull() })
+                            }
+
+                            entry<Screen.CihaiReading> {
+                                CihaiReadingPage(onBack = { backStack.removeLastOrNull() })
                             }
 
                             entry<Screen.Chat>(
@@ -735,6 +740,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object Cihai : Screen
+
+    @Serializable
+    data object CihaiReading : Screen
 
     @Serializable
     data class Chat(

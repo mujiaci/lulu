@@ -28,13 +28,7 @@ object LuluExpressionOutputTransformer : OutputMessageTransformer {
 private fun sanitizeLuluAssistantExpressionMessages(messages: List<UIMessage>): List<UIMessage> {
     return messages.map { message ->
         if (message.role != MessageRole.ASSISTANT) return@map message
-        val textPart = message.parts.singleOrNull() as? UIMessagePart.Text ?: return@map message
-        val visibleText = sanitizeLuluVisibleExpression(textPart.text)
-        if (visibleText == textPart.text) {
-            message
-        } else {
-            message.copy(parts = listOf(textPart.copy(text = visibleText)))
-        }
+        message.sanitizeLuluTextParts(dropBlankPresenceText = false).message
     }
 }
 
@@ -42,19 +36,12 @@ internal fun splitLuluAssistantExpressionMessages(messages: List<UIMessage>): Li
     val trailingPresence = mutableListOf<UIMessageAnnotation.Metadata>()
     val visibleMessages = messages.mapNotNull { message ->
         if (message.role != MessageRole.ASSISTANT) return@mapNotNull message
-        val textPart = message.parts.singleOrNull() as? UIMessagePart.Text ?: return@mapNotNull message
-        val presenceAnnotation = extractLuluPresenceMetadata(textPart.text)
-        val visibleText = sanitizeLuluVisibleExpression(textPart.text)
-        if (visibleText.isBlank() && presenceAnnotation != null) {
-            trailingPresence += presenceAnnotation
+        val sanitized = message.sanitizeLuluTextParts(dropBlankPresenceText = true)
+        if (sanitized.message.parts.isEmpty() && sanitized.presenceAnnotations.isNotEmpty()) {
+            trailingPresence += sanitized.presenceAnnotations
             null
-        } else if (visibleText != textPart.text) {
-            message.copy(
-                parts = listOf(textPart.copy(text = visibleText)),
-                annotations = message.annotations + listOfNotNull(presenceAnnotation),
-            )
         } else {
-            presenceAnnotation?.let { message.copy(annotations = message.annotations + it) } ?: message
+            sanitized.message
         }
     }
     val withPresence = visibleMessages.attachTrailingLuluPresence(trailingPresence)
@@ -73,6 +60,35 @@ internal fun splitLuluAssistantExpressionMessages(messages: List<UIMessage>): Li
         )
     }
     return withPresence.dropLast(1) + splitMessages
+}
+
+private data class SanitizedLuluMessage(
+    val message: UIMessage,
+    val presenceAnnotations: List<UIMessageAnnotation.Metadata>,
+)
+
+private fun UIMessage.sanitizeLuluTextParts(dropBlankPresenceText: Boolean): SanitizedLuluMessage {
+    val presenceAnnotations = parts
+        .filterIsInstance<UIMessagePart.Text>()
+        .mapNotNull { part -> extractLuluPresenceMetadata(part.text) }
+    val newParts = parts.mapNotNull { part ->
+        if (part !is UIMessagePart.Text) return@mapNotNull part
+        val visibleText = sanitizeLuluVisibleExpression(part.text)
+        when {
+            visibleText.isNotBlank() -> part.copy(text = visibleText)
+            dropBlankPresenceText && extractLuluPresenceMetadata(part.text) != null -> null
+            else -> part.copy(text = visibleText)
+        }
+    }
+    val nextAnnotations = if (presenceAnnotations.isEmpty()) {
+        annotations
+    } else {
+        annotations + presenceAnnotations
+    }
+    return SanitizedLuluMessage(
+        message = copy(parts = newParts, annotations = nextAnnotations),
+        presenceAnnotations = presenceAnnotations,
+    )
 }
 
 private fun List<UIMessage>.attachTrailingLuluPresence(
