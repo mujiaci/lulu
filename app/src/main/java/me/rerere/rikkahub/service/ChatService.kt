@@ -87,6 +87,7 @@ import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
+import me.rerere.rikkahub.data.ai.transformers.sanitizeLuluVisibleExpression
 import me.rerere.rikkahub.data.ai.transformers.StudyStateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
@@ -661,9 +662,10 @@ class ChatService(
         }.getOrNull()
             ?.takeIf { it.toText().isNotBlank() || it.extractTextToSpeechToolText().isNotBlank() }
             ?: return null
-        val reply = replyMessage.toText()
+        val reply = sanitizeLuluVisibleExpression(
+            replyMessage.toText()
             .ifBlank { replyMessage.extractTextToSpeechToolText() }
-            .trim()
+        ).trim()
             .takeIf { it.isNotBlank() }
             ?: return null
         val visibleAssistantMessage = replyMessage.copy(

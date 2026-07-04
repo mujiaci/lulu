@@ -124,6 +124,20 @@ private fun CurrentStatus(state: LuluState) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        state.selfScene.takeIf { it.isNotBlank() }?.let { scene ->
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(
+                    text = "此刻动作",
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = scene,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),

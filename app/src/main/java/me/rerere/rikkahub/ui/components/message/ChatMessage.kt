@@ -109,6 +109,7 @@ import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.extendColors
 import me.rerere.rikkahub.data.datastore.ChatFontFamily
+import me.rerere.rikkahub.data.ai.transformers.LULU_PRESENCE_METADATA_TYPE
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.Image
@@ -222,6 +223,7 @@ fun ChatMessage(
         if (lastMessage && message.role == MessageRole.ASSISTANT) {
             LuluExpressionInlineState(
                 messageKey = message.id.toString(),
+                annotations = message.annotations,
                 loading = loading,
             )
         }
@@ -310,14 +312,22 @@ private fun isFreshMessage(createdAt: LocalDateTime): Boolean {
 @Composable
 private fun LuluExpressionInlineState(
     messageKey: String,
+    annotations: List<UIMessageAnnotation>,
     loading: Boolean,
 ) {
     val context = LocalContext.current
-    var state by remember(messageKey) { mutableStateOf<LuluExpressionSnapshot?>(null) }
+    val presenceSnapshot = remember(messageKey, annotations) {
+        annotations.latestLuluPresenceSnapshot()
+    }
+    var state by remember(messageKey) { mutableStateOf<LuluExpressionSnapshot?>(presenceSnapshot) }
 
-    LaunchedEffect(messageKey, loading) {
+    LaunchedEffect(messageKey, loading, presenceSnapshot) {
         if (loading) {
             state = null
+            return@LaunchedEffect
+        }
+        if (presenceSnapshot != null) {
+            state = presenceSnapshot
             return@LaunchedEffect
         }
         delay(120)
@@ -351,6 +361,22 @@ private data class LuluExpressionSnapshot(
             .orEmpty()
     }
 }
+
+private fun List<UIMessageAnnotation>.latestLuluPresenceSnapshot(): LuluExpressionSnapshot? =
+    asReversed()
+        .asSequence()
+        .filterIsInstance<UIMessageAnnotation.Metadata>()
+        .firstOrNull { it.type == LULU_PRESENCE_METADATA_TYPE }
+        ?.data
+        ?.let { obj ->
+            LuluExpressionSnapshot(
+                description = obj["description"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                emoji = "",
+                sticker = "",
+                gesture = "",
+            )
+        }
+        ?.takeIf { it.toDisplayText().isNotBlank() }
 
 private fun readLatestLuluExpressionSnapshot(file: File): LuluExpressionSnapshot? {
     if (!file.exists()) return null

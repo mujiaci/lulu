@@ -10,11 +10,28 @@ import kotlin.uuid.Uuid
 
 const val LULU_PRESENCE_METADATA_TYPE = "lulu_presence"
 
+private val LULU_PRESENCE_BLOCK_REGEX =
+    Regex("(?is)<\\s*lulu[_\\s-]*presence\\s*>\\s*([\\s\\S]*?)\\s*</\\s*lulu[_\\s-]*presence\\s*>")
+
 object LuluExpressionOutputTransformer : OutputMessageTransformer {
+    override suspend fun visualTransform(
+        ctx: TransformerContext,
+        messages: List<UIMessage>,
+    ): List<UIMessage> = sanitizeLuluAssistantExpressionMessages(messages)
+
     override suspend fun onGenerationFinish(
         ctx: TransformerContext,
         messages: List<UIMessage>,
     ): List<UIMessage> = splitLuluAssistantExpressionMessages(messages)
+}
+
+private fun sanitizeLuluAssistantExpressionMessages(messages: List<UIMessage>): List<UIMessage> {
+    val last = messages.lastOrNull() ?: return messages
+    if (last.role != MessageRole.ASSISTANT) return messages
+    val textPart = last.parts.singleOrNull() as? UIMessagePart.Text ?: return messages
+    val visibleText = sanitizeLuluVisibleExpression(textPart.text)
+    if (visibleText == textPart.text) return messages
+    return messages.dropLast(1) + last.copy(parts = listOf(textPart.copy(text = visibleText)))
 }
 
 internal fun splitLuluAssistantExpressionMessages(messages: List<UIMessage>): List<UIMessage> {
@@ -49,7 +66,7 @@ internal fun splitLuluAssistantExpressionMessages(messages: List<UIMessage>): Li
 }
 
 internal fun extractLuluPresenceMetadata(text: String): UIMessageAnnotation.Metadata? {
-    val block = Regex("(?is)<lulu_presence>\\s*([\\s\\S]*?)\\s*</lulu_presence>")
+    val block = LULU_PRESENCE_BLOCK_REGEX
         .find(text)
         ?.groupValues
         ?.getOrNull(1)
@@ -84,7 +101,7 @@ private fun String.normalizeLuluPresenceKey(): String? = when (trim().lowercase(
 
 internal fun sanitizeLuluVisibleExpression(text: String): String {
     val withoutPresenceBlocks = text
-        .replace(Regex("(?is)<lulu_presence>.*?</lulu_presence>"), "")
+        .replace(LULU_PRESENCE_BLOCK_REGEX, "")
         .trim()
     val internalPrefixes = listOf(
         "表达建议：",

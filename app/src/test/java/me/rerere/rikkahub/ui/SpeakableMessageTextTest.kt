@@ -12,6 +12,22 @@ import org.junit.Test
 
 class SpeakableMessageTextTest {
     @Test
+    fun `buildSpeakableMessageText does not read lulupresence metadata aloud`() {
+        val message = UIMessage.assistant(
+            """
+            我在。
+            <lulupresence>
+            status: 靠近屏幕
+            description: 把手机拿近一点，等你继续说
+            inner voice: 我有点担心，但不想把担心直接读出来。
+            </lulupresence>
+            """.trimIndent()
+        )
+
+        assertEquals("我在。", buildSpeakableMessageText(message, onlyReadQuoted = false))
+    }
+
+    @Test
     fun `buildSpeakableMessageText ignores speaking tool labels and non speech role lines`() {
         val message = UIMessage(
             role = MessageRole.ASSISTANT,

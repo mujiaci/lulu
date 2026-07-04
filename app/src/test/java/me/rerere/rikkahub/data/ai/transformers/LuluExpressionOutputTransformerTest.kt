@@ -126,6 +126,30 @@ class LuluExpressionOutputTransformerTest {
     }
 
     @Test
+    fun `strips compact lulupresence blocks and stores inner voice metadata`() {
+        val assistant = assistantMessage(
+            """
+            我在。
+            <lulupresence>
+            status: 靠近屏幕
+            description: 把手机拿近一点，等你继续说
+            inner voice: 我有点担心，但不想把担心直接读出来。
+            </lulupresence>
+            """.trimIndent()
+        )
+
+        val result = splitLuluAssistantExpressionMessages(listOf(assistant))
+        val annotation = result.single().annotations
+            .filterIsInstance<UIMessageAnnotation.Metadata>()
+            .single()
+
+        assertEquals("我在。", result.single().toText())
+        assertEquals("靠近屏幕", annotation.data["status"]?.jsonPrimitive?.content)
+        assertEquals("把手机拿近一点，等你继续说", annotation.data["description"]?.jsonPrimitive?.content)
+        assertEquals("我有点担心，但不想把担心直接读出来。", annotation.data["inner_voice"]?.jsonPrimitive?.content)
+    }
+
+    @Test
     fun `metadata annotation serializes without discriminator conflict`() {
         val json = Json { ignoreUnknownKeys = true }
         val annotation: UIMessageAnnotation = UIMessageAnnotation.Metadata(

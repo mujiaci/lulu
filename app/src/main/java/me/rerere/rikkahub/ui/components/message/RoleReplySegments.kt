@@ -2,6 +2,7 @@ package me.rerere.rikkahub.ui.components.message
 
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
+import me.rerere.rikkahub.data.ai.transformers.sanitizeLuluVisibleExpression
 import me.rerere.rikkahub.utils.JsonInstant
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
@@ -67,9 +68,9 @@ private fun String.removeHiddenZipTags(): String =
 
 @Suppress("UNUSED_PARAMETER")
 fun buildSpeakableMessageText(message: UIMessage, onlyReadQuoted: Boolean): String? {
-    val rawText = message.toText().removeHiddenZipTags()
+    val rawText = sanitizeLuluVisibleExpression(message.toText()).removeHiddenZipTags()
     val sourceText = rawText.ifBlank { message.extractTextToSpeechToolText() }
-    val selectedText = sourceText
+    val selectedText = sanitizeLuluVisibleExpression(sourceText)
     val withoutSpeakingLines = selectedText.removeGeneratedSpeakingLines()
     val visibleSpeakableText = withoutSpeakingLines.extractSpeakableRoleText()
     if (withoutSpeakingLines.isNotBlank()) {
