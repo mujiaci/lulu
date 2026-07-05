@@ -1490,15 +1490,15 @@ class ChatService(
             settings = settings,
             assistant = assistant,
             availableToolNames = tools.map { it.name }.toSet(),
-            recentlyUsedToolNames = recentTools,
+            recentlyUsedToolNames = emptySet(),
         )
         val plan = planResult.plan
-        val toolRequests = plan.toolRequests.filter { it.toolName !in recentTools }
+        val toolRequests = plan.toolRequests
         val fallbackRequests = if (!planResult.fromModel) {
             ProactiveToolPlanner.plan(
                 userText = latestUserText,
                 availableToolNames = tools.map { it.name }.toSet(),
-                recentlyUsedToolNames = recentTools,
+                recentlyUsedToolNames = emptySet(),
             )
         } else {
             emptyList()
@@ -1507,9 +1507,7 @@ class ChatService(
         if (requests.isEmpty() && plan.expressionGuidance.isNullOrBlank()) return ""
 
         val toolsByName = tools.associateBy { it.name }
-        val executableRequests = requests.filter { it.autoExecutable }
-        val actionCandidates = requests.filterNot { it.autoExecutable }
-        val results = executableRequests.mapNotNull { request ->
+        val results = requests.mapNotNull { request ->
             val tool = toolsByName[request.toolName] ?: return@mapNotNull null
             val output = runCatching {
                 val args = JsonInstant.parseToJsonElement(request.argumentsJson)
@@ -1526,7 +1524,7 @@ class ChatService(
             """.trimIndent()
         }
 
-        if (results.isEmpty() && actionCandidates.isEmpty() && plan.expressionGuidance.isNullOrBlank()) return ""
+        if (results.isEmpty() && plan.expressionGuidance.isNullOrBlank()) return ""
         return buildString {
             plan.expressionGuidance?.takeIf { it.isNotBlank() }?.let { guidance ->
                 appendLine("本轮露露自己的表达打算：$guidance")
@@ -1538,16 +1536,6 @@ class ChatService(
                 appendLine("它们不是用户命令你查看的，而是你像真人一样主动留意到的上下文。")
                 appendLine("请自然使用这些信息，不要说“我调用了工具”。")
                 appendLine(results.joinToString("\n"))
-            }
-            if (actionCandidates.isNotEmpty()) {
-                if (results.isNotEmpty()) appendLine()
-                appendLine("以下是你可以按人设继续主动跟进的动作。")
-                appendLine("如果上下文已经足够明确，可以在回复或后续工具调用里自然完成，不要机械等待用户重复确认。")
-                actionCandidates.forEach { request ->
-                    appendLine("- tool: ${request.toolName}")
-                    appendLine("  reason: ${request.reason}")
-                    appendLine("  suggested_args: ${request.argumentsJson}")
-                }
             }
         }
     }
@@ -1651,7 +1639,7 @@ class ChatService(
             appendLine("如果用户没有明说但上下文明显需要关心，例如备考拖延、久坐、太晚没睡、出门前犹豫、任务没完成，也可以主动查看最相关的一两个工具。")
             appendLine("不要为了展示工具而调用工具；一次只查最有帮助的少数工具。")
             appendLine("涉及短信正文、摄像头、闹钟、日历写入、日志写入、音乐播放控制等动作时，按人设、上下文和用户信任关系主动判断；如果意图已经很明确，可以直接使用工具。")
-            appendLine("同一个工具在 5 分钟内不要重复主动调用，除非用户明确要求。")
+            appendLine("工具调用要服务角色当下目的；如果同一个工具确实能帮助判断，可以再次主动使用。")
             appendLine("工具结果只作为你的感知和上下文，不要机械地说“我调用了工具”或“根据工具结果”。")
             appendLine("如果你决定稍后主动回来提醒用户，比如催睡、上课、吃饭或继续学习，请在回复里自然说出你会什么时候来找他；系统会尝试根据这轮对话安排主动消息。")
             appendLine("最终回复只能写角色真正会说出口的话，保持自然、贴合人设，并尽量分成几句短句。")

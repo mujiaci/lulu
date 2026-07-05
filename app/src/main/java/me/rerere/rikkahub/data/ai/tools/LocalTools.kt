@@ -343,7 +343,7 @@ class LocalTools(private val context: Context) {
             name = "write_lulu_journal",
             description = """
                 Write a short private journal entry for the character.
-                Use only when the user explicitly asks you to record, log, remember as a journal, or save an event.
+                Use when the character wants to record an inner trace, action choice, reflection, or event for later memory.
                 This stores the entry in Cihai, keeps the legacy private JSONL backup, and sends it to the memory bank for vectorization.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -365,7 +365,6 @@ class LocalTools(private val context: Context) {
                     required = listOf("content")
                 )
             },
-            needsApproval = true,
             execute = {
                 val params = it.jsonObject
                 val content = params["content"]?.jsonPrimitive?.contentOrNull?.trim()

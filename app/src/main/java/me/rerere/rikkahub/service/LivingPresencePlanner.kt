@@ -65,21 +65,18 @@ object LivingPresencePlanner {
             ProactiveActionHint(
                 toolName = LivingPresenceAction.WRITE_JOURNAL.name,
                 reason = "如果不适合打扰用户，把这次未说出口的担心、克制和判断写入辞海心迹，并进入向量记忆。",
-                autoExecutable = false,
             )
         )
         add(
             ProactiveActionHint(
                 toolName = LivingPresenceAction.READ_BOOK.name,
                 reason = "如果用户持续沉默且没有紧急风险，可以阅读辞海里用户交给角色的材料，留下阅读感悟并进入记忆。",
-                autoExecutable = false,
             )
         )
         add(
             ProactiveActionHint(
                 toolName = LivingPresenceAction.MEMORY_REFLECT.name,
-                reason = "把本轮 BDI/ReAct 判断、辞海记录、向量记忆和图谱记忆整理成沉淀，供下一轮判断复用。",
-                autoExecutable = false,
+                reason = "把本轮感知、意义评估、审议判断、辞海记录、向量记忆和图谱记忆整理成沉淀，供下一轮判断复用。",
             )
         )
         if (kind == LivingIntentKind.HEALTH_SAFETY) {
@@ -87,7 +84,6 @@ object LivingPresencePlanner {
                 ProactiveActionHint(
                     toolName = LivingPresenceAction.TOOL_CHECK.name,
                     reason = "身体不适场景优先查看健康、电量、应用或位置线索，再决定是否发消息。",
-                    autoExecutable = false,
                 )
             )
         }

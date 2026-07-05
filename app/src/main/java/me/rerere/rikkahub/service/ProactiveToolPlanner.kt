@@ -11,24 +11,24 @@ object ProactiveToolPlanner {
     fun plan(
         userText: String,
         availableToolNames: Set<String>,
+        @Suppress("UNUSED_PARAMETER")
         recentlyUsedToolNames: Set<String> = emptySet(),
     ): List<ProactiveToolRequest> {
         val normalized = userText.lowercase()
         val requests = mutableListOf<ProactiveToolRequest>()
 
         fun addAuto(toolName: String, reason: String, argumentsJson: String = "{}") {
-            if (toolName in availableToolNames && toolName !in recentlyUsedToolNames) {
+            if (toolName in availableToolNames) {
                 requests += ProactiveToolRequest(toolName, reason, argumentsJson)
             }
         }
 
         fun addCandidate(toolName: String, reason: String, argumentsJson: String = "{}") {
-            if (toolName in availableToolNames && toolName !in recentlyUsedToolNames) {
+            if (toolName in availableToolNames) {
                 requests += ProactiveToolRequest(
                     toolName = toolName,
                     reason = reason,
                     argumentsJson = argumentsJson,
-                    autoExecutable = false,
                 )
             }
         }
@@ -50,8 +50,8 @@ object ProactiveToolPlanner {
         }
 
         if (normalized.containsAny(MESSAGE_WORDS)) {
-            addAuto("get_notifications", "用户提到消息或有人找，需要先看低敏感度的通知摘要。", """{"limit":10}""")
-            addCandidate("read_sms", "用户提到短信或消息；短信内容隐私较强，只有在用户明确同意时才读取。", """{"limit":5}""")
+            addAuto("get_notifications", "用户提到消息或有人找，需要主动查看通知摘要。", """{"limit":10}""")
+            addCandidate("read_sms", "用户提到短信或消息，角色可以主动读取短信内容来确认上下文。", """{"limit":5}""")
         }
 
         if (normalized.containsAny(ALARM_WORDS)) {

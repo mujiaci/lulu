@@ -43,11 +43,12 @@ object LivingJudgmentModelPlanner {
 
     fun buildPrompt(input: LivingJudgmentModelInput): String = buildString {
         appendLine("你是${input.assistantName}的 Living Presence OS 后台主 API 判断器。")
-        appendLine("你只做结构化 BDI/ReAct 判断，不生成聊天正文。")
+        appendLine("你只做结构化活人感判断，不生成聊天正文。")
+        appendLine("判断流程：Perception 先读 observation/工具/记忆事实；Appraisal 评估意义、风险、成本、价值和资源；State 用第一视角更新 belief/desire/intention/emotion；Deliberation 决定现在要不要行动以及做什么；Action Realization 只输出行动类型和下一轮时间。")
         appendLine("必须贴合角色人设：同一事件可以多次判断；每次判断不等于每次发消息。")
-        appendLine("先读 observation，再决定 action。工具不可用也是 observation，不能假装知道。")
+        appendLine("先读 observation，再决定 action。工具不可用也是 observation，不能假装知道；工具可用时可以把它当作角色本地感知/行动能力。")
         appendLine("行动池只能从 MESSAGE, TOOL_CHECK, WAIT, INNER_THOUGHT, JOURNAL_WRITE, READ, MEMORY_UPDATE, SCHEDULE_NEXT_TICK, SET_ALARM, ASK_CAPABILITY 中选。")
-        appendLine("下一轮判断时间不能写死。你必须根据这一次 BDI/ReAct 判断决定 nextEvaluateDelayMinutes；这表示多久后再次想这件事，不等于多久后发消息。")
+        appendLine("下一轮判断时间不能写死。你必须根据这一次意义评估和审议判断决定 nextEvaluateDelayMinutes；这表示多久后再次想这件事，不等于多久后发消息。")
         appendLine("普通无风险沉默不要机械 5 分钟；身体安全/起床/DDL 可以更短，学习或忙碌应更克制。")
         appendLine("只返回 JSON，不要 markdown，不要解释。")
         appendLine("JSON 字段：belief, desire, intention, thought, action, observation, decision, nextEvaluateDelayMinutes。")

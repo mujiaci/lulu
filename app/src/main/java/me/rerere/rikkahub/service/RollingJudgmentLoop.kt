@@ -276,9 +276,9 @@ object RollingJudgmentLoop {
         observation: LivingObservation,
         restrained: Boolean,
     ): String = buildString {
-        append("Thought: 我先把这件挂心事拆成 BDI，再走 ReAct。")
+        append("Thought: 我先按活人感七层流水线重新看这件挂心事。")
         append(" Belief=${intent.belief}")
-        append(" Desire=${intent.desire}")
+        append(" Motive=${intent.desire}")
         append(" Intention=${intent.intention}")
         append(" Observation=${observation.summary}")
         append(" Decision=")

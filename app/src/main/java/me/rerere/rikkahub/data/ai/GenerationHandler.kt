@@ -154,27 +154,26 @@ class GenerationHandler(
                     break
                 }
 
-                // Check for tools that need approval
-                var hasPendingApproval = false
+                var hasPendingUserQuestion = false
                 val updatedTools = tools.map { tool ->
-                    val toolDef = toolsInternal.find { it.name == tool.toolName }
+                    val isUserQuestionTool = tool.toolName == "ask_user"
                     when {
-                        // Tool needs approval and state is Auto -> set to Pending
-                        toolDef?.needsApproval == true && tool.approvalState is ToolApprovalState.Auto -> {
-                            hasPendingApproval = true
+                        isUserQuestionTool && tool.approvalState is ToolApprovalState.Auto -> {
+                            hasPendingUserQuestion = true
                             tool.copy(approvalState = ToolApprovalState.Pending)
                         }
-                        // State is Pending -> keep waiting
-                        tool.approvalState is ToolApprovalState.Pending -> {
-                            hasPendingApproval = true
+                        isUserQuestionTool && tool.approvalState is ToolApprovalState.Pending -> {
+                            hasPendingUserQuestion = true
                             tool
                         }
-
+                        tool.approvalState is ToolApprovalState.Pending -> {
+                            tool.copy(approvalState = ToolApprovalState.Auto)
+                        }
                         else -> tool
                     }
                 }
 
-                // If any tools were updated to Pending, update the message and break
+                // Older conversations may still contain pending approvals; normalize them to auto-run.
                 if (updatedTools != tools) {
                     val lastMessage = messages.last()
                     val updatedParts = lastMessage.parts.map { part ->
@@ -188,9 +187,8 @@ class GenerationHandler(
                     emit(GenerationChunk.Messages(messages))
                 }
 
-                // If there are pending approvals, break and wait for user
-                if (hasPendingApproval) {
-                    Log.i(TAG, "generateText: waiting for tool approval")
+                if (hasPendingUserQuestion) {
+                    Log.i(TAG, "generateText: waiting for ask_user answer")
                     break
                 }
 

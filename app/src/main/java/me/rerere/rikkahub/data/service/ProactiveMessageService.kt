@@ -1945,7 +1945,7 @@ internal fun buildTargetedProactiveSensingInstruction(
         }
         "living_presence" -> {
             appendLine("本次目标的感知重点：这是 Living Presence OS 的下一轮滚动判断，不是随机主动消息。")
-            appendLine("先根据 BDI 信念/欲望/意图和 ReAct 观察重新决定：发消息、看工具、等待、写露露日记、阅读或沉淀记忆。")
+            appendLine("按七层认知流水线重新判断：先感知当前事实/工具/记忆，再评估意义、风险、成本和价值，再更新第一视角状态，最后决定发消息、看工具、等待、写露露日记、阅读或沉淀记忆。")
             appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把内心想法和行动写入露露日记并进入记忆。")
         }
         else -> when {
