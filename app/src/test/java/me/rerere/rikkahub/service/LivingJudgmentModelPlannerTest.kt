@@ -24,8 +24,11 @@ class LivingJudgmentModelPlannerTest {
         )
 
         assertTrue(prompt.contains("nextEvaluateDelayMinutes"))
-        assertTrue(prompt.contains("belief/motive/intention/emotion"))
-        assertTrue(prompt.contains("Consolidation"))
+        assertTrue(prompt.contains("情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀"))
+        assertTrue(prompt.contains("traitMotive"))
+        assertTrue(prompt.contains("situationalMotive"))
+        assertTrue(prompt.contains("emotionLabel"))
+        assertTrue(prompt.contains("ReAct 属于这里"))
         assertTrue(prompt.contains("不要照抄固定表"))
         assertTrue(prompt.contains("不等于多久后发消息"))
     }
@@ -56,7 +59,16 @@ class LivingJudgmentModelPlannerTest {
                 ```json
                 {
                   "belief": "用户身体不舒服，而且暂时没有回复。",
+                  "traitMotive": "露露长期想保护用户。",
+                  "situationalMotive": "这次因为用户肚子疼才特别在意。",
                   "motive": "确认安全，同时不要制造恐慌。",
+                  "emotion": {
+                    "emotionLabel": "担心但压低声音",
+                    "feltSense": "心口发紧",
+                    "impulse": "想马上确认安全",
+                    "restraint": "压住连环追问",
+                    "intensity": 9
+                  },
                   "intention": "先观察工具线索，再决定是否轻轻确认。",
                   "thought": "我没有足够健康线索，所以不能假装知道。",
                   "action": "TOOL_CHECK, MESSAGE, SCHEDULE_NEXT_TICK",
@@ -89,6 +101,10 @@ class LivingJudgmentModelPlannerTest {
         assertEquals(17, trace?.nextEvaluateDelayMinutes)
         assertTrue(trace?.thought?.contains("不能假装知道") == true)
         assertTrue(trace?.motive?.contains("确认安全") == true)
+        assertTrue(trace?.traitMotive?.contains("保护用户") == true)
+        assertTrue(trace?.situationalMotive?.contains("肚子疼") == true)
+        assertTrue(trace?.emotion?.emotionLabel?.contains("担心") == true)
+        assertEquals(9, trace?.emotion?.intensity)
         assertTrue(trace?.appraisal?.risk?.contains("身体风险") == true)
         assertTrue(trace?.consolidation?.policyLearning?.contains("短周期") == true)
     }

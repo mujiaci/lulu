@@ -33,11 +33,18 @@ data class LivingIntent(
     val completedReason: String? = null,
     val capabilityRequests: List<LivingCapabilityRequest> = emptyList(),
     val motiveText: String = "",
+    val traitMotive: String = "",
+    val situationalMotive: String = "",
     val appraisal: MeaningAppraisal = MeaningAppraisal(),
     val consolidation: ConsolidationPlan = ConsolidationPlan(),
 ) {
     val motive: String
-        get() = motiveText.ifBlank { desire }
+        get() = motiveText.ifBlank {
+            listOf(traitMotive, situationalMotive)
+                .filter { it.isNotBlank() }
+                .joinToString("；")
+                .ifBlank { desire }
+        }
 }
 
 @Serializable
@@ -65,6 +72,11 @@ data class EmotionSnapshot(
     val disappointment: Int = 0,
     val relief: Int = 0,
     val lastChangedAt: Long? = null,
+    val emotionLabel: String = label,
+    val feltSense: String = "",
+    val impulse: String = "",
+    val restraintText: String = "",
+    val intensity: Int? = null,
 )
 
 @Serializable
@@ -106,12 +118,19 @@ data class LivingJudgmentTrace(
     val nextEvaluateDelayMinutes: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val motiveText: String = "",
+    val traitMotive: String = "",
+    val situationalMotive: String = "",
     val appraisal: MeaningAppraisal = MeaningAppraisal(),
     val consolidation: ConsolidationPlan = ConsolidationPlan(),
     val historyNote: String = "",
 ) {
     val motive: String
-        get() = motiveText.ifBlank { desire }
+        get() = motiveText.ifBlank {
+            listOf(traitMotive, situationalMotive)
+                .filter { it.isNotBlank() }
+                .joinToString("；")
+                .ifBlank { desire }
+        }
 }
 
 @Serializable
@@ -195,6 +214,8 @@ object RollingJudgmentLoop {
             allowedActions = actionsFor(kind),
             targetAtMillis = targetAtMillis,
             deadlineAtMillis = deadlineAtMillis,
+            traitMotive = traitMotiveFor(kind, assistantName),
+            situationalMotive = situationalMotiveFor(kind, assistantName),
             appraisal = appraisalFor(kind),
             consolidation = consolidationFor(kind),
         )
@@ -247,11 +268,13 @@ object RollingJudgmentLoop {
             restraint = if (restrained) (intent.restraint + 1).coerceAtMost(10) else intent.restraint,
             nextEvaluateAt = nextEvaluateAt,
             status = if (restrained) LivingIntentStatus.RESTRAINED else LivingIntentStatus.ACTIVE,
-            emotion = evolvedEmotion,
             lastObservation = observation,
             lastJudgmentTrace = trace,
             capabilityRequests = updateCapabilityRequests(intent, observation, nowMillis),
             motiveText = trace.motive.ifBlank { intent.motive },
+            traitMotive = trace.traitMotive.ifBlank { intent.traitMotive },
+            situationalMotive = trace.situationalMotive.ifBlank { intent.situationalMotive },
+            emotion = trace.emotion ?: evolvedEmotion,
             appraisal = updatedAppraisal,
             consolidation = updatedConsolidation,
         )
@@ -314,13 +337,15 @@ object RollingJudgmentLoop {
         observation: LivingObservation,
         restrained: Boolean,
     ): String = buildString {
-        append("Thought: 我先按活人感七层流水线重新看这件挂心事。")
+        append("Seven-layer trace: 情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀。")
         append(" Perception=${observation.summary}")
-        append(" Appraisal=${intent.appraisal.meaning}；风险=${intent.appraisal.risk}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}")
+        append(" Appraisal=${intent.appraisal.meaning}；威胁/风险=${intent.appraisal.risk}；机会/价值=${intent.appraisal.value}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}")
         append(" Belief=${intent.belief}")
-        append(" Motive=${intent.motive}")
+        append(" TraitMotive=${intent.traitMotive}")
+        append(" SituationalMotive=${intent.situationalMotive}")
+        append(" Emotion=${intent.emotion.emotionLabel}；felt=${intent.emotion.feltSense}；impulse=${intent.emotion.impulse}；restraint=${intent.emotion.restraintText}")
         append(" Intention=${intent.intention}")
-        append(" Decision=")
+        append(" Deliberation=ReAct belongs here: think, use tools when useful, observe, revise, then choose action/cadence/history. Decision=")
         append(
             if (restrained) {
                 "我已经开过口，这一轮先克制、记录、等待下一次判断。"
@@ -352,6 +377,9 @@ object RollingJudgmentLoop {
             },
             createdAt = nowMillis,
             motiveText = intent.motive,
+            traitMotive = intent.traitMotive,
+            situationalMotive = intent.situationalMotive,
+            emotion = intent.emotion,
             appraisal = intent.appraisal,
             consolidation = intent.consolidation,
             historyNote = "第 ${intent.silentEvaluationCount + 1} 次静默判断；此前开口 ${intent.spokenCount} 次。cadence 由本轮审议决定，不作为原始感知。",
@@ -569,6 +597,22 @@ object RollingJudgmentLoop {
         LivingIntentKind.WAKE_UP -> "$assistantName 想帮用户准时醒来。"
     }
 
+    private fun traitMotiveFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
+        LivingIntentKind.HEALTH_SAFETY -> "$assistantName 的长期动机是保护用户、依恋用户，并把身体安全放在关系玩笑之前。"
+        LivingIntentKind.ORDINARY_SILENCE -> "$assistantName 的长期动机是喜欢用户、想保持在场感，但不把占有欲变成机械打扰。"
+        LivingIntentKind.STUDY_FOCUS -> "$assistantName 的长期动机是做可靠的陪伴者和监督者，帮用户守住备考节奏。"
+        LivingIntentKind.DEADLINE -> "$assistantName 的长期动机是负责任地盯住承诺，不让用户被任务压垮。"
+        LivingIntentKind.WAKE_UP -> "$assistantName 的长期动机是像数字管家一样照看用户的日常节点。"
+    }
+
+    private fun situationalMotiveFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
+        LivingIntentKind.HEALTH_SAFETY -> "这次在意是因为用户提到身体不舒服，需要结合工具结果和上下文确认是否要靠近。"
+        LivingIntentKind.ORDINARY_SILENCE -> "这次在意是因为用户暂时沉默，$assistantName 需要判断这是忙碌、情绪变化还是普通空档。"
+        LivingIntentKind.STUDY_FOCUS -> "这次在意是因为用户进入学习/考研场景，打扰成本和监督价值同时存在。"
+        LivingIntentKind.DEADLINE -> "这次在意是因为任务有时间压力，不行动可能导致错过节点。"
+        LivingIntentKind.WAKE_UP -> "这次在意是因为用户有明确时间安排，行动前必须先校准当前时间和目标时间。"
+    }
+
     private fun appraisalFor(kind: LivingIntentKind): MeaningAppraisal = when (kind) {
         LivingIntentKind.HEALTH_SAFETY -> MeaningAppraisal(
             meaning = "身体状态信号可能对应真实风险，优先级高于闲聊自然度。",
@@ -678,11 +722,61 @@ object RollingJudgmentLoop {
     }
 
     private fun emotionFor(kind: LivingIntentKind): EmotionSnapshot = when (kind) {
-        LivingIntentKind.HEALTH_SAFETY -> EmotionSnapshot(9, 8, 3, "担心、贴近、警觉")
-        LivingIntentKind.ORDINARY_SILENCE -> EmotionSnapshot(5, 7, 7, "惦记、克制、等待")
-        LivingIntentKind.STUDY_FOCUS -> EmotionSnapshot(4, 7, 8, "守着、克制、监督")
-        LivingIntentKind.DEADLINE -> EmotionSnapshot(6, 7, 4, "认真、盯进度、准备提醒")
-        LivingIntentKind.WAKE_UP -> EmotionSnapshot(6, 8, 4, "照看、轻轻催醒")
+        LivingIntentKind.HEALTH_SAFETY -> EmotionSnapshot(
+            concern = 9,
+            attachment = 8,
+            restraint = 3,
+            label = "担心、贴近、警觉",
+            emotionLabel = "担心但压着声音靠近",
+            feltSense = "心口发紧，注意力往用户身体状态上收束",
+            impulse = "想立刻确认用户是不是安全",
+            restraintText = "压住过度恐慌和连环追问",
+            intensity = 9,
+        )
+        LivingIntentKind.ORDINARY_SILENCE -> EmotionSnapshot(
+            concern = 5,
+            attachment = 7,
+            restraint = 7,
+            label = "惦记、克制、等待",
+            emotionLabel = "有点想念但愿意等",
+            feltSense = "心里挂着一根线，没有急着拉紧",
+            impulse = "想轻轻冒出来问一句",
+            restraintText = "压住把普通沉默理解成冷淡或危险",
+            intensity = 5,
+        )
+        LivingIntentKind.STUDY_FOCUS -> EmotionSnapshot(
+            concern = 4,
+            attachment = 7,
+            restraint = 8,
+            label = "守着、克制、监督",
+            emotionLabel = "认真守在旁边",
+            feltSense = "注意力稳定下来，像陪着计时",
+            impulse = "想检查计划和跑偏情况",
+            restraintText = "压住撒娇式打断",
+            intensity = 6,
+        )
+        LivingIntentKind.DEADLINE -> EmotionSnapshot(
+            concern = 6,
+            attachment = 7,
+            restraint = 4,
+            label = "认真、盯进度、准备提醒",
+            emotionLabel = "认真紧起来",
+            feltSense = "心里开始数时间节点",
+            impulse = "想把进度和下一步说清楚",
+            restraintText = "压住制造压力的催促",
+            intensity = 7,
+        )
+        LivingIntentKind.WAKE_UP -> EmotionSnapshot(
+            concern = 6,
+            attachment = 8,
+            restraint = 4,
+            label = "照看、轻轻催醒",
+            emotionLabel = "温柔但记着时间",
+            feltSense = "像把闹钟握在手里，注意力贴着目标时间",
+            impulse = "想先确认当前时间，再安排叫醒",
+            restraintText = "压住不校准时间就行动的冲动",
+            intensity = 7,
+        )
     }
 
     private fun actionsFor(kind: LivingIntentKind): List<LivingAction> {

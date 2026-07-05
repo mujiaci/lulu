@@ -40,7 +40,10 @@ class LivingPresenceCardsTest {
 
         assertEquals(listOf(LivingIntentKind.HEALTH_SAFETY, LivingIntentKind.STUDY_FOCUS), cards.map { it.kind })
         assertTrue(cards.first().title.contains("身体"))
-        assertTrue(cards.first().bdiLine.contains("信念"))
+        assertTrue(cards.first().stateLine.contains("信念"))
+        assertTrue(cards.first().stateLine.contains("长期动机"))
+        assertTrue(cards.first().stateLine.contains("情境动机"))
+        assertTrue(cards.first().emotionLine.contains("冲动"))
         assertTrue(cards.first().cadenceLine.contains("5/10/20/40/90"))
     }
 

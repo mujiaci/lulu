@@ -44,15 +44,21 @@ object LivingJudgmentModelPlanner {
     fun buildPrompt(input: LivingJudgmentModelInput): String = buildString {
         appendLine("你是${input.assistantName}的 Living Presence OS 后台主 API 判断器。")
         appendLine("你只做结构化活人感判断，不生成聊天正文。")
-        appendLine("判断流程：Perception 先读时间、上下文、考研计划、工具结果、工具状态和召回记忆；Appraisal 评估意义、威胁、价值、后果、身心安全、成本、收益、时间和资源；State 用第一视角更新 belief/motive/intention/emotion；Deliberation 综合前三层决定要不要行动、做什么、多久后再想；Action Realization 只把已决定的行动变成可执行步骤；Expression 留给聊天主流程；Consolidation 输出本轮如何沉淀。")
-        appendLine("belief 不是原始感知，而是角色第一视角的解释性总结；motive 是她为什么在意，来自人设核心特质、关系和当下情绪，不要写成抽象欲望。")
+        appendLine("最终架构名：情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀。")
+        appendLine("情境感知 Perception 只收集事实：当前时间、对话上下文、工具结果、工具可用状态、考研计划状态、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；它不决定意义。")
+        appendLine("意义评估 Appraisal 评估重要性、威胁、机会、身体安全、精神安全、时间压力、行动成本、可能收益、不行动后果、可用资源；它接近 Lazarus appraisal theory，是给行动选择提供重量，不是直接选择行动。")
+        appendLine("状态保持 State 保存持续心理状态，不重新裁判：belief 是第一视角解释，不是原始感知；traitMotive 是长期人设底层动机；situationalMotive 是本次 concern 为什么在意；emotion 用 emotionLabel/feltSense/impulse/restraint/intensity 表达。")
+        appendLine("审议决策 Deliberation 综合前三层回答是否行动、是否开口、是否查工具、是否等待、是否写辞海、是否安排下一轮、优先级和不行动理由；ReAct 属于这里，是边想、边查、边修正的审议过程，不是另一个想法层。")
+        appendLine("行为实现 Action Planning 决定怎么做：调哪个工具、参数、先后顺序、失败怎么办、是否需要确认、结果如何反馈给表达层。涉及时钟动作必须先 Temporal Grounding，确认当前时间和目标时间。")
+        appendLine("人格表达 Expression 只把已决定的行动说成人话，不决定政策；经验沉淀 Consolidation 输出情节痕迹、情感残留、语义记忆、行为经验。")
         appendLine("必须贴合角色人设：同一事件可以多次判断；每次判断不等于每次发消息。")
         appendLine("先读 observation，再决定 action。工具不可用也是 observation，不能假装知道；工具可用时可以把它当作角色本地感知/行动能力。")
         appendLine("行动池只能从 MESSAGE, TOOL_CHECK, WAIT, INNER_THOUGHT, JOURNAL_WRITE, READ, MEMORY_UPDATE, SCHEDULE_NEXT_TICK, SET_ALARM, ASK_CAPABILITY 中选。")
         appendLine("下一轮判断时间不能写死。你必须根据这一次意义评估和审议判断决定 nextEvaluateDelayMinutes；这表示多久后再次想这件事，不等于多久后发消息。")
         appendLine("普通无风险沉默不要机械 5 分钟；身体安全/起床/DDL 可以更短，学习或忙碌应更克制。")
         appendLine("只返回 JSON，不要 markdown，不要解释。")
-        appendLine("JSON 字段：belief, motive, intention, thought, action, observation, decision, nextEvaluateDelayMinutes, appraisal, consolidation, historyNote。")
+        appendLine("JSON 字段：belief, traitMotive, situationalMotive, motive, emotion, intention, thought, action, observation, decision, nextEvaluateDelayMinutes, appraisal, consolidation, historyNote。")
+        appendLine("emotion 字段：emotionLabel, feltSense, impulse, restraint, intensity。")
         appendLine("appraisal 字段：meaning, value, risk, cost, consequence, resources。consolidation 字段：episodicTrace, affectiveResidue, semanticMemory, policyLearning。")
         appendLine("nextEvaluateDelayMinutes 为 1 到 1440 的整数分钟；由角色判断，不要照抄固定表。")
         appendLine("<persona>")
@@ -61,6 +67,8 @@ object LivingJudgmentModelPlanner {
         appendLine("<intent>")
         appendLine("kind=${input.intent.kind}")
         appendLine("belief=${input.intent.belief}")
+        appendLine("traitMotive=${input.intent.traitMotive}")
+        appendLine("situationalMotive=${input.intent.situationalMotive}")
         appendLine("motive=${input.intent.motive}")
         appendLine("intention=${input.intent.intention}")
         appendLine("hypotheses=${input.intent.hypotheses.joinToString(" / ")}")
@@ -70,7 +78,7 @@ object LivingJudgmentModelPlanner {
         appendLine("silentEvaluationCount=${input.intent.silentEvaluationCount}")
         appendLine("urgency=${input.intent.urgency}")
         appendLine("restraint=${input.intent.restraint}")
-        appendLine("emotion=${input.intent.emotion.label}, concern=${input.intent.emotion.concern}, attachment=${input.intent.emotion.attachment}")
+        appendLine("emotion=${input.intent.emotion.emotionLabel}, felt=${input.intent.emotion.feltSense}, impulse=${input.intent.emotion.impulse}, restraint=${input.intent.emotion.restraintText}, intensity=${input.intent.emotion.intensity ?: input.intent.emotion.concern}")
         appendLine("</intent>")
         appendLine("<observation>")
         appendLine(input.observation.summary.take(1800))
@@ -99,6 +107,9 @@ object LivingJudgmentModelPlanner {
             motiveText = obj.string("motive")?.take(500)?.ifBlank { null }
                 ?: obj.string("desire")?.take(500)?.ifBlank { null }
                 ?: input.intent.motive,
+            traitMotive = obj.string("traitMotive")?.take(500)?.ifBlank { null } ?: input.intent.traitMotive,
+            situationalMotive = obj.string("situationalMotive")?.take(500)?.ifBlank { null } ?: input.intent.situationalMotive,
+            emotion = obj.emotion("emotion", input.intent.emotion),
             appraisal = obj.appraisal("appraisal") ?: input.intent.appraisal,
             consolidation = obj.consolidation("consolidation") ?: input.intent.consolidation,
             historyNote = obj.string("historyNote")?.take(500).orEmpty(),
@@ -136,6 +147,19 @@ object LivingJudgmentModelPlanner {
             affectiveResidue = obj.string("affectiveResidue")?.take(300).orEmpty(),
             semanticMemory = obj.string("semanticMemory")?.take(300).orEmpty(),
             policyLearning = obj.string("policyLearning")?.take(300).orEmpty(),
+        )
+    }
+
+    private fun JsonObject.emotion(key: String, fallback: EmotionSnapshot): EmotionSnapshot? {
+        val obj = this[key] as? JsonObject ?: return null
+        val label = obj.string("emotionLabel")?.take(240)?.ifBlank { null } ?: fallback.emotionLabel
+        return fallback.copy(
+            label = label,
+            emotionLabel = label,
+            feltSense = obj.string("feltSense")?.take(300).orEmpty().ifBlank { fallback.feltSense },
+            impulse = obj.string("impulse")?.take(300).orEmpty().ifBlank { fallback.impulse },
+            restraintText = obj.string("restraint")?.take(300).orEmpty().ifBlank { fallback.restraintText },
+            intensity = obj["intensity"]?.jsonPrimitive?.intOrNull?.coerceIn(0, 10) ?: fallback.intensity,
         )
     }
 }

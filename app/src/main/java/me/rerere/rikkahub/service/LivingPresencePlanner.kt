@@ -49,13 +49,13 @@ object LivingPresencePlanner {
     }
 
     private fun buildReason(intent: LivingIntent, index: Int): String = buildString {
-        append("七层活人感滚动判断#${index + 1}：")
+        append("情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀#${index + 1}：")
         append(intent.belief)
-        append(" Perception=时间/上下文/考研计划/工具结果/工具状态/召回记忆先进入感知层。")
-        append(" Appraisal=${intent.appraisal.meaning} 风险=${intent.appraisal.risk} 成本=${intent.appraisal.cost} 资源=${intent.appraisal.resources}.")
-        append(" State: belief=${intent.belief}; motive=${intent.motive}; intention=${intent.intention}; emotion=${intent.emotion.label}.")
-        append(" Deliberation: 综合感知、意义评估和状态，决定是否开口、是否查工具、多久后再判断。")
-        append(" Action pool includes message, tool check, wait, write journal, read, memory reflection, schedule next tick.")
+        append(" 情境感知=时间/上下文/考研计划/工具结果/工具状态/召回记忆/状态栏/辞海/历史挂心记录先进入感知层。")
+        append(" 意义评估=${intent.appraisal.meaning} 威胁/风险=${intent.appraisal.risk} 机会/价值=${intent.appraisal.value} 成本=${intent.appraisal.cost} 资源=${intent.appraisal.resources}.")
+        append(" 状态保持: belief=${intent.belief}; traitMotive=${intent.traitMotive}; situationalMotive=${intent.situationalMotive}; intention=${intent.intention}; emotion=${intent.emotion.emotionLabel}/${intent.emotion.feltSense}.")
+        append(" 审议决策: ReAct 在这里边想、边查、边修正，决定是否开口、是否查工具、是否等待、是否写辞海、是否安排下一轮。")
+        append(" 行动池 includes MESSAGE, WAIT, TOOL_USE, SET_ALARM, JOURNAL_WRITE, MEMORY_UPDATE, SCHEDULE_NEXT_TICK, ASK_USER, PASS.")
         append(" Consolidation=${intent.consolidation.episodicTrace} / ${intent.consolidation.policyLearning}.")
         append(" Hypotheses: ${intent.hypotheses.joinToString(" / ")}.")
         append(" 生成时必须重新观察当前状态，不要把这段 reason 当成预写消息。")

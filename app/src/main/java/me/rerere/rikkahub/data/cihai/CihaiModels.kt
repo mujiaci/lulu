@@ -156,9 +156,9 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
             kind = CihaiEntryKind.REFLECTION,
             title = "${input.assistantName.ifBlank { "角色" }} 的下一轮判断沉淀",
             content = buildString {
-                append("本轮七层活人感流水线的结果：我先感知时间、上下文、工具结果和记忆，再评估意义、风险、成本、价值与资源。\n")
-                append("状态层把原始感知转成第一视角信念、动机、意图和情绪；判断层决定本轮不立刻开口，而是保留行动池和下一次审议时间。\n")
-                append("沉淀层把原始记录留在辞海，把心迹/行动/阅读送入向量记忆和图谱共现关系，同时留下情绪余波、语义经验和下一轮策略。")
+                append("本轮情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀架构的结果：我先整理时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录。\n")
+                append("意义评估只给这件事加重量：重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源；状态保持把它压成第一视角信念、长期/情境动机、意图和情绪。\n")
+                append("审议层用 ReAct 边想边查边修正，决定本轮不立刻开口，而是保留行动池和下一次审议时间；沉淀层把这次经历压缩成情节痕迹、情感残留、语义记忆和行为经验。")
             },
             emotion = "复盘、收束、准备下一轮",
             createdAt = input.createdAt + 3,

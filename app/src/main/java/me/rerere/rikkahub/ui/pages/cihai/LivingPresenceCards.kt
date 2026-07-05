@@ -53,12 +53,12 @@ private fun LivingIntent.toCardModel(nowMillis: Long): LivingIntentCardModel {
             LivingIntentStatus.COMPLETED -> "已完成"
             LivingIntentStatus.CANCELLED -> "已取消"
         },
-        stateLine = "信念：$belief\n动机：$motive\n意图：$intention",
+        stateLine = "信念：$belief\n长期动机：${traitMotive.ifBlank { motive }}\n情境动机：${situationalMotive.ifBlank { motive }}\n意图：$intention",
         appraisalLine = "意义评估：${appraisal.meaning}\n风险：${appraisal.risk}\n成本/资源：${appraisal.cost} / ${appraisal.resources}",
         hypothesesLine = "猜测：${hypotheses.joinToString(" / ")}",
         cadenceLine = "下次审议：${evaluationCadence.delaysMinutes.joinToString("/")} 分钟 · ${evaluationCadence.reason}",
         countLine = "默默判断 $silentEvaluationCount 次 · 开口 $spokenCount 次 · 克制 $restraint/10",
-        emotionLine = "情绪：${emotion.label} · 担心 ${emotion.concern}/10 · 依恋 ${emotion.attachment}/10",
+        emotionLine = "情绪：${emotion.emotionLabel} · ${emotion.feltSense}\n冲动：${emotion.impulse}\n克制：${emotion.restraintText}",
         consolidationLine = "沉淀：${consolidation.episodicTrace}\n策略：${consolidation.policyLearning}",
         capabilityLine = capabilityRequests
             .takeIf { it.isNotEmpty() }
