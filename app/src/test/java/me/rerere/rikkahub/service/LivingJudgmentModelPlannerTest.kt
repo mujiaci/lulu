@@ -32,6 +32,7 @@ class LivingJudgmentModelPlannerTest {
         assertTrue(prompt.contains("不要照抄固定表"))
         assertTrue(prompt.contains("不等于多久后发消息"))
         assertTrue(prompt.contains("不设置系统层工具安全门"))
+        assertTrue(prompt.contains("是否需要向用户澄清或确认"))
     }
 
     @Test
