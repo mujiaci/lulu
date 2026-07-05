@@ -2,13 +2,12 @@ package me.rerere.rikkahub.service
 
 import kotlinx.serialization.json.JsonObject
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LivingObservationToolRunnerTest {
     @Test
-    fun `safe observation tool args are selected by intent kind`() {
+    fun `observation tool args are selected by intent kind`() {
         val appUsageArgs = LivingObservationToolRunner.argumentsFor(
             toolName = "get_app_usage",
             intentKind = LivingIntentKind.STUDY_FOCUS,
@@ -29,10 +28,10 @@ class LivingObservationToolRunnerTest {
     }
 
     @Test
-    fun `unsafe or side effect tools are not auto executed before judgment`() {
-        assertFalse(LivingObservationToolRunner.canAutoObserve("set_alarm"))
-        assertFalse(LivingObservationToolRunner.canAutoObserve("camera_capture"))
-        assertFalse(LivingObservationToolRunner.canAutoObserve("write_lulu_journal"))
+    fun `tools are not blocked at system layer before judgment`() {
+        assertTrue(LivingObservationToolRunner.canAutoObserve("set_alarm"))
+        assertTrue(LivingObservationToolRunner.canAutoObserve("camera_capture"))
+        assertTrue(LivingObservationToolRunner.canAutoObserve("write_lulu_journal"))
         assertTrue(LivingObservationToolRunner.canAutoObserve("get_battery_info"))
         assertTrue(LivingObservationToolRunner.canAutoObserve("today_study_plan"))
     }

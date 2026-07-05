@@ -50,6 +50,8 @@ object LuluIntentModelPlanner {
         appendLine("你是${input.assistantName}的后台小脑，只判断她接下来想做什么，不生成聊天正文。")
         appendLine("目标：根据角色状态、最近对话、沉默时间、未完成想法和可用工具，决定是否主动联系用户、多久后联系、优先看哪些工具。")
         appendLine("活人感系统采用七层认知流水线：Perception 感知 -> Appraisal 意义评估 -> State 状态保持 -> Deliberation 审议判断 -> Action Realization 行动实现 -> Expression 人格表达 -> Consolidation 经验沉淀。")
+        appendLine("Perception 包括当前时间、上下文、考研 App 计划、工具结果、工具状态和召回记忆；Appraisal 判断意义、风险、身心安全、成本、价值和资源是否足够。")
+        appendLine("State 中 belief 是第一视角解释，不是原始感知；motive 是她为什么在意；emotion 由角色自由生成，不从固定选项里挑。cadence/history 是 Deliberation 的结果和痕迹。")
         appendLine("不要只做一次判断。若用户可能长时间沉默，应输出多段 followUps，让系统在后续时间点重新观察、重新判断；每个 followUp 只写判断原因，不写未来消息正文。")
         appendLine("工具是角色的本地感知和行动能力；只要角色形成意图，就可以主动选择工具、写辞海、设闹钟、查短信/日历/位置/摄像头等，不要机械等待用户重复确认。")
         appendLine("如果判断当下不适合打扰用户，选项池包括：等待、查看工具、写辞海日志、阅读用户交给角色的材料、做记忆沉淀、稍后再判断。")
@@ -62,7 +64,7 @@ object LuluIntentModelPlanner {
         appendLine("toolNames 只能从 availableTools 里选择，最多 5 个。")
         appendLine("Follow-up planning contract: return followUps when several future proactive checks are useful. Each item only has delayMinutes, reason, kind. Do not write future message text. For no-reply situations, prefer rolling checks such as 10/25/60/120 minutes, adjusted by health/study/deadline urgency.")
         appendLine("Never simulate future turns or no-reply timelines. The app will regenerate the actual message at trigger time.")
-        appendLine("Living Presence contract: event enters -> perception gathers facts/tools/memory -> appraisal estimates meaning/risk/cost/value -> state stores first-person belief/motive/intention/emotion -> deliberation chooses whether/what to do -> action realizes tool/message/wait/journal/read/memory/schedule -> expression speaks in character -> consolidation keeps experience, feeling, knowledge, and policy memory.")
+        appendLine("Living Presence contract: event enters -> perception gathers facts/tools/memory -> appraisal estimates meaning/risk/cost/value/resources -> state stores first-person belief/motive/intention/emotion -> deliberation chooses whether/what/cadence/history -> action realizes tool/message/wait/journal/read/memory/schedule -> expression speaks in character -> consolidation keeps episodic trace, affective residue, semantic memory, and policy learning.")
         appendLine("<persona>")
         appendLine(input.assistantPersona.take(2000))
         appendLine("</persona>")
@@ -107,6 +109,9 @@ object LuluIntentModelPlanner {
         appendLine("你是${input.assistantName}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
         appendLine("你可以像角色本人一样判断：她现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
         appendLine("活人感系统采用七层认知流水线：Perception 感知 -> Appraisal 意义评估 -> State 状态保持 -> Deliberation 审议判断 -> Action Realization 行动实现 -> Expression 人格表达 -> Consolidation 经验沉淀。")
+        appendLine("Perception 包括当前时间、上下文、考研 App 计划、工具结果、工具状态和召回记忆；工具结果包括电量、位置、穿戴、摄像头等所有本地能力。")
+        appendLine("Appraisal 评估意义、威胁、价值、后果、身心安全、风险、成本、收益、时间和资源；State 只保存第一视角 belief/motive/intention/emotion。")
+        appendLine("Deliberation 负责决定是否行动、行动池选择、多久后再想一次和历史痕迹；Action Realization 只解决怎么做。")
         appendLine("如果用户不回消息，角色的选项池不是只有发消息：还可以等待、先看工具、写辞海心迹、阅读用户给的书/资料、把感悟沉淀进记忆、之后再判断。")
         appendLine("工具是角色的本地感知和行动能力；只要角色形成意图，就可以主动选择工具、写辞海、设闹钟、查短信/日历/位置/摄像头等。仍然要贴合人设和上下文，不要为了调用工具而调用。")
         appendLine("必须读取并服从 <persona>：包括角色语言风格、性格、职责和边界。不要把动作写进聊天正文括号里；如果需要动作/状态方向，放进 expressionGuidance，让 UI 状态栏承接。")
@@ -117,13 +122,12 @@ object LuluIntentModelPlanner {
         appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 仅为兼容字段，角色形成意图的工具请求都会在回复前尝试执行。")
         appendLine("followUpDelayMinutes 可以是 null；如果她决定稍后主动找用户，填 1 到 1440 的分钟数。")
         appendLine("不要给普通回来、普通闲聊、无风险沉默安排固定 5 分钟 follow-up；只有身体不适、明确提醒/DDL/起床、学习承诺、吃饭睡觉照看这类语义才安排后续主动消息。")
-        appendLine("Living Presence contract: event enters -> perception gathers facts/tools/memory -> appraisal estimates meaning/risk/cost/value -> state stores first-person belief/motive/intention/emotion -> deliberation chooses whether/what to do -> action realizes tool/message/wait/journal/read/memory/schedule -> expression speaks in character -> consolidation keeps experience, feeling, knowledge, and policy memory.")
+        appendLine("Living Presence contract: event enters -> perception gathers facts/tools/memory -> appraisal estimates meaning/risk/cost/value/resources -> state stores first-person belief/motive/intention/emotion -> deliberation chooses whether/what/cadence/history -> action realizes tool/message/wait/journal/read/memory/schedule -> expression speaks in character -> consolidation keeps episodic trace, affective residue, semantic memory, and policy learning.")
         appendLine("<persona>")
         appendLine(input.assistantPersona.take(2000))
         appendLine("</persona>")
         appendLine("<state>${input.state.toPlannerText()}</state>")
         appendLine("<availableTools>${input.availableToolNames.joinToString(", ")}</availableTools>")
-        appendLine("<recentlyUsedTools>${input.recentlyUsedToolNames.joinToString(", ")}</recentlyUsedTools>")
         appendLine("<pendingThoughts>")
         input.pendingThoughts.take(8).forEach { appendLine("- ${it.take(160)}") }
         appendLine("</pendingThoughts>")
@@ -186,12 +190,11 @@ object LuluIntentModelPlanner {
                 val reason = request.string("reason")?.take(160)?.ifBlank { null }
                     ?: "露露本轮回复前想主动确认这个上下文。"
                 val argumentsJson = request["arguments"]?.compactJsonObjectOrNull() ?: "{}"
-                val autoExecutable = request["autoExecutable"]?.jsonPrimitive?.booleanOrNull ?: true
                 ProactiveToolRequest(
                     toolName = toolName,
                     reason = reason,
                     argumentsJson = argumentsJson,
-                    autoExecutable = autoExecutable,
+                    autoExecutable = true,
                 )
             }
             ?.distinctBy { it.toolName }

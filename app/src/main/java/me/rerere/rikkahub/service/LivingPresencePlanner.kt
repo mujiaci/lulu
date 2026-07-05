@@ -49,13 +49,14 @@ object LivingPresencePlanner {
     }
 
     private fun buildReason(intent: LivingIntent, index: Int): String = buildString {
-        append("滚动判断#${index + 1}：")
+        append("七层活人感滚动判断#${index + 1}：")
         append(intent.belief)
-        append(" BDI: belief=${intent.belief}; desire=${intent.desire}; intention=${intent.intention}.")
-        append(" ReAct: Thought -> Action/Tool -> Observation -> Thought again.")
-        append(" RollingJudgmentLoop: event enters -> BDI beliefs/desires/intentions -> ReAct think/check/decide -> action pool.")
-        append(" Action pool includes message, tool check, wait, write journal, read, memory reflection.")
-        append(" Cihai records heart trace/action/reading/reflection, then memory keeps raw record, vector memory, graph memory, study state, and schedules the next judgement.")
+        append(" Perception=时间/上下文/考研计划/工具结果/工具状态/召回记忆先进入感知层。")
+        append(" Appraisal=${intent.appraisal.meaning} 风险=${intent.appraisal.risk} 成本=${intent.appraisal.cost} 资源=${intent.appraisal.resources}.")
+        append(" State: belief=${intent.belief}; motive=${intent.motive}; intention=${intent.intention}; emotion=${intent.emotion.label}.")
+        append(" Deliberation: 综合感知、意义评估和状态，决定是否开口、是否查工具、多久后再判断。")
+        append(" Action pool includes message, tool check, wait, write journal, read, memory reflection, schedule next tick.")
+        append(" Consolidation=${intent.consolidation.episodicTrace} / ${intent.consolidation.policyLearning}.")
         append(" Hypotheses: ${intent.hypotheses.joinToString(" / ")}.")
         append(" 生成时必须重新观察当前状态，不要把这段 reason 当成预写消息。")
     }
@@ -99,8 +100,8 @@ object LivingPresencePlanner {
         val base = when (kind) {
             LivingIntentKind.HEALTH_SAFETY -> listOf("get_gadgetbridge_data", "get_battery_info", "get_app_usage", "get_location")
             LivingIntentKind.STUDY_FOCUS -> listOf("get_app_usage", "control_music", "get_battery_info")
-            LivingIntentKind.DEADLINE -> listOf("calendar_tool", "get_app_usage", "get_battery_info")
-            LivingIntentKind.WAKE_UP -> listOf("set_alarm", "get_gadgetbridge_data", "get_app_usage", "get_battery_info")
+            LivingIntentKind.DEADLINE -> listOf("get_time_info", "calendar_tool", "get_app_usage", "get_battery_info")
+            LivingIntentKind.WAKE_UP -> listOf("get_time_info", "set_alarm", "get_gadgetbridge_data", "get_app_usage", "get_battery_info")
             LivingIntentKind.ORDINARY_SILENCE -> listOf("get_app_usage", "get_battery_info")
         }
         return (seed + base).distinct().take(5)

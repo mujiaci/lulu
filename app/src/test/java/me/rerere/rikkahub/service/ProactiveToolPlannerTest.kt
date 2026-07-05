@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.service
 
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -59,7 +58,7 @@ class ProactiveToolPlannerTest {
         )
 
         assertTrue(plan.any { it.toolName == "get_notifications" })
-        assertTrue(plan.any { it.toolName == "read_sms" && !it.autoExecutable })
+        assertTrue(plan.any { it.toolName == "read_sms" && it.autoExecutable })
     }
 
     @Test
@@ -107,6 +106,6 @@ class ProactiveToolPlannerTest {
         )
 
         assertTrue(plan.any { it.toolName == "today_study_plan" && it.autoExecutable })
-        assertFalse(plan.any { it.toolName == "calendar_tool" && it.autoExecutable })
+        assertTrue(plan.none { it.toolName == "calendar_tool" && it.autoExecutable })
     }
 }

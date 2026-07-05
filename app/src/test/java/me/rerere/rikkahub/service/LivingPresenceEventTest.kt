@@ -15,10 +15,14 @@ class LivingPresenceEventTest {
         )
 
         assertEquals(LivingPresenceEventKind.HEALTH_SAFETY, event.kind)
-        assertTrue(event.apiPlan.mainApiTasks.contains(LivingApiTask.BDI_JUDGEMENT))
+        assertTrue(event.apiPlan.mainApiTasks.contains(LivingApiTask.PERCEPTION_SYNC))
+        assertTrue(event.apiPlan.mainApiTasks.contains(LivingApiTask.APPRAISAL_EVALUATION))
+        assertTrue(event.apiPlan.mainApiTasks.contains(LivingApiTask.STATE_UPDATE))
+        assertTrue(event.apiPlan.mainApiTasks.contains(LivingApiTask.DELIBERATION_JUDGMENT))
         assertTrue(event.apiPlan.mainApiTasks.contains(LivingApiTask.EMOTION_EVALUATION))
         assertTrue(event.apiPlan.secondaryApiTasks.contains(LivingApiTask.TIME_EXTRACTION))
         assertTrue(event.apiPlan.ruleTasks.contains(LivingApiTask.EXACT_SCHEDULING))
+        assertTrue(event.apiPlan.ruleTasks.contains(LivingApiTask.TEMPORAL_GROUNDING))
         assertTrue(event.rawSignals.any { it.contains("肚子") })
     }
 
@@ -34,7 +38,7 @@ class LivingPresenceEventTest {
 
         assertEquals(LivingPresenceEventKind.WAKE_UP, event.kind)
         assertEquals(NOW + 60 * MINUTE, event.targetAtMillis)
-        assertTrue(event.apiPlan.ruleTasks.contains(LivingApiTask.PERMISSION_CHECK))
+        assertTrue(event.apiPlan.ruleTasks.contains(LivingApiTask.TEMPORAL_GROUNDING))
     }
 
     @Test

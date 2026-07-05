@@ -7,43 +7,47 @@ import java.time.Instant
 import java.time.ZoneId
 
 object LivingObservationToolRunner {
-    private val autoObservationTools = setOf(
-        "get_battery_info",
-        "get_app_usage",
-        "today_study_plan",
-        "today_schedule",
-        "get_gadgetbridge_data",
-        "calendar_tool",
-        "get_weather",
-        "get_location",
-        "set_alarm",
-    )
-
     fun canAutoObserve(toolName: String): Boolean {
-        val normalized = normalizeToolName(toolName)
-        return normalized in autoObservationTools && normalized != "set_alarm"
+        return normalizeToolName(toolName).isNotBlank()
     }
 
+    @Suppress("UNUSED_PARAMETER")
     fun canAutoObserve(toolName: String, intent: LivingIntent): Boolean {
-        val normalized = normalizeToolName(toolName)
-        if (normalized == "set_alarm") {
-            return intent.kind == LivingIntentKind.WAKE_UP && intent.targetAtMillis != null
-        }
-        return normalized in autoObservationTools
+        return canAutoObserve(toolName)
     }
 
     fun resolveToolName(toolName: String): String = normalizeToolName(toolName)
 
     fun argumentsFor(toolName: String, intent: LivingIntent): JsonObject {
+        return argumentsFor(
+            toolName = toolName,
+            intentKind = intent.kind,
+            targetAtMillis = intent.targetAtMillis,
+        )
+    }
+
+    fun argumentsFor(toolName: String, intentKind: LivingIntentKind): JsonObject {
+        return argumentsFor(
+            toolName = toolName,
+            intentKind = intentKind,
+            targetAtMillis = null,
+        )
+    }
+
+    private fun argumentsFor(
+        toolName: String,
+        intentKind: LivingIntentKind,
+        targetAtMillis: Long?,
+    ): JsonObject {
         val normalized = normalizeToolName(toolName)
         return when (normalized) {
             "get_app_usage" -> buildJsonObject {
-                put("limit", if (intent.kind == LivingIntentKind.STUDY_FOCUS) 5 else 3)
+                put("limit", if (intentKind == LivingIntentKind.STUDY_FOCUS) 5 else 3)
             }
             "get_gadgetbridge_data" -> buildJsonObject {
                 put(
                     "data_type",
-                    when (intent.kind) {
+                    when (intentKind) {
                         LivingIntentKind.HEALTH_SAFETY -> "all"
                         LivingIntentKind.WAKE_UP -> "sleep"
                         else -> "daily_summary"
@@ -56,10 +60,11 @@ object LivingObservationToolRunner {
             }
             "get_location" -> buildJsonObject {
                 put("include_address", true)
-                put("force_refresh", intent.kind == LivingIntentKind.HEALTH_SAFETY)
+                put("force_refresh", intentKind == LivingIntentKind.HEALTH_SAFETY)
             }
+            "get_time_info" -> JsonObject(emptyMap())
             "set_alarm" -> buildJsonObject {
-                val target = intent.targetAtMillis
+                val target = targetAtMillis
                     ?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalTime() }
                 if (target != null) {
                     put("hour", target.hour)

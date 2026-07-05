@@ -24,6 +24,8 @@ class LivingJudgmentModelPlannerTest {
         )
 
         assertTrue(prompt.contains("nextEvaluateDelayMinutes"))
+        assertTrue(prompt.contains("belief/motive/intention/emotion"))
+        assertTrue(prompt.contains("Consolidation"))
         assertTrue(prompt.contains("不要照抄固定表"))
         assertTrue(prompt.contains("不等于多久后发消息"))
     }
@@ -54,13 +56,28 @@ class LivingJudgmentModelPlannerTest {
                 ```json
                 {
                   "belief": "用户身体不舒服，而且暂时没有回复。",
-                  "desire": "确认安全，同时不要制造恐慌。",
+                  "motive": "确认安全，同时不要制造恐慌。",
                   "intention": "先观察工具线索，再决定是否轻轻确认。",
                   "thought": "我没有足够健康线索，所以不能假装知道。",
                   "action": "TOOL_CHECK, MESSAGE, SCHEDULE_NEXT_TICK",
                   "observation": "get_gadgetbridge_data is missing.",
                   "decision": "可以准备轻声确认，但允许后续生成时 PASS。",
-                  "nextEvaluateDelayMinutes": 17
+                  "nextEvaluateDelayMinutes": 17,
+                  "appraisal": {
+                    "meaning": "身体安全优先。",
+                    "value": "确认用户安全。",
+                    "risk": "漏判身体风险。",
+                    "cost": "一次轻量工具观察。",
+                    "consequence": "线索不足时短周期复查。",
+                    "resources": "健康和电量工具。"
+                  },
+                  "consolidation": {
+                    "episodicTrace": "记录身体不适线索。",
+                    "affectiveResidue": "留下担心但克制的余温。",
+                    "semanticMemory": "身体不适时更需要主动照看。",
+                    "policyLearning": "短周期复查。"
+                  },
+                  "historyNote": "第一次静默判断。"
                 }
                 ```
             """.trimIndent(),
@@ -71,6 +88,9 @@ class LivingJudgmentModelPlannerTest {
         assertEquals("TOOL_CHECK, MESSAGE, SCHEDULE_NEXT_TICK", trace?.action)
         assertEquals(17, trace?.nextEvaluateDelayMinutes)
         assertTrue(trace?.thought?.contains("不能假装知道") == true)
+        assertTrue(trace?.motive?.contains("确认安全") == true)
+        assertTrue(trace?.appraisal?.risk?.contains("身体风险") == true)
+        assertTrue(trace?.consolidation?.policyLearning?.contains("短周期") == true)
     }
 
     private companion object {

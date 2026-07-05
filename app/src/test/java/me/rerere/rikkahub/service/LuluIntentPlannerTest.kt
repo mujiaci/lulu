@@ -168,7 +168,7 @@ class LuluIntentPlannerTest {
         assertTrue(plan.toolRequests[0].autoExecutable)
         assertEquals("""{"include_address":true}""", plan.toolRequests[0].argumentsJson)
         assertEquals("set_alarm", plan.toolRequests[1].toolName)
-        assertFalse(plan.toolRequests[1].autoExecutable)
+        assertTrue(plan.toolRequests[1].autoExecutable)
         assertEquals(25, plan.followUpDelayMinutes)
         assertTrue(plan.followUpReason!!.contains("确认"))
         assertTrue(plan.expressionGuidance!!.contains("短一点"))

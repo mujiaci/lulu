@@ -231,6 +231,7 @@ private fun CihaiEntry.displayBody(): String {
     val thought = raw.extractTraceSection("Thought:", "Action:")
     val decision = raw.extractTraceSection("Decision:", "Capability requests:")
     val intention = raw.extractTraceSection("Intention=", "Observation=")
+        .ifBlank { raw.extractTraceSection("Intention=", "Decision=") }
     return when (kind) {
         CihaiEntryKind.INNER_JOURNAL -> thought.ifBlank { raw }.cleanTraceForUser()
         CihaiEntryKind.ACTION_LOG -> buildList {
@@ -255,10 +256,15 @@ private fun String.cleanTraceForUser(): String =
         .map { it.trim() }
         .filter { line ->
             line.isNotBlank() &&
-                !line.startsWith("Structured BDI/ReAct trace", ignoreCase = true) &&
+                !line.startsWith("Structured seven-layer trace", ignoreCase = true) &&
+                !line.startsWith("Seven-layer Living Presence trace", ignoreCase = true) &&
                 !line.startsWith("Source:", ignoreCase = true) &&
                 !line.startsWith("Action:", ignoreCase = true) &&
                 !line.startsWith("Observation:", ignoreCase = true) &&
+                !line.startsWith("Perception=", ignoreCase = true) &&
+                !line.startsWith("Appraisal=", ignoreCase = true) &&
+                !line.startsWith("Belief=", ignoreCase = true) &&
+                !line.startsWith("Motive=", ignoreCase = true) &&
                 !line.startsWith("Capability requests:", ignoreCase = true) &&
                 !line.startsWith("Allowed actions:", ignoreCase = true)
         }

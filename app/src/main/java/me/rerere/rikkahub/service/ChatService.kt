@@ -376,7 +376,6 @@ class ChatService(
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
-    private val proactiveToolCooldowns = ConcurrentHashMap<String, Instant>()
     private val chatTurnFollowUpCooldowns = ConcurrentHashMap<String, Instant>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
@@ -716,7 +715,6 @@ class ChatService(
             .deduplicateByToolName()
             .selectRelevantToolsForPrompt(hiddenMessages)
             .withHumanLikeToolPrompts()
-            .withProactiveCooldown()
         val latestUserText = hiddenMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
         val proactiveContext = collectProactiveToolContext(
             messages = hiddenMessages,
@@ -893,7 +891,7 @@ class ChatService(
         session.setJob(job)
     }
 
-    // ---- 处理工具调用审批 ----
+    // ---- 处理工具问答和旧会话兼容状态 ----
 
     fun handleToolApproval(
         conversationId: Uuid,
@@ -914,7 +912,7 @@ class ChatService(
                     else -> ToolApprovalState.Denied(reason)
                 }
 
-                // Update the tool approval state
+                // Update the tool interaction state
                 val updatedNodes = conversation.messageNodes.map { node ->
                     node.copy(
                         messages = node.messages.map { msg ->
@@ -997,7 +995,6 @@ class ChatService(
                 .deduplicateByToolName()
                 .selectRelevantToolsForPrompt(conversation.currentMessages)
                 .withHumanLikeToolPrompts()
-                .withProactiveCooldown()
             val latestUserText = conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }
                 ?.toText()
                 .orEmpty()
@@ -1396,7 +1393,7 @@ class ChatService(
                     return@mapIndexed node
                 }
 
-                // Remove messages that still have unresolved tool approvals.
+                // Remove messages that still have unresolved tool interactions.
                 return@mapIndexed node.copy(
                     messages = node.messages.filter { it.id != node.currentMessage.id },
                     selectIndex = node.selectIndex - 1
@@ -1481,10 +1478,6 @@ class ChatService(
     ): String {
         val latestUserText = messages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
         if (latestUserText.isBlank()) return ""
-        val recentTools = proactiveToolCooldowns
-            .filterValues { java.time.Duration.between(it, Instant.now()).toMillis() < 5.minutes.inWholeMilliseconds }
-            .keys
-            .toSet()
         val planResult = buildChatTurnPlan(
             messages = messages,
             settings = settings,
@@ -1675,56 +1668,6 @@ class ChatService(
             if (appearance.isNotBlank()) appendLine("我的外貌：${appearance.take(600)}")
             append("聊天、称呼、关系感、身体/性别/外貌描写、以及涉及用户出现在画面里的内容，都要优先遵守这些资料。")
         }.trim()
-    }
-
-    private fun List<Tool>.withProactiveCooldown(): List<Tool> {
-        val cooldown = 5.minutes
-        return map { tool ->
-            if (!tool.name.needsProactiveCooldown()) return@map tool
-            tool.copy(
-                systemPrompt = { model, messages ->
-                    val base = tool.systemPrompt(model, messages)
-                    val lastUsed = proactiveToolCooldowns[tool.name]
-                    val cooldownPrompt = if (lastUsed == null) {
-                        "This tool is available for proactive use when it would naturally help the character."
-                    } else {
-                        val elapsed = java.time.Duration.between(lastUsed, Instant.now()).toMillis()
-                        if (elapsed < cooldown.inWholeMilliseconds) {
-                            "Avoid proactively calling this tool again right now unless the user explicitly asks; it was used less than 5 minutes ago."
-                        } else {
-                            "This tool is available for proactive use when it would naturally help the character."
-                        }
-                    }
-                    listOf(base, cooldownPrompt).filter { it.isNotBlank() }.joinToString("\n")
-                },
-                execute = { args ->
-                    val result = tool.execute(args)
-                    proactiveToolCooldowns[tool.name] = Instant.now()
-                    result
-                }
-            )
-        }
-    }
-
-    private fun String.needsProactiveCooldown(): Boolean {
-        return this in setOf(
-            "get_location",
-            "get_notifications",
-            "get_battery_info",
-            "gadgetbridge_health",
-            "set_alarm",
-            "read_sms",
-        ) || contains("usage", ignoreCase = true)
-            || contains("camera", ignoreCase = true)
-            || contains("nearby", ignoreCase = true)
-            || contains("location", ignoreCase = true)
-            || contains("battery", ignoreCase = true)
-            || contains("health", ignoreCase = true)
-            || contains("sleep", ignoreCase = true)
-            || contains("heart", ignoreCase = true)
-            || contains("sms", ignoreCase = true)
-            || contains("notification", ignoreCase = true)
-            || contains("alarm", ignoreCase = true)
     }
 
     // ---- 生成标题 ----

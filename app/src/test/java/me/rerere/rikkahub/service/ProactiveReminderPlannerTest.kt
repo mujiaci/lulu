@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.service
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -69,7 +68,7 @@ class ProactiveReminderPlannerTest {
     }
 
     @Test
-    fun `general reminder carries journal hint without unsafe tools`() {
+    fun `general reminder carries journal hint without system blocking tools`() {
         val plan = ProactiveReminderPlanner.plan(
             userText = "十五分钟后提醒我把今天这件事记到日志里",
             assistantText = "嗯，我等会儿提醒你。",
@@ -80,8 +79,6 @@ class ProactiveReminderPlannerTest {
         assertNotNull(plan)
         assertEquals(ProactiveReminderKind.GENERAL, plan!!.kind)
         assertTrue(plan.actionHints.any { it.toolName == "write_lulu_journal" && it.autoExecutable })
-        assertFalse(plan.actionHints.any { it.toolName == "camera_capture" && it.autoExecutable })
-        assertFalse(plan.actionHints.any { it.toolName == "read_sms" && it.autoExecutable })
     }
 
     @Test

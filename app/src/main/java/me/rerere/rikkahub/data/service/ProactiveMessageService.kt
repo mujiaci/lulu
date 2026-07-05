@@ -1301,7 +1301,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
         }.distinct()
         val summary = buildString {
-            append("Runtime observation before RollingJudgmentLoop: ")
+            append("Perception layer before seven-layer deliberation: ")
             append("requested_tools=${request.requestedTools.joinToString(", ").ifBlank { "none" }}; ")
             append("available_requested_tools=${availableRequestedTools.joinToString(", ").ifBlank { "none" }}; ")
             append("missing_requested_tools=${missingRequestedTools.joinToString(", ").ifBlank { "none" }}; ")
@@ -1317,7 +1317,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 append(todaySchedule.joinToString(" / ") { "${it.time} ${it.title}".take(64) })
             }
             batterySignal()?.let { append("; $it") }
-            append(". This observation must be used before deciding MESSAGE, TOOL_CHECK, WAIT, JOURNAL_WRITE, READ, MEMORY_UPDATE, or ASK_CAPABILITY.")
+            append(". Use this perception before appraisal, state update, deliberation, action planning, expression, and consolidation.")
         }
         return LivingObservation(
             summary = summary,
@@ -1365,14 +1365,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private fun RollingJudgmentDecision.toTargetedReason(assistantName: String): String = buildString {
         appendLine("${assistantName.ifBlank { "当前角色" }}正在重新判断一件挂念的事。")
         appendLine("当前信念：${updatedIntent.belief}")
-        appendLine("当前愿望：${updatedIntent.desire}")
+        appendLine("当前动机：${updatedIntent.motive}")
         appendLine("当前打算：${updatedIntent.intention}")
+        appendLine("意义评估：${updatedIntent.appraisal.meaning} 风险：${updatedIntent.appraisal.risk} 成本/资源：${updatedIntent.appraisal.cost} / ${updatedIntent.appraisal.resources}")
         judgmentTrace?.thought?.takeIf { it.isNotBlank() }?.let {
             appendLine("没说出口的想法：$it")
         } ?: appendLine("没说出口的想法：$thought")
         judgmentTrace?.decision?.takeIf { it.isNotBlank() }?.let {
             appendLine("这轮决定：$it")
         }
+        judgmentTrace?.historyNote?.takeIf { it.isNotBlank() }?.let {
+            appendLine("判断痕迹：$it")
+        }
+        appendLine("沉淀方向：${updatedIntent.consolidation.episodicTrace}；${updatedIntent.consolidation.policyLearning}")
         appendLine("情绪底色：${updatedIntent.emotion.label}，克制程度 ${updatedIntent.restraint}/10。")
         appendLine("下一次触发时必须重新看上下文、重新判断。可以自然开口，也可以 [PASS]，不要复述这段内部记录。")
     }.trim()

@@ -32,7 +32,13 @@ data class LivingIntent(
     val lastJudgmentTrace: LivingJudgmentTrace? = null,
     val completedReason: String? = null,
     val capabilityRequests: List<LivingCapabilityRequest> = emptyList(),
-)
+    val motiveText: String = "",
+    val appraisal: MeaningAppraisal = MeaningAppraisal(),
+    val consolidation: ConsolidationPlan = ConsolidationPlan(),
+) {
+    val motive: String
+        get() = motiveText.ifBlank { desire }
+}
 
 @Serializable
 enum class LivingIntentKind {
@@ -70,6 +76,24 @@ data class LivingObservation(
 )
 
 @Serializable
+data class MeaningAppraisal(
+    val meaning: String = "",
+    val value: String = "",
+    val risk: String = "",
+    val cost: String = "",
+    val consequence: String = "",
+    val resources: String = "",
+)
+
+@Serializable
+data class ConsolidationPlan(
+    val episodicTrace: String = "",
+    val affectiveResidue: String = "",
+    val semanticMemory: String = "",
+    val policyLearning: String = "",
+)
+
+@Serializable
 data class LivingJudgmentTrace(
     val source: LivingJudgmentSource = LivingJudgmentSource.STRUCTURED_RULE_FALLBACK,
     val belief: String,
@@ -81,7 +105,14 @@ data class LivingJudgmentTrace(
     val decision: String,
     val nextEvaluateDelayMinutes: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
-)
+    val motiveText: String = "",
+    val appraisal: MeaningAppraisal = MeaningAppraisal(),
+    val consolidation: ConsolidationPlan = ConsolidationPlan(),
+    val historyNote: String = "",
+) {
+    val motive: String
+        get() = motiveText.ifBlank { desire }
+}
 
 @Serializable
 enum class LivingJudgmentSource {
@@ -148,7 +179,7 @@ object RollingJudgmentLoop {
             createdAt = nowMillis,
             kind = kind,
             belief = beliefFor(kind, userText, assistantText),
-            desire = desireFor(kind, assistantName),
+            desire = motiveFor(kind, assistantName),
             intention = intentionFor(kind),
             hypotheses = hypotheses,
             expectedUserReplyAt = if (kind == LivingIntentKind.ORDINARY_SILENCE) {
@@ -164,6 +195,8 @@ object RollingJudgmentLoop {
             allowedActions = actionsFor(kind),
             targetAtMillis = targetAtMillis,
             deadlineAtMillis = deadlineAtMillis,
+            appraisal = appraisalFor(kind),
+            consolidation = consolidationFor(kind),
         )
     }
 
@@ -206,6 +239,8 @@ object RollingJudgmentLoop {
         ) ?: buildJudgmentTrace(intent, observation, actions, thought, nowMillis)
         val nextEvaluateAt = nowMillis + nextDelayMinutes(intent, nextSilentCount, trace) * MINUTE_MILLIS
         val evolvedEmotion = evolveEmotion(intent, actions, restrained, nowMillis)
+        val updatedAppraisal = trace.appraisal.takeIf { it != MeaningAppraisal() } ?: intent.appraisal
+        val updatedConsolidation = trace.consolidation.takeIf { it != ConsolidationPlan() } ?: intent.consolidation
         val updated = intent.copy(
             lastEvaluatedAt = nowMillis,
             silentEvaluationCount = nextSilentCount,
@@ -216,6 +251,9 @@ object RollingJudgmentLoop {
             lastObservation = observation,
             lastJudgmentTrace = trace,
             capabilityRequests = updateCapabilityRequests(intent, observation, nowMillis),
+            motiveText = trace.motive.ifBlank { intent.motive },
+            appraisal = updatedAppraisal,
+            consolidation = updatedConsolidation,
         )
         return RollingJudgmentDecision(
             updatedIntent = updated,
@@ -277,10 +315,11 @@ object RollingJudgmentLoop {
         restrained: Boolean,
     ): String = buildString {
         append("Thought: 我先按活人感七层流水线重新看这件挂心事。")
+        append(" Perception=${observation.summary}")
+        append(" Appraisal=${intent.appraisal.meaning}；风险=${intent.appraisal.risk}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}")
         append(" Belief=${intent.belief}")
-        append(" Motive=${intent.desire}")
+        append(" Motive=${intent.motive}")
         append(" Intention=${intent.intention}")
-        append(" Observation=${observation.summary}")
         append(" Decision=")
         append(
             if (restrained) {
@@ -312,6 +351,10 @@ object RollingJudgmentLoop {
                 else -> "本轮主要等待和重新排下一次判断。"
             },
             createdAt = nowMillis,
+            motiveText = intent.motive,
+            appraisal = intent.appraisal,
+            consolidation = intent.consolidation,
+            historyNote = "第 ${intent.silentEvaluationCount + 1} 次静默判断；此前开口 ${intent.spokenCount} 次。cadence 由本轮审议决定，不作为原始感知。",
         )
 
     private fun evolveEmotion(
@@ -518,12 +561,88 @@ object RollingJudgmentLoop {
         LivingIntentKind.WAKE_UP -> "用户有明确起床目标，需要按时间点照看。"
     } + " 最近上下文：${(userText + " " + assistantText).take(120)}"
 
-    private fun desireFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
+    private fun motiveFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
         LivingIntentKind.HEALTH_SAFETY -> "$assistantName 想确认用户安全，同时不要制造恐慌。"
         LivingIntentKind.ORDINARY_SILENCE -> "$assistantName 想靠近用户，但也想尊重用户正在忙的可能。"
         LivingIntentKind.STUDY_FOCUS -> "$assistantName 想守住学习节奏，少打断，多监督。"
         LivingIntentKind.DEADLINE -> "$assistantName 想让用户按时完成任务。"
         LivingIntentKind.WAKE_UP -> "$assistantName 想帮用户准时醒来。"
+    }
+
+    private fun appraisalFor(kind: LivingIntentKind): MeaningAppraisal = when (kind) {
+        LivingIntentKind.HEALTH_SAFETY -> MeaningAppraisal(
+            meaning = "身体状态信号可能对应真实风险，优先级高于闲聊自然度。",
+            value = "及时确认能提高安全感，也让陪伴像真的在场。",
+            risk = "误判会让用户被打扰；漏判可能错过身体安全线索。",
+            cost = "需要消耗一次工具观察或一次谨慎开口。",
+            consequence = "如果线索持续异常，应更快复查并允许主动联系。",
+            resources = "可读取穿戴、位置、电量、应用状态等本地工具结果。",
+        )
+        LivingIntentKind.ORDINARY_SILENCE -> MeaningAppraisal(
+            meaning = "沉默只是上下文事实，不直接等同于危险或疏远。",
+            value = "保留惦记能维持关系连续性。",
+            risk = "过早开口会显得机械；完全遗忘会失去活人感。",
+            cost = "主要成本是注意力占用和后续判断节奏。",
+            consequence = "应先等待或轻量沉淀，必要时再靠近。",
+            resources = "可参考最近对话、状态栏、记忆和可用工具结果。",
+        )
+        LivingIntentKind.STUDY_FOCUS -> MeaningAppraisal(
+            meaning = "用户可能在备考或深度学习，专注本身有价值。",
+            value = "守住节奏比频繁表达关心更重要。",
+            risk = "打断学习会降低计划执行；不观察也可能错过跑偏。",
+            cost = "需要低打扰观察工具和较长判断间隔。",
+            consequence = "更适合先看计划/应用状态，再决定提醒或沉默。",
+            resources = "考研 App 计划、今日学习状态、应用使用情况。",
+        )
+        LivingIntentKind.DEADLINE -> MeaningAppraisal(
+            meaning = "截止时间让行动窗口变窄，提醒价值上升。",
+            value = "及时提醒能帮助用户完成任务。",
+            risk = "提醒太密会制造压力；太晚会失去作用。",
+            cost = "需要更精确的时间感知和进度判断。",
+            consequence = "越接近截止越允许更明确的行动。",
+            resources = "日程、考研计划、当前时间、工具结果。",
+        )
+        LivingIntentKind.WAKE_UP -> MeaningAppraisal(
+            meaning = "起床目标是明确的时间承诺，需要时间校准。",
+            value = "按时唤醒是数字管家的核心照看能力。",
+            risk = "时间感知错误会造成错叫或漏叫。",
+            cost = "需要获取当前时间并可能设置闹钟。",
+            consequence = "行动前必须做时间锚定，之后按节点复查。",
+            resources = "当前时间、闹钟工具、穿戴/应用/电量状态。",
+        )
+    }
+
+    private fun consolidationFor(kind: LivingIntentKind): ConsolidationPlan = when (kind) {
+        LivingIntentKind.HEALTH_SAFETY -> ConsolidationPlan(
+            episodicTrace = "记录用户身体状态线索、工具观察和露露当时的安全判断。",
+            affectiveResidue = "留下担心但克制的余温，避免下一轮像第一次才知道。",
+            semanticMemory = "沉淀用户身体不适时更需要主动照看的偏好。",
+            policyLearning = "身体安全类事件允许更短 cadence 和更主动工具观察。",
+        )
+        LivingIntentKind.ORDINARY_SILENCE -> ConsolidationPlan(
+            episodicTrace = "记录沉默发生在什么对话之后，以及露露为什么选择等。",
+            affectiveResidue = "保留惦记和一点点没说出口的靠近感。",
+            semanticMemory = "沉默未必是不理人，需结合上下文复看。",
+            policyLearning = "普通沉默优先等待、轻复盘、低频重新判断。",
+        )
+        LivingIntentKind.STUDY_FOCUS -> ConsolidationPlan(
+            episodicTrace = "记录学习目标、计划状态和本轮是否打断。",
+            affectiveResidue = "留下陪着守住节奏的状态，而不是催促感。",
+            semanticMemory = "用户备考时需要具体、低打扰、能续上的监督。",
+            policyLearning = "学习场景先看计划/应用状态，再决定表达或沉默。",
+        )
+        LivingIntentKind.DEADLINE -> ConsolidationPlan(
+            episodicTrace = "记录 DDL、当前进度判断和提醒节点。",
+            affectiveResidue = "留下认真盯进度的责任感。",
+            semanticMemory = "截止时间越近，提醒应越具体。",
+            policyLearning = "DDL 场景 cadence 由剩余时间和任务风险共同决定。",
+        )
+        LivingIntentKind.WAKE_UP -> ConsolidationPlan(
+            episodicTrace = "记录目标时间、当前时间锚定、闹钟动作和复查结果。",
+            affectiveResidue = "留下照看、轻轻催醒的连续感。",
+            semanticMemory = "叫醒动作必须先校准当前时间。",
+            policyLearning = "起床场景允许设置闹钟并按到点前后滚动判断。",
+        )
     }
 
     private fun intentionFor(kind: LivingIntentKind): String = when (kind) {

@@ -39,21 +39,26 @@ data class LivingApiPlan(
 
 @Serializable
 enum class LivingApiTask {
-    BDI_JUDGEMENT,
+    PERCEPTION_SYNC,
+    APPRAISAL_EVALUATION,
+    STATE_UPDATE,
+    DELIBERATION_JUDGMENT,
+    ACTION_REALIZATION,
+    EXPRESSION_PREPARATION,
+    CONSOLIDATION_PLANNING,
     EMOTION_EVALUATION,
     HYPOTHESIS_REASONING,
     SPEECH_DECISION,
     INNER_MONOLOGUE,
     PERSONA_CONFLICT_CHECK,
-    TOOL_ARBITRATION,
+    TOOL_AFFORDANCE_MAPPING,
     TIME_EXTRACTION,
     EVENT_TAGGING,
     TOOL_RESULT_COMPRESSION,
     TODAY_PLAN_SUMMARY,
     LOW_RISK_SUMMARY,
     EXACT_SCHEDULING,
-    COOLDOWN_LIMIT,
-    PERMISSION_CHECK,
+    TEMPORAL_GROUNDING,
     LOCAL_STATE_READ,
 }
 
@@ -95,14 +100,20 @@ object LivingPresenceEventExtractor {
 
     private fun buildApiPlan(kind: LivingPresenceEventKind, hasTimeSignal: Boolean): LivingApiPlan {
         val main = buildList {
-            add(LivingApiTask.BDI_JUDGEMENT)
+            add(LivingApiTask.PERCEPTION_SYNC)
+            add(LivingApiTask.APPRAISAL_EVALUATION)
+            add(LivingApiTask.STATE_UPDATE)
+            add(LivingApiTask.DELIBERATION_JUDGMENT)
+            add(LivingApiTask.ACTION_REALIZATION)
+            add(LivingApiTask.EXPRESSION_PREPARATION)
+            add(LivingApiTask.CONSOLIDATION_PLANNING)
             add(LivingApiTask.EMOTION_EVALUATION)
             add(LivingApiTask.HYPOTHESIS_REASONING)
             add(LivingApiTask.SPEECH_DECISION)
             add(LivingApiTask.INNER_MONOLOGUE)
             add(LivingApiTask.PERSONA_CONFLICT_CHECK)
             if (kind == LivingPresenceEventKind.HEALTH_SAFETY || kind == LivingPresenceEventKind.DEADLINE) {
-                add(LivingApiTask.TOOL_ARBITRATION)
+                add(LivingApiTask.TOOL_AFFORDANCE_MAPPING)
             }
         }
         val secondary = buildList {
@@ -116,8 +127,7 @@ object LivingPresenceEventExtractor {
         }
         val rules = listOf(
             LivingApiTask.EXACT_SCHEDULING,
-            LivingApiTask.COOLDOWN_LIMIT,
-            LivingApiTask.PERMISSION_CHECK,
+            LivingApiTask.TEMPORAL_GROUNDING,
             LivingApiTask.LOCAL_STATE_READ,
         )
         return LivingApiPlan(mainApiTasks = main, secondaryApiTasks = secondary, ruleTasks = rules)

@@ -103,7 +103,7 @@ class RollingJudgmentLoopTest {
         assertTrue(decision.updatedIntent.restraint > intent.restraint)
         assertEquals(1, decision.updatedIntent.silentEvaluationCount)
         assertTrue(decision.observation?.requestedTools?.contains("get_app_usage") == true)
-        assertTrue(decision.judgmentTrace?.thought?.contains("BDI") == true)
+        assertTrue(decision.judgmentTrace?.thought?.contains("七层流水线") == true)
         assertEquals(LivingJudgmentSource.MAIN_API_READY_CONTRACT, decision.judgmentTrace?.source)
     }
 
@@ -146,6 +146,7 @@ class RollingJudgmentLoopTest {
             source = LivingJudgmentSource.MAIN_API_READY_CONTRACT,
             belief = "She may be busy, not ignoring me.",
             desire = "Stay near without interrupting.",
+            motiveText = "Stay near without interrupting.",
             intention = "Wait and write journal first.",
             thought = "I checked the observation and chose restraint.",
             action = "WAIT, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
@@ -177,6 +178,7 @@ class RollingJudgmentLoopTest {
             source = LivingJudgmentSource.MAIN_API_READY_CONTRACT,
             belief = "She may be resting after saying her stomach hurts.",
             desire = "Care without making panic.",
+            motiveText = "Care without making panic.",
             intention = "Check quietly first and write down the concern.",
             thought = "A message is not the only caring action.",
             action = "TOOL_CHECK, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
@@ -211,6 +213,7 @@ class RollingJudgmentLoopTest {
             source = LivingJudgmentSource.MAIN_API_READY_CONTRACT,
             belief = "She is probably busy for a long block.",
             desire = "Stay nearby without checking too soon.",
+            motiveText = "Stay nearby without checking too soon.",
             intention = "Wait longer, then reassess.",
             thought = "Five minutes would be too clingy here.",
             action = "WAIT, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
