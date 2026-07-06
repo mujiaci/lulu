@@ -45,6 +45,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.io.File
+import java.nio.charset.Charset
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -335,12 +336,14 @@ private fun Context.readBookFromUri(uri: Uri, assistantId: String): CihaiBook {
         name.endsWith(".docx", ignoreCase = true) ||
             mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> {
             val file = File.createTempFile("cihai-reading-", ".docx", cacheDir)
-            contentResolver.openInputStream(uri)?.use { input ->
-                file.outputStream().use { output -> input.copyTo(output) }
-            } ?: error("无法读取文件")
-            runCatching { DocxParser.parse(file) }
-                .also { file.delete() }
-                .getOrElse { error("docx 解析失败：${it.message}") }
+            try {
+                contentResolver.openInputStream(uri)?.use { input ->
+                    file.outputStream().use { output -> input.copyTo(output) }
+                } ?: error("无法读取文件")
+                readDocxWithTextFallback(file)
+            } finally {
+                file.delete()
+            }
         }
         else -> contentResolver.openInputStream(uri)?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }
             ?: error("无法读取文件")
@@ -351,6 +354,52 @@ private fun Context.readBookFromUri(uri: Uri, assistantId: String): CihaiBook {
         title = name.removeSuffix(".txt").removeSuffix(".docx"),
         content = content,
     )
+}
+
+private fun readDocxWithTextFallback(file: File): String =
+    runCatching { DocxParser.parse(file) }.getOrElse { docxError ->
+        file.readPlainTextFallback()
+            ?: error(
+                "docx 解析失败：请确认这是标准 .docx 文件；如果它是旧 .doc、微信/WPS 导出的非标准文档，" +
+                    "请先另存为标准 .docx 或 .txt 后再上传。原因：${docxError.message}"
+            )
+    }
+
+private fun File.readPlainTextFallback(): String? {
+    val bytes = readBytes()
+    if (bytes.isOleDocument() || bytes.isZipDocument()) return null
+    return listOf(Charsets.UTF_8, Charset.forName("GB18030"), Charsets.UTF_16LE, Charsets.UTF_16BE)
+        .asSequence()
+        .map { charset -> bytes.toString(charset).trim('\uFEFF').trim() }
+        .firstOrNull { it.looksLikeReadableText() }
+}
+
+private fun ByteArray.isZipDocument(): Boolean =
+    size >= 4 && this[0] == 0x50.toByte() && this[1] == 0x4B.toByte()
+
+private fun ByteArray.isOleDocument(): Boolean {
+    val oleHeader = byteArrayOf(
+        0xD0.toByte(),
+        0xCF.toByte(),
+        0x11,
+        0xE0.toByte(),
+        0xA1.toByte(),
+        0xB1.toByte(),
+        0x1A,
+        0xE1.toByte(),
+    )
+    return size >= oleHeader.size && oleHeader.indices.all { this[it] == oleHeader[it] }
+}
+
+private fun String.looksLikeReadableText(): Boolean {
+    if (isBlank()) return false
+    val sample = take(4000)
+    val replacementCount = sample.count { it == '\uFFFD' }
+    val controlCount = sample.count { Character.isISOControl(it) && it != '\n' && it != '\r' && it != '\t' }
+    if (replacementCount > sample.length / 20 || controlCount > sample.length / 20) return false
+    val punctuation = "，。！？；：、,.!?;:()（）《》“”\"'[]【】-—… "
+    val readableCount = sample.count { it.isLetterOrDigit() || it.isWhitespace() || it in punctuation }
+    return readableCount >= sample.length * 3 / 5
 }
 
 private fun Context.displayName(uri: Uri): String {

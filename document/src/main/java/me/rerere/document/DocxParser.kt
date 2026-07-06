@@ -19,20 +19,24 @@ private data class ParagraphProperties(
 
 object DocxParser {
     fun parse(file: File): String {
-        return try {
+        val content = try {
             ZipFile(file).use { zipFile ->
                 val entry = zipFile.getEntry("word/document.xml")
                     ?: zipFile.entries().asSequence().firstOrNull { it.name.endsWith("/word/document.xml") }
                     ?: zipFile.entries().asSequence().firstOrNull {
                         it.name.startsWith("word/") && it.name.endsWith("document.xml")
                     }
-                    ?: return "Unable to find document content in DOCX file"
+                    ?: throw IllegalArgumentException("无法在 DOCX 文件中找到正文内容")
                 zipFile.getInputStream(entry).use { input ->
                     parseDocumentXml(input)
                 }
             }
         } catch (e: Exception) {
-            "Error parsing DOCX file: ${e.message}"
+            if (e is IllegalArgumentException) throw e
+            throw IllegalArgumentException("DOCX 解析失败：${e.message}", e)
+        }
+        return content.ifBlank {
+            throw IllegalArgumentException("DOCX 正文内容为空")
         }
     }
 
@@ -64,7 +68,7 @@ object DocxParser {
 
             result.toString().trim()
         } catch (e: Exception) {
-            "Error parsing document XML: ${e.message}"
+            throw IllegalArgumentException("DOCX 正文 XML 解析失败：${e.message}", e)
         }
     }
 
