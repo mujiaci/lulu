@@ -2108,7 +2108,8 @@ internal fun buildTargetedProactiveSensingInstruction(
         "living_presence" -> {
             appendLine("本次目标的感知重点：这是 Living Presence OS 的下一轮滚动判断，不是随机主动消息。")
             appendLine("按感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构重新判断：先整理当前时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录；再评估重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源。")
-            appendLine("状态保持只保存第一视角信念、长期/情境动机、意图和结构化情绪；审议决策用 ReAct 边想边查边修正，再决定发消息、看工具、等待、写露露日记、阅读、安排下一轮或沉淀记忆。")
+            appendLine("动态判断根据完整感知包、人设和意义评估决定意图、可做什么、要不要查工具、要不要开口、要不要写辞海，以及下一轮从什么时候重新感知。")
+            appendLine("状态生成只保留心情、身体状况、精神状况、亲密关系和第一人称没说出口；不要把 belief、traitMotive、situationalMotive 或 intention 塞回状态栏。")
             appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把第一人称内心想法写入辞海；记忆由辞海和聊天阈值自动沉淀。")
         }
         else -> when {

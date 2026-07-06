@@ -61,7 +61,7 @@ private fun LivingIntent.toCardModel(nowMillis: Long): LivingIntentCardModel {
         appraisalLine = "意义：${appraisal.meaning}\n风险：${appraisal.risk}\n资源：${appraisal.resources}",
         hypothesesLine = "可能情况：${hypotheses.joinToString(" / ")}",
         perceptionLine = "下次感知由本轮判断动态决定；到点后重新从感知层开始。",
-        countLine = "沉默判断 $silentEvaluationCount 次 · 开口 $spokenCount 次 · 克制 $restraint/10",
+        countLine = "默默判断 $silentEvaluationCount 次 · 开口 $spokenCount 次 · 克制 $restraint/10",
         emotionLine = "情绪：${emotion.emotionLabel} · ${emotion.feltSense}\n冲动：${emotion.impulse}\n克制：${emotion.restraintText}",
         consolidationLine = "沉淀：${consolidation.episodicTrace}\n策略：${consolidation.policyLearning}",
         capabilityLine = capabilityRequests

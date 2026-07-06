@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.item
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
@@ -41,6 +42,7 @@ import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
+import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -53,7 +55,9 @@ import java.util.Locale
 fun CihaiPage(onBack: () -> Unit) {
     val settings = LocalSettings.current
     val store = koinInject<CihaiStore>()
+    val livingPresenceStore = koinInject<LivingPresenceStore>()
     val state by store.state.collectAsState()
+    val livingState by livingPresenceStore.state.collectAsState()
     val scope = rememberCoroutineScope()
     val fallbackAssistant = settings.getCurrentAssistant()
     val selectedAssistantId = state.selectedAssistantId
@@ -65,6 +69,10 @@ fun CihaiPage(onBack: () -> Unit) {
     val tabs = listOf(
         CihaiEntryKind.INNER_JOURNAL,
         CihaiEntryKind.ACTION_LOG,
+    )
+    val concernCards = buildLivingIntentCards(
+        intents = livingState.activeIntents,
+        selectedAssistantId = selectedAssistantId,
     )
 
     LaunchedEffect(selectedAssistantId) {
@@ -88,7 +96,7 @@ fun CihaiPage(onBack: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 Text(
-                    text = "露露日记",
+                    text = "辞海",
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
@@ -101,7 +109,7 @@ fun CihaiPage(onBack: () -> Unit) {
                 )
             }
             Text(
-                text = "这里只放角色没有说出口的心声，以及她在后台做出的行动选择。阅读已经挪到独立入口。",
+                text = "这里放挂心任务、第一人称心迹和行动沉淀；记忆会按轮次自动整理，阅读保留独立入口。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -123,7 +131,7 @@ fun CihaiPage(onBack: () -> Unit) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(selectedAssistant.name.ifBlank { "当前角色" }, fontWeight = FontWeight.SemiBold)
                         Text(
-                            text = "当前查看这个角色的活人感日记。",
+                            text = "当前查看这个角色的辞海：她在挂心什么、没说出口什么、准备怎样继续感知。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -144,6 +152,18 @@ fun CihaiPage(onBack: () -> Unit) {
                 contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (concernCards.isNotEmpty()) {
+                    item(key = "concern-title") {
+                        Text(
+                            text = "挂心中",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                        )
+                    }
+                    items(concernCards, key = { it.id }) { card ->
+                        ConcernCard(card)
+                    }
+                }
                 items(
                     state.entries.filter {
                         it.assistantId == selectedAssistantId && it.kind == tabs[selectedTab]
@@ -153,6 +173,59 @@ fun CihaiPage(onBack: () -> Unit) {
                     EntryCard(entry)
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun ConcernCard(card: LivingIntentCardModel) {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                Text(
+                    text = card.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Text(
+                        text = card.statusText,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Text(
+                text = card.nextPerceptionText,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text = listOf(card.eventLine, card.goalLine, card.stateLine).joinToString("\n"),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            Text(
+                text = card.perceptionLine,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = card.countLine,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
