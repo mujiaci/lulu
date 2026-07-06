@@ -30,6 +30,7 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
+import java.io.File
 
 @Serializable
 sealed class LocalToolOption {
