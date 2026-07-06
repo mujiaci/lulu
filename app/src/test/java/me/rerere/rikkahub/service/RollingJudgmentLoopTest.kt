@@ -84,6 +84,33 @@ class RollingJudgmentLoopTest {
     }
 
     @Test
+    fun `wake up observation carries temporal grounding before alarm action`() {
+        val wakeAt = NOW + 60 * MINUTE
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantName = "露露",
+            userText = "我 9 点要起床",
+            assistantText = "那我先校准时间，再帮你盯着。",
+            nowMillis = NOW,
+            targetAtMillis = wakeAt,
+        )
+
+        val decision = RollingJudgmentLoop.evaluate(
+            intent = intent,
+            nowMillis = NOW + 55 * MINUTE,
+        )
+
+        val observation = decision.observation
+        assertTrue(observation?.requestedTools?.first() == "get_time_info")
+        assertTrue(observation?.requestedTools?.contains("set_alarm") == true)
+        assertTrue(observation?.signals?.contains("temporal_grounding_required=true") == true)
+        assertTrue(observation?.signals?.contains("current_time_ms=${NOW + 55 * MINUTE}") == true)
+        assertTrue(observation?.signals?.contains("target_time_ms=$wakeAt") == true)
+        assertTrue(observation?.summary?.contains("Temporal Grounding") == true)
+        assertTrue(observation?.summary?.contains("current_time_ms=${NOW + 55 * MINUTE}") == true)
+        assertTrue(observation?.summary?.contains("target_time_ms=$wakeAt") == true)
+    }
+
+    @Test
     fun `structured judgment can keep any local action from capability pool`() {
         val intent = RollingJudgmentLoop.createIntent(
             assistantName = "Lulu",

@@ -318,9 +318,16 @@ object RollingJudgmentLoop {
             intent.deadlineAtMillis?.let {
                 add("deadline_in_min=${((it - nowMillis) / MINUTE_MILLIS).coerceAtLeast(0)}")
             }
+            addAll(temporalGroundingSignals(intent, nowMillis))
             intent.lastSpokenAt?.let {
                 add("minutes_since_spoken=${((nowMillis - it) / MINUTE_MILLIS).coerceAtLeast(0)}")
             }
+        }
+        val temporalSignals = signals.filter {
+            it.startsWith("temporal_grounding_") ||
+                it.startsWith("current_time_ms=") ||
+                it.startsWith("target_time_ms=") ||
+                it.startsWith("deadline_time_ms=")
         }
         val summary = buildString {
             append("Observation: 本轮先固定读取可用线索，再判断。")
@@ -329,6 +336,11 @@ object RollingJudgmentLoop {
             append("；当前信号=")
             append(signals.joinToString(", "))
             append("。如果工具不可用，必须把“工具不可用”也当作 observation，而不是直接假装知道。")
+            if (temporalSignals.isNotEmpty()) {
+                append(" Temporal Grounding: ")
+                append(temporalSignals.joinToString(", "))
+                append("；涉及时钟动作必须先用这些时间锚点校准当前时间和目标时间。")
+            }
         }
         return LivingObservation(
             summary = summary,
@@ -336,6 +348,14 @@ object RollingJudgmentLoop {
             signals = signals,
             createdAt = nowMillis,
         )
+    }
+
+    private fun temporalGroundingSignals(intent: LivingIntent, nowMillis: Long): List<String> = buildList {
+        if (intent.kind != LivingIntentKind.WAKE_UP && intent.kind != LivingIntentKind.DEADLINE) return@buildList
+        add("temporal_grounding_required=true")
+        add("current_time_ms=$nowMillis")
+        intent.targetAtMillis?.let { add("target_time_ms=$it") }
+        intent.deadlineAtMillis?.let { add("deadline_time_ms=$it") }
     }
 
     private fun structuredThought(
@@ -820,11 +840,13 @@ object RollingJudgmentLoop {
             "get_battery_info",
         )
         LivingIntentKind.DEADLINE -> listOf(
+            "get_time_info",
             "today_schedule",
             "calendar_tool",
             "get_app_usage",
         )
         LivingIntentKind.WAKE_UP -> listOf(
+            "get_time_info",
             "set_alarm",
             "get_gadgetbridge_data",
             "get_battery_info",
