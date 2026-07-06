@@ -65,7 +65,7 @@ fun CihaiPage(onBack: () -> Unit) {
     val selectedAssistant = settings.assistants.firstOrNull { it.id.toString() == selectedAssistantId }
         ?: fallbackAssistant
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = visibleCihaiEntryKinds()
+    val sections = visibleCihaiSections()
     val concernCards = buildLivingIntentCards(
         intents = livingState.activeIntents,
         selectedAssistantId = selectedAssistantId,
@@ -135,49 +135,116 @@ fun CihaiPage(onBack: () -> Unit) {
                 }
             }
             TabRow(selectedTabIndex = selectedTab) {
-                tabs.forEachIndexed { index, kind ->
+                sections.forEachIndexed { index, section ->
                     Tab(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
-                        text = { Text(kind.label, maxLines = 1) },
+                        text = { Text(section.label, maxLines = 1) },
                     )
                 }
             }
+            val selectedSection = sections[selectedTab]
             LazyColumn(
                 modifier = Modifier.weight(1f),
                 contentPadding = PaddingValues(bottom = 24.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                if (concernCards.isNotEmpty()) {
-                    item(key = "concern-title") {
-                        Text(
-                            text = "挂心中",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                when (selectedSection) {
+                    CihaiSection.CONCERNS -> {
+                        if (concernCards.isEmpty()) {
+                            item(key = "empty-concerns") {
+                                EmptyCihaiSection(
+                                    title = "现在没有挂心任务",
+                                    body = "这里以后只放持续照看的事，比如考试、起床、身体状态、DDL 或学习节奏。",
+                                )
+                            }
+                        } else {
+                            item(key = "concern-title") {
+                                Text(
+                                    text = "挂心中",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(concernCards, key = { it.id }) { card ->
+                                ConcernCard(card)
+                            }
+                        }
+                    }
+                    else -> {
+                        val entries = entriesForCihaiSection(
+                            entries = state.entries,
+                            selectedAssistantId = selectedAssistantId,
+                            section = selectedSection,
                         )
+                        if (entries.isEmpty()) {
+                            item(key = "empty-${selectedSection.name}") {
+                                EmptyCihaiSection(
+                                    title = selectedSection.emptyTitle,
+                                    body = selectedSection.emptyBody,
+                                )
+                            }
+                        } else {
+                            items(entries, key = { it.id }) { entry ->
+                                EntryCard(entry)
+                            }
+                        }
                     }
-                    items(concernCards, key = { it.id }) { card ->
-                        ConcernCard(card)
-                    }
-                }
-                items(
-                    state.entries.filter {
-                        it.assistantId == selectedAssistantId && it.kind == tabs[selectedTab]
-                    },
-                    key = { it.id },
-                ) { entry ->
-                    EntryCard(entry)
                 }
             }
         }
     }
 }
 
-internal fun visibleCihaiEntryKinds(): List<CihaiEntryKind> = listOf(
-    CihaiEntryKind.INNER_JOURNAL,
-    CihaiEntryKind.ACTION_LOG,
-    CihaiEntryKind.REFLECTION,
+internal enum class CihaiSection(
+    val label: String,
+    val entryKind: CihaiEntryKind?,
+    val emptyTitle: String,
+    val emptyBody: String,
+) {
+    CONCERNS(
+        label = "挂心",
+        entryKind = null,
+        emptyTitle = "现在没有挂心任务",
+        emptyBody = "这里以后只放持续照看的事，比如考试、起床、身体状态、DDL 或学习节奏。",
+    ),
+    INNER_JOURNAL(
+        label = "心迹",
+        entryKind = CihaiEntryKind.INNER_JOURNAL,
+        emptyTitle = "还没有心迹",
+        emptyBody = "这里只放角色第一人称没说出口的心理活动，不放行动记录。",
+    ),
+    ACTION_LOG(
+        label = "行动",
+        entryKind = CihaiEntryKind.ACTION_LOG,
+        emptyTitle = "还没有行动记录",
+        emptyBody = "这里只放角色在后台做过的等待、克制、查看工具、阅读或安排下一次感知。",
+    ),
+    REFLECTION(
+        label = "沉淀",
+        entryKind = CihaiEntryKind.REFLECTION,
+        emptyTitle = "还没有记忆沉淀",
+        emptyBody = "这里只放多轮判断之后整理出的经验，供之后相似情境复用。",
+    ),
+}
+
+internal fun visibleCihaiSections(): List<CihaiSection> = listOf(
+    CihaiSection.CONCERNS,
+    CihaiSection.INNER_JOURNAL,
+    CihaiSection.ACTION_LOG,
+    CihaiSection.REFLECTION,
 )
+
+internal fun entriesForCihaiSection(
+    entries: List<CihaiEntry>,
+    selectedAssistantId: String,
+    section: CihaiSection,
+): List<CihaiEntry> {
+    val kind = section.entryKind ?: return emptyList()
+    return entries.filter { entry ->
+        entry.assistantId == selectedAssistantId && entry.kind == kind
+    }
+}
 
 @Composable
 private fun ConcernCard(card: LivingIntentCardModel) {
@@ -226,6 +293,34 @@ private fun ConcernCard(card: LivingIntentCardModel) {
             Text(
                 text = card.countLine,
                 style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyCihaiSection(
+    title: String,
+    body: String,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.68f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                text = body,
+                style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
