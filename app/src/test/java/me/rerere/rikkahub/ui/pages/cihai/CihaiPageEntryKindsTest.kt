@@ -4,22 +4,21 @@ import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.cihai.CihaiEntry
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CihaiPageEntryKindsTest {
     @Test
-    fun `cihai page exposes distinct concern journal action and memory sections`() {
+    fun `cihai page exposes concern journal and memory sections without action tab`() {
         val sections = visibleCihaiSections()
 
         assertEquals(
-            listOf("挂心", "心迹", "行动", "沉淀"),
+            listOf("挂心", "心迹", "沉淀"),
             sections.map { it.label },
         )
         assertEquals(null, CihaiSection.CONCERNS.entryKind)
         assertEquals(CihaiEntryKind.INNER_JOURNAL, CihaiSection.INNER_JOURNAL.entryKind)
-        assertEquals(CihaiEntryKind.ACTION_LOG, CihaiSection.ACTION_LOG.entryKind)
         assertEquals(CihaiEntryKind.REFLECTION, CihaiSection.REFLECTION.entryKind)
+        assertFalse(sections.any { it.entryKind == CihaiEntryKind.ACTION_LOG })
         assertFalse(sections.any { it.entryKind == CihaiEntryKind.READING_NOTE })
     }
 
@@ -36,10 +35,6 @@ class CihaiPageEntryKindsTest {
         assertEquals(
             listOf("journal"),
             entriesForCihaiSection(entries, "lulu", CihaiSection.INNER_JOURNAL).map { it.id },
-        )
-        assertEquals(
-            listOf("action"),
-            entriesForCihaiSection(entries, "lulu", CihaiSection.ACTION_LOG).map { it.id },
         )
         assertEquals(
             listOf("reflection"),

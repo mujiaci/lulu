@@ -94,14 +94,14 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 item {
-                    CacheStatsCard(
-                        stats = stats,
+                    CacheRecordsCard(
+                        records = stats.cacheRecords,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                 }
                 item {
-                    CacheRecordsCard(
-                        records = stats.cacheRecords,
+                    CacheStatsCard(
+                        stats = stats,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     )
                 }

@@ -119,7 +119,7 @@ enum class LuluActionCue(val label: String) {
     CAMERA_CANDIDATE("可看环境"),
 
     @SerialName("journal_candidate")
-    JOURNAL_CANDIDATE("可写日志"),
+    JOURNAL_CANDIDATE("可写心迹"),
 }
 
 @Serializable

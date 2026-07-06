@@ -444,7 +444,7 @@ object RollingJudgmentLoop {
             action = actions.joinToString(", ") { it.name },
             observation = observation.summary,
             decision = when {
-                LivingAction.MESSAGE in actions -> "允许主 API 在触发消息前再次判断是否开口；如果不自然可以 PASS 并写日志。"
+                LivingAction.MESSAGE in actions -> "允许主 API 在触发消息前再次判断是否开口；如果不自然可以 PASS 并写辞海心迹。"
                 LivingAction.WRITE_DIARY in actions -> "本轮不强行说话，把第一人称内心想法写入辞海；记忆由辞海和聊天阈值自动沉淀。"
                 else -> "本轮主要等待，并重新安排下一次完整感知。"
             },

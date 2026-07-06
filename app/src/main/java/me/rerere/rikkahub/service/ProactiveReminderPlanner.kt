@@ -126,7 +126,7 @@ object ProactiveReminderPlanner {
                 add(
                     ProactiveActionHint(
                         toolName = "write_lulu_journal",
-                        reason = "把这次催睡/休息约定记进露露日志，后续能延续关心。",
+                        reason = "把这次催睡/休息约定写入辞海心迹，后续能延续关心；不计入露露日记。",
                         argumentsJson = """{"entry_type":"care","content":"用户刚才提到睡觉/休息，露露约好到点提醒。"}""",
                     )
                 )
@@ -150,7 +150,7 @@ object ProactiveReminderPlanner {
                 add(
                     ProactiveActionHint(
                         toolName = "write_lulu_journal",
-                        reason = "把这次吃饭关心记进露露日志，后续能延续照看。",
+                        reason = "把这次吃饭关心写入辞海心迹，后续能延续照看；不计入露露日记。",
                         argumentsJson = """{"entry_type":"care","content":"用户刚才提到还没吃饭，露露约好稍后确认。"}""",
                     )
                 )
@@ -159,7 +159,7 @@ object ProactiveReminderPlanner {
                 add(
                     ProactiveActionHint(
                         toolName = "write_lulu_journal",
-                        reason = "把这次学习/写作业约定记进露露日志，后续能延续陪伴。",
+                        reason = "把这次学习/写作业约定写入辞海心迹，后续能延续陪伴；不计入露露日记。",
                         argumentsJson = """{"entry_type":"care","content":"用户刚才去学习/写作业，露露约好晚点轻轻确认。"}""",
                     )
                 )
@@ -171,7 +171,7 @@ object ProactiveReminderPlanner {
             add(
                 ProactiveActionHint(
                     toolName = "write_lulu_journal",
-                    reason = "用户明确提到记录/日志，可以把这件事写进露露日志。",
+                    reason = "用户明确提到记录，可以把这件事写进辞海心迹；不计入露露日记。",
                     argumentsJson = """{"entry_type":"user_request","content":"用户希望稍后把这件事记录下来。"}""",
                 )
             )

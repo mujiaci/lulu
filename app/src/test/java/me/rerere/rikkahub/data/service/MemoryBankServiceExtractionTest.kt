@@ -90,8 +90,8 @@ class MemoryBankServiceExtractionTest {
         val saved = service.saveExtractedMemories(
             candidates = listOf(
                 AffectiveMemoryCandidate(
-                    type = "cihai_journal",
-                    content = "Lulu decided not to disturb and wrote down her concern.",
+                    type = "cihai_inner",
+                    content = "Lulu decided not to disturb and kept her concern in Cihai.",
                     importance = 3,
                     embeddingText = "silent judgement concern",
                 ),

@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.cihai
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -28,7 +29,7 @@ class CihaiMemoryTest {
     }
 
     @Test
-    fun `journal entry becomes pending vector memory candidate`() {
+    fun `cihai inner entry becomes pending vector memory candidate without diary kind`() {
         val entry = CihaiEntry(
             assistantId = "lulu",
             kind = CihaiEntryKind.INNER_JOURNAL,
@@ -45,7 +46,7 @@ class CihaiMemoryTest {
         )
         val candidate = entry.toMemoryCandidate()
 
-        assertEquals("cihai_journal", memory.memoryKind)
+        assertEquals("cihai_inner", memory.memoryKind)
         assertEquals("pending", memory.vectorStatus)
         assertTrue(memory.embeddingText!!.contains("担心但克制"))
         assertTrue(memory.tagsJson!!.contains("辞海"))
@@ -74,19 +75,25 @@ class CihaiMemoryTest {
     }
 
     @Test
-    fun `silent judgement creates journal entry for cihai memory`() {
+    fun `silent judgement creates cihai inner entry without writing diary content`() {
         val entry = CihaiEntry.fromSilentJudgment(
             assistantId = "lulu",
             assistantName = "露露",
-            reason = "滚动判断：用户已经 25 分钟没有回复，先观察，不机械追问。",
-            userText = "我先去处理点事",
+            reason = "感知层：用户说自己明天早上考试，最近上下文里压力偏高。意义评估层：考试对学生很重要，错过会有严重后果。判断层：今晚先确认她有没有睡下，明早再重新感知是否醒来。",
+            userText = "我明天早上10点要起床考试",
             createdAt = 1_700_000_000_000L,
         )
 
         assertEquals(CihaiEntryKind.INNER_JOURNAL, entry.kind)
         assertTrue(entry.title.contains("露露"))
-        assertTrue(entry.content.contains("不机械追问"))
-        assertTrue(entry.toMemoryCandidate().embeddingText!!.contains("滚动判断"))
+        assertTrue(entry.content.length in 100..500)
+        assertTrue(entry.content.startsWith("我"))
+        assertFalse(entry.content.contains("用户刚才说过："))
+        assertTrue(entry.content.contains("感知"))
+        assertTrue(entry.content.contains("评估"))
+        assertTrue(entry.content.contains("判断"))
+        assertTrue(entry.content.contains("考试"))
+        assertTrue(entry.toMemoryCandidate().embeddingText!!.contains("明早"))
     }
 
     @Test
@@ -108,7 +115,7 @@ class CihaiMemoryTest {
     }
 
     @Test
-    fun `silent presence action can read a user book while not disturbing`() {
+    fun `silent presence can read a user book while recording cihai inner thought`() {
         val book = CihaiBook(
             assistantId = "lulu",
             title = "陪伴方法",
@@ -129,17 +136,16 @@ class CihaiMemoryTest {
         )
 
         assertEquals(
-            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.ACTION_LOG, CihaiEntryKind.READING_NOTE),
+            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.READING_NOTE),
             result.entries.map { it.kind },
         )
-        assertTrue(result.entries[1].content.contains("读"))
-        assertTrue(result.entries[2].sourceTitle!!.contains("陪伴方法"))
+        assertTrue(result.entries[1].sourceTitle!!.contains("陪伴方法"))
         assertTrue(result.updatedBook!!.progressPercent > book.progressPercent)
         assertTrue(result.entries.all { it.toMemoryCandidate().type.startsWith("cihai_") })
     }
 
     @Test
-    fun `silent presence action still records action log when no book is available`() {
+    fun `silent presence no longer records action log when no book is available`() {
         val result = planCihaiSilentPresence(
             CihaiSilentPresenceInput(
                 assistantId = "lulu",
@@ -153,11 +159,10 @@ class CihaiMemoryTest {
         )
 
         assertEquals(
-            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.ACTION_LOG),
+            listOf(CihaiEntryKind.INNER_JOURNAL),
             result.entries.map { it.kind },
         )
         assertEquals(null, result.updatedBook)
-        assertTrue(result.entries[1].content.contains("没有可读材料"))
     }
 
     @Test
@@ -175,7 +180,7 @@ class CihaiMemoryTest {
         )
 
         assertEquals(
-            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.ACTION_LOG, CihaiEntryKind.REFLECTION),
+            listOf(CihaiEntryKind.INNER_JOURNAL, CihaiEntryKind.REFLECTION),
             result.entries.map { it.kind },
         )
         assertTrue(result.entries.last().content.contains("下一轮判断"))

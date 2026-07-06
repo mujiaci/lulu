@@ -71,7 +71,7 @@ object LivingPresencePlanner {
         append("感知层必须先装入角色人设、上下文、未总结聊天、辞海、挂心任务、工具状态、工具结果、向量记忆和上一轮状态栏。")
         append("意义评估 Appraisal=${intent.appraisal.meaning}；风险=${intent.appraisal.risk}；价值=${intent.appraisal.value}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}.")
         append("判断层 intention=${intent.intention}；是否开口、是否查工具、是否等待、是否写辞海、下一次什么时候感知，都必须根据本轮感知和人设重新决定。")
-        append("行动池 includes MESSAGE, WAIT, TOOL_USE, SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION, READ, ASK_USER, PASS；记忆沉淀由辞海/聊天阈值自动触发，不作为模型动作。")
+        append("行动池 includes MESSAGE, WAIT, TOOL_USE, SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION, READ, ASK_USER, PASS；WRITE_DIARY 是兼容名，只代表写辞海心迹，不计入露露日记；记忆沉淀由辞海/聊天阈值自动触发，不作为模型动作。")
         append("状态栏只生成心情、身体、精神、亲密和第一人称没说出口；不要把 belief/motive/intention 当成状态栏展示。")
         append("Consolidation=${intent.consolidation.episodicTrace} / ${intent.consolidation.policyLearning}.")
         append("Hypotheses: ${intent.hypotheses.joinToString(" / ")}.")
@@ -82,7 +82,7 @@ object LivingPresencePlanner {
         add(
             ProactiveActionHint(
                 toolName = LivingPresenceConsolidationHint.WRITE_JOURNAL.name,
-                reason = "如果不适合打扰用户，把这次未说出口的担心、克制和判断写入辞海心迹，并进入向量记忆。",
+                reason = "如果不适合打扰用户，把这次未说出口的担心、克制和判断写入辞海心迹，并进入向量记忆；不计入露露日记。",
             )
         )
         add(

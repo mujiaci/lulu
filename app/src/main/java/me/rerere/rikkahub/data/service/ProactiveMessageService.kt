@@ -701,7 +701,7 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 不要说\"根据xxx\"、\"我注意到xxx数据\"之类暴露信息来源的话")
         sb.appendLine("- 直接以朋友聊天的语气开口，就像你突然想到了什么想跟对方说")
         sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，最终消息只输出纯文本")
-        sb.appendLine("- 可以为了判断用户状态主动调用工具，例如时间、位置、应用使用、电量、健康、通知、短信、当前音乐、闹钟、日历或日志。")
+        sb.appendLine("- 可以为了判断用户状态主动调用工具，例如时间、位置、应用使用、电量、健康、通知、短信、当前音乐、闹钟、日历或辞海心迹。")
         sb.appendLine("- 工具调用要符合角色当下目的：比如催睡就优先看时间、电量、应用使用；确认上课就优先看时间、位置、应用使用。")
         sb.appendLine("- 涉及时间时必须以“当前本地时间”的 24 小时制为准，00:00-04:59 是凌晨，不能说成下午或中午。")
         sb.appendLine("- 如果工具能帮你更像真人一样判断用户状态，就大胆用；最终说出口的话仍然要自然，不要暴露工具细节。")
@@ -1456,11 +1456,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         decision: RollingJudgmentDecision,
     ): Boolean {
         val nextPerceptionAt = decision.updatedIntent.nextPerceptionAt
-        if (nextPerceptionAt <= System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1)) return false
+        val triggerAtMillis = resolveLivingPresenceTriggerAt(
+            nextPerceptionAt = nextPerceptionAt,
+            nowMillis = System.currentTimeMillis(),
+        )
         ProactiveMessageService.scheduleTargeted(
             context = this@ProactiveMessageTriggerService,
             setting = setting,
-            triggerAtMillis = nextPerceptionAt,
+            triggerAtMillis = triggerAtMillis,
             reason = decision.toTargetedReason(assistantName),
             userText = decision.updatedIntent.belief.take(160),
             kind = decision.updatedIntent.kind.toTargetedKind(),
@@ -1971,6 +1974,11 @@ internal fun Settings.markTargetedProactiveThoughtExpressed(
     )
 }
 
+internal fun resolveLivingPresenceTriggerAt(
+    nextPerceptionAt: Long,
+    nowMillis: Long = System.currentTimeMillis(),
+): Long = maxOf(nextPerceptionAt, nowMillis + TimeUnit.SECONDS.toMillis(10))
+
 internal fun buildSilentLivingPresenceState(
     assistantId: Uuid,
     previous: LuluState,
@@ -2103,14 +2111,14 @@ internal fun buildTargetedProactiveSensingInstruction(
             appendLine("表达重点放在轻轻确认状态，不要打断太重。")
         }
         "general" -> {
-            appendLine("本次目标的感知重点：先看当前时间、应用使用和电量；如果原因里提到记录/日志，可以主动写入日志。")
+            appendLine("本次目标的感知重点：先看当前时间、应用使用和电量；如果原因里提到记录，可以主动写入辞海心迹，不计入露露日记。")
         }
         "living_presence" -> {
             appendLine("本次目标的感知重点：这是 Living Presence OS 的下一轮滚动判断，不是随机主动消息。")
             appendLine("按感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构重新判断：先整理当前时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录；再评估重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源。")
             appendLine("动态判断根据完整感知包、人设和意义评估决定意图、可做什么、要不要查工具、要不要开口、要不要写辞海，以及下一轮从什么时候重新感知。")
             appendLine("状态生成只保留心情、身体状况、精神状况、亲密关系和第一人称没说出口；不要把 belief、traitMotive、situationalMotive 或 intention 塞回状态栏。")
-            appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把第一人称内心想法写入辞海；记忆由辞海和聊天阈值自动沉淀。")
+            appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把第一人称内心想法写入辞海心迹；辞海心迹/行动不计入露露日记，记忆由辞海和聊天阈值自动沉淀。")
         }
         else -> when {
             reason.contains("睡") -> appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量。")

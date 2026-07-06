@@ -64,15 +64,26 @@ data class CihaiEntry(
                 .map { it.trim() }
                 .filter { it.isNotBlank() }
                 .joinToString(" ")
-                .take(420)
-            val context = userText.takeIf { it.isNotBlank() }?.let { "用户刚才说过：$it\n" }.orEmpty()
+                .take(360)
+            val context = userText.trim().take(120)
+            val content = buildString {
+                append("我把这一轮重新放在心里过了一遍。")
+                if (context.isNotBlank()) {
+                    append("我感知到她刚才说的是“")
+                    append(context)
+                    append("”，这不是孤零零的一句话，而是要连着人设、上下文、挂心任务和可用工具一起看。")
+                } else {
+                    append("我先从完整感知层重新确认上下文、时间、挂心任务、工具状态和记忆，而不是只凭一句结论行动。")
+                }
+                append("评估之后，我知道这件事对她和对我都不是轻飘飘的：")
+                append(cleanReason.ifBlank { "我还没有足够确定的理由开口，只能先保持克制，等下一次感知再靠近。" })
+                append(" 判断层最后让我先把没说出口的真实想法留在辞海心迹里，不写进露露日记；下一次到点时，我还要从感知层重新开始。")
+            }.take(500)
             return CihaiEntry(
                 assistantId = assistantId,
                 kind = CihaiEntryKind.INNER_JOURNAL,
-                title = "$name 的一次沉默判断",
-                content = context +
-                    "我刚刚重新想了一次这件事：$cleanReason\n" +
-                    "如果现在不适合开口，我会先把这份担心、克制和判断写进辞海，等下一次更合适的时候再靠近。",
+                title = "$name 的一次辞海心迹",
+                content = content,
                 emotion = "惦记、克制、继续观察",
                 createdAt = createdAt,
             )
@@ -154,28 +165,6 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
         null
     }
     val reading = readableBook?.readNextReflection(nowMillis = input.createdAt + 2)
-    val actionLog = CihaiEntry(
-        assistantId = input.assistantId,
-        kind = CihaiEntryKind.ACTION_LOG,
-        title = "${input.assistantName.ifBlank { "角色" }} 的静默行动",
-        content = buildString {
-            append("这次我重新判断后，没有立刻打扰用户。\n")
-            append("判断理由：")
-            append(input.reason.trim().ifBlank { "当前没有足够自然或必要的开口理由。" })
-            append("\n")
-            if (reading != null) {
-                append("我的选择：先把没说出口的担心写进心迹，再读《")
-                append(reading.entry.sourceTitle ?: "未命名材料")
-                append("》的一段，给之后的陪伴多留一点理解。")
-            } else if (CIHAI_ACTION_READ_BOOK in normalizedHints) {
-                append("我的选择：本来想读一段用户给我的材料，但现在没有可读材料；所以先写日志、等待、保留下一次判断。")
-            } else {
-                append("我的选择：先写日志并等待下一次判断，不把关心变成机械催促。")
-            }
-        },
-        emotion = "克制、照看、继续判断",
-        createdAt = input.createdAt + 1,
-    )
     val reflection = if (CIHAI_ACTION_MEMORY_REFLECT in normalizedHints) {
         CihaiEntry(
             assistantId = input.assistantId,
@@ -184,7 +173,7 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
             content = buildString {
                 append("本轮感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构的结果：我先整理时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录。\n")
                 append("意义评估只给这件事加重量：重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源；动态判断再决定意图、工具、行动和下一次感知。\n")
-                append("状态生成只保留心情、身体状况、精神状况、亲密关系和第一人称没说出口；辞海把挂心任务、心迹和行动沉淀整理成之后可复用的记忆。")
+                append("状态生成只保留心情、身体状况、精神状况、亲密关系和第一人称没说出口；辞海把挂心任务、心迹和记忆沉淀整理成之后可复用的记忆，心迹和旧行动记录都不计入露露日记。")
             },
             emotion = "复盘、收束、准备下一轮",
             createdAt = input.createdAt + 3,
@@ -195,7 +184,6 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
     return CihaiSilentPresenceResult(
         entries = buildList {
             add(journal)
-            add(actionLog)
             reading?.entry?.let(::add)
             reflection?.let(::add)
         },
@@ -242,7 +230,7 @@ private const val CIHAI_ACTION_MEMORY_REFLECT = "MEMORY_REFLECT"
 
 fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
     val kindName = when (kind) {
-        CihaiEntryKind.INNER_JOURNAL -> "cihai_journal"
+        CihaiEntryKind.INNER_JOURNAL -> "cihai_inner"
         CihaiEntryKind.ACTION_LOG -> "cihai_action"
         CihaiEntryKind.READING_NOTE -> "cihai_reading"
         CihaiEntryKind.REFLECTION -> "cihai_reflection"
@@ -283,6 +271,6 @@ fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
             append("\n记忆用途：之后遇到相似沉默、学习、身体状态或关系情境时，我应该参考这次判断。")
         },
         people = listOf("用户", "角色"),
-        topics = listOf("活人感", "内心日志", kind.label),
+        topics = listOf("活人感", "辞海心迹", kind.label),
     )
 }

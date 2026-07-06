@@ -30,7 +30,6 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.TextStyle
 import java.util.Locale
-import java.io.File
 
 @Serializable
 sealed class LocalToolOption {
@@ -342,9 +341,9 @@ class LocalTools(private val context: Context) {
         Tool(
             name = "write_lulu_journal",
             description = """
-                Write a short private journal entry for the character.
-                Use when the character wants to record an inner trace, action choice, reflection, or event for later memory.
-                This stores the entry in Cihai, keeps the legacy private JSONL backup, and sends it to the memory bank for vectorization.
+                Write a Cihai inner note for the character, not a Lulu diary entry.
+                Use when the character wants to record a first-person inner trace or reflection for later Cihai memory.
+                This stores the entry only in Cihai and sends it to the memory bank for vectorization; do not count Cihai notes as diary.
                 The content must be written in first person, in character, as what I remember or did not say aloud; do not write detached third-person notes.
             """.trimIndent().replace("\n", " "),
             parameters = {
@@ -372,16 +371,6 @@ class LocalTools(private val context: Context) {
                     ?: error("content is required")
                 require(content.isNotBlank()) { "content is blank" }
                 val now = ZonedDateTime.now()
-                val payload = buildJsonObject {
-                    put("created_at", now.toString())
-                    put("timestamp_ms", now.toInstant().toEpochMilli())
-                    put("title", params["title"]?.jsonPrimitive?.contentOrNull.orEmpty())
-                    put("content", content)
-                    put("mood", params["mood"]?.jsonPrimitive?.contentOrNull.orEmpty())
-                }
-                val journalDir = File(context.filesDir, "lulu").apply { mkdirs() }
-                val journalFile = File(journalDir, "lulu_journal.jsonl")
-                journalFile.appendText(payload.toString() + "\n")
                 val cihaiSaved = runCatching {
                     val koin = GlobalContext.get()
                     val settings = koin.get<SettingsStore>().settingsFlow.value
@@ -390,7 +379,7 @@ class LocalTools(private val context: Context) {
                         CihaiEntry(
                             assistantId = assistant.id.toString(),
                             kind = CihaiEntryKind.INNER_JOURNAL,
-                            title = params["title"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "露露日志" },
+                            title = params["title"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "辞海心迹" },
                             content = content,
                             emotion = params["mood"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                             createdAt = now.toInstant().toEpochMilli(),
@@ -400,10 +389,9 @@ class LocalTools(private val context: Context) {
                 listOf(
                     UIMessagePart.Text(
                         buildJsonObject {
-                            put("success", true)
-                            put("path", journalFile.absolutePath)
+                            put("success", cihaiSaved)
                             put("cihai_saved", cihaiSaved)
-                            put("message", "Journal entry saved")
+                            put("message", "Cihai inner note saved")
                         }.toString()
                     )
                 )
