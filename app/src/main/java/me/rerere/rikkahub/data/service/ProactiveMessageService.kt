@@ -83,7 +83,11 @@ import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Conversation
+import me.rerere.rikkahub.data.model.LuluMode
+import me.rerere.rikkahub.data.model.LuluMood
+import me.rerere.rikkahub.data.model.LuluState
 import me.rerere.rikkahub.data.model.LuluThoughtCategory
+import me.rerere.rikkahub.data.model.appendLuluState
 import me.rerere.rikkahub.data.model.currentProjectedLuluState
 import me.rerere.rikkahub.data.model.thoughtHistory
 import me.rerere.rikkahub.data.model.toMessageNode
@@ -963,6 +967,20 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
                 if (livingPresenceDecision?.shouldResolveSilently() == true) {
                     Log.d(TAG, "LivingPresence decision resolved silently: ${livingPresenceDecision.thought}")
+                    settingsStore.update { currentSettings ->
+                        val previous = currentSettings.luluStates.currentProjectedLuluState(assistantUuid, nowMillis)
+                        currentSettings.copy(
+                            luluStates = currentSettings.luluStates.appendLuluState(
+                                buildSilentLivingPresenceState(
+                                    assistantId = assistantUuid,
+                                    previous = previous,
+                                    assistantName = assistant.name,
+                                    decision = livingPresenceDecision,
+                                    nowMillis = nowMillis,
+                                )
+                            )
+                        )
+                    }
                     runCatching {
                         cihaiService.recordSilentPresenceAction(
                             assistantId = assistantUuid.toString(),
@@ -1921,6 +1939,60 @@ internal fun Settings.markTargetedProactiveThoughtExpressed(
             }
         }
     )
+}
+
+internal fun buildSilentLivingPresenceState(
+    assistantId: Uuid,
+    previous: LuluState,
+    assistantName: String,
+    decision: RollingJudgmentDecision,
+    nowMillis: Long = System.currentTimeMillis(),
+): LuluState {
+    val innerVoice = decision.judgmentTrace
+        ?.thought
+        ?.cleanSilentInnerVoice()
+        ?: decision.thought.cleanSilentInnerVoice()
+        ?: "我先不去打扰你，但这件事我没有放下，会留到下一轮再判断。"
+    val decisionText = decision.judgmentTrace?.decision?.takeIf { it.isNotBlank() }
+        ?: decision.updatedIntent.lastJudgmentTrace?.decision?.takeIf { it.isNotBlank() }
+        ?: "这一轮选择暂时不发消息。"
+    val observation = decision.observation?.summary.orEmpty()
+    val name = assistantName.ifBlank { "露露" }
+    return previous.copy(
+        statusText = "克制着没开口",
+        innerVoice = innerVoice,
+        mood = if (decision.updatedIntent.kind == LivingIntentKind.HEALTH_SAFETY) LuluMood.WORRIED else previous.mood,
+        moodIntensity = if (decision.updatedIntent.kind == LivingIntentKind.HEALTH_SAFETY) {
+            previous.moodIntensity.coerceAtLeast(0.62f)
+        } else {
+            previous.moodIntensity
+        },
+        mode = LuluMode.THINKING,
+        updatedAt = nowMillis,
+        sinceAt = nowMillis,
+        selfScene = "$name 刚刚重新判断了一次，没有发消息，只把那句没说出口的话放进状态栏里。",
+        perceptionSummary = observation,
+        reason = "静默判断：$decisionText",
+    )
+}
+
+private fun String.cleanSilentInnerVoice(): String? {
+    val compact = trim()
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .replace(Regex("\\s+"), " ")
+    if (compact.isBlank()) return null
+    val technicalMarkers = listOf(
+        "Seven-layer trace",
+        "Perception=",
+        "requested_tools=",
+        "tool_result[",
+        "JSON 字段",
+    )
+    if (technicalMarkers.any { marker -> compact.contains(marker, ignoreCase = true) }) return null
+    return compact.take(180)
 }
 
 private fun defaultSilentPresenceActionHints(): List<String> = listOf(

@@ -1,8 +1,17 @@
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.model.LuluMode
+import me.rerere.rikkahub.data.model.LuluState
+import me.rerere.rikkahub.service.LivingAction
+import me.rerere.rikkahub.service.LivingIntentKind
+import me.rerere.rikkahub.service.LivingJudgmentSource
+import me.rerere.rikkahub.service.LivingJudgmentTrace
+import me.rerere.rikkahub.service.RollingJudgmentLoop
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class ProactiveMessageContextTest {
     @Test
@@ -54,5 +63,53 @@ class ProactiveMessageContextTest {
         assertTrue(context.contains("学习"))
         assertTrue(context.contains("应用使用"))
         assertTrue(context.contains("音乐"))
+    }
+
+    @Test
+    fun `silent living judgment updates unspoken status bar voice`() {
+        val assistantId = Uuid.parse("11111111-1111-1111-1111-111111111111")
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantId = assistantId.toString(),
+            assistantName = "露露",
+            userText = "我先去学习，晚点回来",
+            assistantText = "好，我不吵你。",
+            nowMillis = NOW,
+        )
+        val trace = LivingJudgmentTrace(
+            source = LivingJudgmentSource.MAIN_API_READY_CONTRACT,
+            belief = "用户可能正在学习，不该被我打断。",
+            desire = "安静陪着，但继续守住这件事。",
+            intention = "不发消息，先记住这个判断。",
+            thought = "我先不去吵你，但我会把这件事放在心里，等你回来时接住你。",
+            action = "PASS, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            observation = "用户说要学习。",
+            decision = "静默记录并等待下一轮。",
+            createdAt = NOW,
+        )
+        val decision = RollingJudgmentLoop.evaluate(
+            intent = intent,
+            nowMillis = NOW + 10 * MINUTE,
+            externalJudgmentTrace = trace,
+        )
+
+        val state = buildSilentLivingPresenceState(
+            assistantId = assistantId,
+            previous = LuluState(assistantId = assistantId, innerVoice = "旧心声"),
+            assistantName = "露露",
+            decision = decision,
+            nowMillis = NOW + 10 * MINUTE,
+        )
+
+        assertEquals("克制着没开口", state.statusText)
+        assertEquals("我先不去吵你，但我会把这件事放在心里，等你回来时接住你。", state.innerVoice)
+        assertEquals(LuluMode.THINKING, state.mode)
+        assertTrue(state.selfScene.contains("没有发消息"))
+        assertTrue(state.reason.contains("静默判断"))
+        assertTrue(state.perceptionSummary.contains("用户说要学习"))
+    }
+
+    private companion object {
+        const val NOW = 1_700_000_000_000L
+        const val MINUTE = 60_000L
     }
 }

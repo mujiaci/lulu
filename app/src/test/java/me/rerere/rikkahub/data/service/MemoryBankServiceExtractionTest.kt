@@ -88,6 +88,50 @@ class MemoryBankServiceExtractionTest {
     }
 
     @Test
+    fun `save extracted memories summarizes raw tool observation before display`() = runBlocking {
+        val dao = RecordingMemoryBankDAO()
+        val service = MemoryBankService(
+            memoryBankDAO = dao,
+            okHttpClient = null,
+            context = null,
+        )
+        val rawToolDump = """
+            Seven-layer trace: 情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀。
+            Perception=Perception layer before seven-layer deliberation:
+            requested_tools=today_schedule, calendar_tool, get_app_usage;
+            tool_observations=tool_result[today_schedule]={
+              "success":true,
+              "source":"study_app_local_store",
+              "undone_tasks":[{"title":"复盘刑法学第 1 章：听众合法硕刑法课程 75-90 分钟"}]
+            }
+        """.trimIndent()
+
+        val saved = service.saveExtractedMemories(
+            candidates = listOf(
+                AffectiveMemoryCandidate(
+                    type = "cihai_reflection",
+                    content = rawToolDump,
+                    roleFeeling = "我重新判断后选择不立刻打扰用户。",
+                    unspokenThought = "我先不去吵你，但会记得你有起床和学习安排。",
+                    importance = 3,
+                )
+            ),
+            assistantId = "assistant-1",
+            conversationId = null,
+            createdAt = 1234L,
+        )
+
+        val inserted = dao.inserted.single()
+        assertEquals(saved.single().content, inserted.content)
+        assertTrue(inserted.content.startsWith("我记得"))
+        assertTrue(inserted.content.contains("我先不去吵你"))
+        assertFalse(inserted.content.contains("tool_result"))
+        assertFalse(inserted.content.contains("requested_tools"))
+        assertFalse(inserted.content.contains("{\"success\""))
+        assertTrue(inserted.embeddingText!!.contains("起床和学习安排"))
+    }
+
+    @Test
     fun `build recall context marks injected memories as recalled`() = runBlocking {
         val dao = RecordingMemoryBankDAO(
             assistantMemories = listOf(

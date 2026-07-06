@@ -293,6 +293,7 @@ class MemoryBankService(
         val saved = candidates
             .map { it.normalized() }
             .filter { it.content.isNotBlank() }
+            .filterNot { it.shouldSkipMemoryBankWrite() }
             .map { candidate ->
                 val entity = candidate.toEntity(
                     assistantId = assistantId,

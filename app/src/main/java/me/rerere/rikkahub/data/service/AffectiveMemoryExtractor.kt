@@ -71,8 +71,12 @@ data class AffectiveMemoryCandidate(
         createdAt: Long = System.currentTimeMillis(),
     ): MemoryBankEntity {
         val normalized = normalized()
+        val displayContent = normalized.toDisplayMemoryContent()
+        val embeddingText = normalized.embeddingText
+            ?.takeUnless { it.looksLikeRawToolOrTraceDump() }
+            ?: normalized.toEmbeddingMemoryText(displayContent)
         return MemoryBankEntity(
-            content = normalized.content,
+            content = displayContent,
             type = "message",
             title = normalized.title,
             memoryKind = normalized.type,
@@ -84,7 +88,7 @@ data class AffectiveMemoryCandidate(
             importance = normalized.importance,
             confidence = normalized.confidence,
             tagsJson = JsonInstant.encodeToString(normalized.tags),
-            embeddingText = normalized.embeddingText ?: normalized.content,
+            embeddingText = embeddingText,
             sourceMessageNodeIdsJson = JsonInstant.encodeToString(normalized.sourceMessageNodeIds),
             evidenceMessageNodeIdsJson = JsonInstant.encodeToString(normalized.evidenceMessageNodeIds),
             relatedMemoryIdsJson = JsonInstant.encodeToString(normalized.relatedMemoryIds),
@@ -100,6 +104,82 @@ data class AffectiveMemoryCandidate(
     }
 }
 
+internal fun AffectiveMemoryCandidate.shouldSkipMemoryBankWrite(): Boolean {
+    val normalized = normalized()
+    if (normalized.content.isBlank()) return true
+    if (normalized.content.looksLikeVocabularyDrill() && !normalized.hasAffectiveSummary()) return true
+    return normalized.content.looksLikeRawToolOrTraceDump() && !normalized.hasAffectiveSummary()
+}
+
+private fun AffectiveMemoryCandidate.hasAffectiveSummary(): Boolean =
+    !roleFeeling.isNullOrBlank() ||
+        !bodySense.isNullOrBlank() ||
+        !unspokenThought.isNullOrBlank() ||
+        !userSignal.isNullOrBlank() ||
+        !relationshipEffect.isNullOrBlank()
+
+private fun AffectiveMemoryCandidate.toDisplayMemoryContent(): String {
+    val normalized = normalized()
+    val lines = buildList {
+        normalized.unspokenThought?.let { add("没说出口：$it") }
+        normalized.roleFeeling?.let { add("当时感觉：$it") }
+        normalized.userSignal?.let { add("用户信号：$it") }
+        normalized.relationshipEffect?.let { add("关系影响：$it") }
+    }
+    if (lines.isNotEmpty()) {
+        return ("我记得这件事。" + lines.joinToString("；")).take(260)
+    }
+    if (normalized.content.looksLikeRawToolOrTraceDump()) {
+        return "我记得当时做过一次工具观察和内部判断，但原始结果只适合作为证据回查，不直接当作记忆内容。"
+    }
+    return firstPersonSummary(normalized.content).take(260)
+}
+
+private fun AffectiveMemoryCandidate.toEmbeddingMemoryText(displayContent: String): String =
+    listOfNotNull(
+        displayContent,
+        roleFeeling?.let { "roleFeeling=$it" },
+        bodySense?.let { "bodySense=$it" },
+        unspokenThought?.let { "unspokenThought=$it" },
+        userSignal?.let { "userSignal=$it" },
+        relationshipEffect?.let { "relationshipEffect=$it" },
+        tags.takeIf { it.isNotEmpty() }?.joinToString(prefix = "tags=", separator = ","),
+    ).joinToString("\n")
+
+private fun firstPersonSummary(content: String): String {
+    val compact = content.trim()
+        .lineSequence()
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .joinToString(" ")
+        .replace(Regex("\\s+"), " ")
+    if (compact.startsWith("我")) return compact
+    return "我记得：$compact"
+}
+
+private fun String.looksLikeRawToolOrTraceDump(): Boolean {
+    val markers = listOf(
+        "tool_result[",
+        "requested_tools=",
+        "available_requested_tools=",
+        "missing_requested_tools=",
+        "Seven-layer trace",
+        "Perception=",
+        "study_app_local_store",
+        "\"success\"",
+        "\"undone_tasks\"",
+    )
+    return markers.any { contains(it, ignoreCase = true) }
+}
+
+private fun String.looksLikeVocabularyDrill(): Boolean {
+    val words = Regex("[A-Za-z][A-Za-z'-]{2,}").findAll(this).map { it.value }.toList()
+    if (words.size < 12) return false
+    val uniqueRatio = words.distinctBy { it.lowercase() }.size.toDouble() / words.size
+    val hasSentencePunctuation = contains("。") || contains("，") || contains(". ") || contains("?")
+    return uniqueRatio > 0.75 && !hasSentencePunctuation
+}
+
 object AffectiveMemoryExtractor {
     fun buildExtractionPrompt(
         turns: List<MemoryExtractionTurn>,
@@ -112,6 +192,8 @@ object AffectiveMemoryExtractor {
             appendLine("角色设定摘要：${assistantPersona.take(1200)}")
         }
         appendLine("重点写$name 自己的情绪、身体感受、未说出口的想法、关系判断，而不是只记录用户流水账。")
+        appendLine("content 必须是$name 第一人称的压缩记忆摘要，不要粘贴工具 JSON、学习计划原文、单词表、长列表或完整 observation。")
+        appendLine("如果原文只是英文单词、工具结果、日程 JSON 或流水账，除非能提炼出用户偏好/承诺/关系变化/角色心声，否则不要写入 memories。")
         appendLine("unspokenThought 必须贴合$name 的人设、语言习惯和关系位置；不要写成旁白腔、客服腔或通用模板。")
         appendLine("unspokenThought 要尽量具体：写$name 当时的猜测、顾虑、想靠近但没有说出口的话、想做但暂时压住的动作、对用户真实状态的判断。不要只写“很担心”这类空泛短句。")
         appendLine("返回 JSON，格式为 {\"memories\":[...]}。不要输出解释。")
