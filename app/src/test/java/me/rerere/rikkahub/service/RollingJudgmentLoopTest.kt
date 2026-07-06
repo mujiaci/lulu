@@ -196,6 +196,39 @@ class RollingJudgmentLoopTest {
     }
 
     @Test
+    fun `decision exposes seven layer trace as structured fields`() {
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantName = "露露",
+            userText = "我要去学习专业课",
+            assistantText = "嗯，我帮你守着节奏。",
+            nowMillis = NOW,
+        )
+        val observation = LivingObservation(
+            summary = "Runtime observation: available_tools=get_app_usage,today_study_plan; study_tasks_open=3",
+            requestedTools = listOf("get_app_usage", "today_study_plan"),
+            signals = listOf("available_tool=get_app_usage", "study_tasks_open=3"),
+            createdAt = NOW + 30 * MINUTE,
+        )
+
+        val decision = RollingJudgmentLoop.evaluate(
+            intent = intent,
+            nowMillis = NOW + 30 * MINUTE,
+            externalObservation = observation,
+        )
+
+        val trace = decision.sevenLayerTrace
+        assertEquals("情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀", trace.architectureName)
+        assertTrue(trace.perception.contains("Runtime observation"))
+        assertTrue(trace.appraisal.contains(intent.appraisal.meaning))
+        assertTrue(trace.state.contains(intent.belief))
+        assertTrue(trace.state.contains(intent.traitMotive))
+        assertTrue(trace.deliberation.contains("ReAct"))
+        assertTrue(trace.actionPlanning.contains("TOOL_USE"))
+        assertTrue(trace.expression.contains(intent.emotion.emotionLabel))
+        assertTrue(trace.consolidation.contains(intent.consolidation.policyLearning))
+    }
+
+    @Test
     fun `rule fallback uses public pass action instead of legacy inner thought`() {
         val intent = RollingJudgmentLoop.createIntent(
             assistantName = "Lulu",

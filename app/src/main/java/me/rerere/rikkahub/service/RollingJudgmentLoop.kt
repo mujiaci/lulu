@@ -4,6 +4,8 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 import kotlin.math.max
 
+const val LIVING_SEVEN_LAYER_ARCHITECTURE_NAME = "情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀"
+
 @Serializable
 data class LivingIntent(
     val id: String = UUID.randomUUID().toString(),
@@ -135,6 +137,18 @@ data class LivingJudgmentTrace(
 }
 
 @Serializable
+data class LivingSevenLayerTrace(
+    val architectureName: String = LIVING_SEVEN_LAYER_ARCHITECTURE_NAME,
+    val perception: String,
+    val appraisal: String,
+    val state: String,
+    val deliberation: String,
+    val actionPlanning: String,
+    val expression: String,
+    val consolidation: String,
+)
+
+@Serializable
 enum class LivingJudgmentSource {
     MAIN_API_STRUCTURED_JUDGMENT,
     MAIN_API_READY_CONTRACT,
@@ -180,6 +194,7 @@ data class RollingJudgmentDecision(
     val updatedIntent: LivingIntent,
     val actions: List<LivingAction>,
     val thought: String,
+    val sevenLayerTrace: LivingSevenLayerTrace,
     val observationRequest: String? = null,
     val observation: LivingObservation? = null,
     val judgmentTrace: LivingJudgmentTrace? = null,
@@ -295,6 +310,7 @@ object RollingJudgmentLoop {
             },
             observation = observation,
             judgmentTrace = trace,
+            sevenLayerTrace = buildSevenLayerTrace(updated, observation, actions, trace, thought),
         )
     }
 
@@ -409,6 +425,59 @@ object RollingJudgmentLoop {
             appraisal = intent.appraisal,
             consolidation = intent.consolidation,
             historyNote = "第 ${intent.silentEvaluationCount + 1} 次静默判断；此前开口 ${intent.spokenCount} 次。cadence 由本轮审议决定，不作为原始感知。",
+        )
+
+    private fun buildSevenLayerTrace(
+        intent: LivingIntent,
+        observation: LivingObservation,
+        actions: List<LivingAction>,
+        trace: LivingJudgmentTrace,
+        thought: String,
+    ): LivingSevenLayerTrace =
+        LivingSevenLayerTrace(
+            perception = observation.summary,
+            appraisal = buildString {
+                append("意义=${intent.appraisal.meaning}")
+                append("；价值=${intent.appraisal.value}")
+                append("；风险=${intent.appraisal.risk}")
+                append("；成本=${intent.appraisal.cost}")
+                append("；后果=${intent.appraisal.consequence}")
+                append("；资源=${intent.appraisal.resources}")
+            },
+            state = buildString {
+                append("belief=${intent.belief}")
+                append("；traitMotive=${intent.traitMotive}")
+                append("；situationalMotive=${intent.situationalMotive}")
+                append("；intention=${intent.intention}")
+                append("；emotion=${intent.emotion.emotionLabel}/${intent.emotion.feltSense}")
+                append("；impulse=${intent.emotion.impulse}")
+                append("；restraint=${intent.emotion.restraintText}")
+            },
+            deliberation = buildString {
+                append("ReAct 审议：")
+                append(thought)
+                append("；decision=${trace.decision}")
+                trace.nextEvaluateDelayMinutes?.let { append("；nextEvaluateDelayMinutes=$it") }
+                trace.historyNote.takeIf { it.isNotBlank() }?.let { append("；history=$it") }
+            },
+            actionPlanning = buildString {
+                append("actions=${actions.joinToString(", ") { it.name }}")
+                if (LivingAction.TOOL_USE in actions || LivingAction.SET_ALARM in actions) {
+                    append("；requestedTools=${observation.requestedTools.joinToString(", ")}")
+                }
+                append("；observationSignals=${observation.signals.joinToString(", ")}")
+            },
+            expression = buildString {
+                append("表达读取当前情绪=${intent.emotion.emotionLabel}")
+                append("；语气由已决定行动和角色人设决定")
+                append("；正文/状态栏不重新决定政策")
+            },
+            consolidation = buildString {
+                append("episodicTrace=${intent.consolidation.episodicTrace}")
+                append("；affectiveResidue=${intent.consolidation.affectiveResidue}")
+                append("；semanticMemory=${intent.consolidation.semanticMemory}")
+                append("；policyLearning=${intent.consolidation.policyLearning}")
+            },
         )
 
     private fun evolveEmotion(
