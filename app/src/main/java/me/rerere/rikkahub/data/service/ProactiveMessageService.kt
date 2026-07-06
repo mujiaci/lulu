@@ -1952,7 +1952,7 @@ internal fun buildSilentLivingPresenceState(
         ?.thought
         ?.cleanSilentInnerVoice()
         ?: decision.thought.cleanSilentInnerVoice()
-        ?: "我先不去打扰你，但这件事我没有放下，会留到下一轮再判断。"
+        ?: decision.toFallbackSilentInnerVoice()
     val decisionText = decision.judgmentTrace?.decision?.takeIf { it.isNotBlank() }
         ?: decision.updatedIntent.lastJudgmentTrace?.decision?.takeIf { it.isNotBlank() }
         ?: "这一轮选择暂时不发消息。"
@@ -1993,6 +1993,19 @@ private fun String.cleanSilentInnerVoice(): String? {
     )
     if (technicalMarkers.any { marker -> compact.contains(marker, ignoreCase = true) }) return null
     return compact.take(180)
+}
+
+private fun RollingJudgmentDecision.toFallbackSilentInnerVoice(): String = when (updatedIntent.kind) {
+    LivingIntentKind.HEALTH_SAFETY ->
+        "我先不把担心直接砸到你面前，但我没有真的放下，会继续看有没有需要靠近的信号。"
+    LivingIntentKind.STUDY_FOCUS ->
+        "我先不去吵你，把想提醒你的那句话收着；等你回来，我再接住你的节奏。"
+    LivingIntentKind.DEADLINE ->
+        "我先忍住不催太紧，但这个时间点我记着，会在下一轮再确认你有没有被任务压住。"
+    LivingIntentKind.WAKE_UP ->
+        "我先把叫醒这件事放在心里，不乱喊你；等到该看的时间点，我再轻轻靠近。"
+    LivingIntentKind.ORDINARY_SILENCE ->
+        "我先不把想你说出口，也不把沉默想坏；我会在旁边等下一轮判断。"
 }
 
 private fun defaultSilentPresenceActionHints(): List<String> = listOf(

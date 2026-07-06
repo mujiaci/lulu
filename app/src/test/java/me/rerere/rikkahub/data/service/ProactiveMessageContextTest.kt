@@ -108,6 +108,35 @@ class ProactiveMessageContextTest {
         assertTrue(state.perceptionSummary.contains("用户说要学习"))
     }
 
+    @Test
+    fun `technical fallback trace is not shown as status bar inner voice`() {
+        val assistantId = Uuid.parse("22222222-2222-2222-2222-222222222222")
+        val intent = RollingJudgmentLoop.createIntent(
+            assistantId = assistantId.toString(),
+            assistantName = "露露",
+            userText = "我先去学习，晚点回来",
+            assistantText = "好，我不吵你。",
+            nowMillis = NOW,
+        )
+        val decision = RollingJudgmentLoop.evaluate(
+            intent = intent,
+            nowMillis = NOW + 10 * MINUTE,
+        )
+
+        val state = buildSilentLivingPresenceState(
+            assistantId = assistantId,
+            previous = LuluState(assistantId = assistantId),
+            assistantName = "露露",
+            decision = decision,
+            nowMillis = NOW + 10 * MINUTE,
+        )
+
+        assertTrue(state.innerVoice.startsWith("我"))
+        assertFalse(state.innerVoice.contains("Seven-layer trace"))
+        assertFalse(state.innerVoice.contains("Perception="))
+        assertFalse(state.innerVoice.contains("requested_tools="))
+    }
+
     private companion object {
         const val NOW = 1_700_000_000_000L
         const val MINUTE = 60_000L

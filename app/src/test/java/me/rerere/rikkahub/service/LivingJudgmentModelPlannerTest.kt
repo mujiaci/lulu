@@ -33,6 +33,9 @@ class LivingJudgmentModelPlannerTest {
         assertTrue(prompt.contains("不等于多久后发消息"))
         assertTrue(prompt.contains("不设置系统层工具安全门"))
         assertTrue(prompt.contains("是否需要向用户澄清或确认"))
+        assertTrue(prompt.contains("thought 必须是第一人称"))
+        assertTrue(prompt.contains("状态栏"))
+        assertTrue(prompt.contains("不要写 Seven-layer trace"))
     }
 
     @Test

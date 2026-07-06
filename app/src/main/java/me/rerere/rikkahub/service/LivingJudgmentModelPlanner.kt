@@ -56,6 +56,7 @@ object LivingJudgmentModelPlanner {
         appendLine("行动池只能从 MESSAGE, WAIT, TOOL_USE, SET_ALARM, JOURNAL_WRITE, MEMORY_UPDATE, SCHEDULE_NEXT_TICK, ASK_USER, PASS 中选；旧名 TOOL_CHECK 等同 TOOL_USE，旧名 ASK_CAPABILITY 等同 ASK_USER。")
         appendLine("下一轮判断时间不能写死。你必须根据这一次意义评估和审议判断决定 nextEvaluateDelayMinutes；这表示多久后再次想这件事，不等于多久后发消息。")
         appendLine("普通无风险沉默不要机械 5 分钟；身体安全/起床/DDL 可以更短，学习或忙碌应更克制。")
+        appendLine("thought 必须是第一人称、角色本人没有说出口的一小段心声，会进入状态栏“没说出口”；不要写 Seven-layer trace、Perception=、工具 JSON、字段名或分析提纲。")
         appendLine("只返回 JSON，不要 markdown，不要解释。")
         appendLine("JSON 字段：belief, traitMotive, situationalMotive, motive, emotion, intention, thought, action, observation, decision, nextEvaluateDelayMinutes, appraisal, consolidation, historyNote。")
         appendLine("emotion 字段：emotionLabel, feltSense, impulse, restraint, intensity。")
