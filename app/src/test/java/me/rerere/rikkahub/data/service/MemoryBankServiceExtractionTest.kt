@@ -42,7 +42,7 @@ class MemoryBankServiceExtractionTest {
         assertEquals(100, saved.single().id)
         assertEquals(1, dao.inserted.size)
         val inserted = dao.inserted.single()
-        assertEquals("manual", inserted.type)
+        assertEquals("message", inserted.type)
         assertEquals("role_emotion", inserted.memoryKind)
         assertEquals("assistant-1", inserted.assistantId)
         assertEquals("conversation-1", inserted.conversationId)
@@ -50,6 +50,32 @@ class MemoryBankServiceExtractionTest {
         assertEquals("pending", inserted.vectorStatus)
         assertTrue(inserted.tagsJson!!.contains("praise"))
         assertTrue(inserted.sourceMessageNodeIdsJson!!.contains("user-node-1"))
+    }
+
+    @Test
+    fun `save extracted memories skips vocabulary drills without affective summary`() = runBlocking {
+        val dao = RecordingMemoryBankDAO()
+        val service = MemoryBankService(
+            memoryBankDAO = dao,
+            okHttpClient = null,
+            context = null,
+        )
+
+        val saved = service.saveExtractedMemories(
+            candidates = listOf(
+                AffectiveMemoryCandidate(
+                    type = "event",
+                    content = "abandon ability absent absorb abstract abuse access accident account accuse achieve acquire adapt address adjust",
+                    importance = 2,
+                )
+            ),
+            assistantId = "assistant-1",
+            conversationId = "conversation-1",
+            createdAt = 1234L,
+        )
+
+        assertEquals(emptyList<MemoryBankEntity>(), saved)
+        assertEquals(0, dao.inserted.size)
     }
 
     @Test
