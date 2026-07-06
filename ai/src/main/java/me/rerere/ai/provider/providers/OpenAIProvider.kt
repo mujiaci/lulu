@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -272,6 +273,7 @@ class OpenAIProvider(
                     }
                 )
             }.mergeCustomBody(params.customBody)
+                .withImageTransportDefaults(params.model.modelId)
         )
 
         val request = Request.Builder()
@@ -423,6 +425,15 @@ class OpenAIProvider(
     }
 }
 
+internal fun JsonObject.withImageTransportDefaults(modelId: String): JsonObject {
+    if (!modelId.startsWith("dall-e", ignoreCase = true)) return this
+    if ("response_format" in this) return this
+    return buildJsonObject {
+        this@withImageTransportDefaults.forEach { (key, value) -> put(key, value) }
+        put("response_format", "b64_json")
+    }
+}
+
 private fun kotlinx.serialization.json.JsonObject.toImageGenerationItemOrNull(client: OkHttpClient): ImageGenerationItem? {
     val b64Json = this["b64_json"]?.jsonPrimitive?.contentOrNull
     if (!b64Json.isNullOrBlank()) {
@@ -441,9 +452,10 @@ private fun String.toImageDataPayload(client: OkHttpClient): String {
         trimmed.startsWith("data:image") -> trimmed.substringAfter("base64,")
         trimmed.startsWith("http://") || trimmed.startsWith("https://") -> {
             val request = Request.Builder().url(trimmed).get().build()
-            val response = client.newCall(request).execute()
-            if (!response.isSuccessful) error("Failed to download generated image: ${response.code}")
-            android.util.Base64.encodeToString(response.body.bytes(), android.util.Base64.NO_WRAP)
+            client.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) error("Failed to download generated image: ${response.code}")
+                android.util.Base64.encodeToString(response.body.bytes(), android.util.Base64.NO_WRAP)
+            }
         }
         else -> trimmed
     }
