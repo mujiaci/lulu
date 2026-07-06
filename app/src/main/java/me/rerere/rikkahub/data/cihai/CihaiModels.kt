@@ -264,10 +264,10 @@ fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
         roleFeeling = feeling,
         unspokenThought = if (kind == CihaiEntryKind.INNER_JOURNAL) content.trim() else null,
         relationshipEffect = when (kind) {
-            CihaiEntryKind.INNER_JOURNAL -> "角色在用户沉默时产生了内心判断，并把未说出口的想法沉淀下来。"
-            CihaiEntryKind.ACTION_LOG -> "角色记录了自己等待、克制、观察或照看的行动选择。"
-            CihaiEntryKind.READING_NOTE -> "角色通过阅读形成了新的理解，可能改变之后陪伴用户的方式。"
-            CihaiEntryKind.REFLECTION -> "角色把多次判断后的经验整理成后续可复用的长期记忆。"
+            CihaiEntryKind.INNER_JOURNAL -> "我在用户沉默时产生了内心判断，并把没说出口的想法沉淀下来。"
+            CihaiEntryKind.ACTION_LOG -> "我记录了自己等待、克制、观察或照看的行动选择。"
+            CihaiEntryKind.READING_NOTE -> "我通过阅读形成了新的理解，可能改变之后陪伴用户的方式。"
+            CihaiEntryKind.REFLECTION -> "我把多次判断后的经验整理成后续可复用的长期记忆。"
         },
         importance = when (kind) {
             CihaiEntryKind.REFLECTION -> 5
@@ -280,7 +280,7 @@ fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
             append(title)
             append("\n")
             append(fullContent)
-            append("\n记忆用途：之后遇到相似沉默、学习、身体状态或关系情境时，角色应参考这次判断。")
+            append("\n记忆用途：之后遇到相似沉默、学习、身体状态或关系情境时，我应该参考这次判断。")
         },
         people = listOf("用户", "角色"),
         topics = listOf("活人感", "内心日志", kind.label),

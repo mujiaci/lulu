@@ -539,6 +539,7 @@ private fun buildMemoryRecallContextFromSelected(
     return buildString {
         appendLine("<lulu_memory>")
         appendLine("这些是当前角色此刻自然想起的记忆，只作为联想参考。不要逐条复述，也不要说“我查到记忆”。")
+        appendLine("载入这些记忆时必须代入当前角色，把它们当成“我记得/我当时/我没说出口”的内在回忆来理解；后续总结、沉淀和回应都要保持第一人称，不要改写成旁白或第三人称。")
         sections.forEach { (title, items) ->
             appendLine("$title：")
             items.forEach { memory ->
@@ -768,10 +769,10 @@ private fun List<MemoryBankEntity>.deduplicateNearVectors(): List<MemoryBankEnti
 private fun MemoryBankEntity.toRecallLine(maxContentLength: Int): String {
     val parts = buildList {
         add(content.trim())
-        roleFeeling?.takeIf { it.isNotBlank() }?.let { add("露露当时的感觉：$it") }
-        bodySense?.takeIf { it.isNotBlank() }?.let { add("身体感：$it") }
-        unspokenThought?.takeIf { it.isNotBlank() }?.let { add("没说出口的想法：$it") }
-        relationshipEffect?.takeIf { it.isNotBlank() }?.let { add("关系判断：$it") }
+        roleFeeling?.takeIf { it.isNotBlank() }?.let { add("我当时的感觉：$it") }
+        bodySense?.takeIf { it.isNotBlank() }?.let { add("我的身体感：$it") }
+        unspokenThought?.takeIf { it.isNotBlank() }?.let { add("我没说出口的想法：$it") }
+        relationshipEffect?.takeIf { it.isNotBlank() }?.let { add("我的关系判断：$it") }
     }
     val prefix = if (confidence < 0.7) "可能：" else ""
     return (prefix + parts.joinToString("；")).ellipsize(maxContentLength)

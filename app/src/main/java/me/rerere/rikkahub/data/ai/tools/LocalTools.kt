@@ -345,6 +345,7 @@ class LocalTools(private val context: Context) {
                 Write a short private journal entry for the character.
                 Use when the character wants to record an inner trace, action choice, reflection, or event for later memory.
                 This stores the entry in Cihai, keeps the legacy private JSONL backup, and sends it to the memory bank for vectorization.
+                The content must be written in first person, in character, as what I remember or did not say aloud; do not write detached third-person notes.
             """.trimIndent().replace("\n", " "),
             parameters = {
                 InputSchema.Obj(
@@ -355,7 +356,7 @@ class LocalTools(private val context: Context) {
                         })
                         put("content", buildJsonObject {
                             put("type", "string")
-                            put("description", "Journal content to save")
+                            put("description", "First-person in-character journal content to save")
                         })
                         put("mood", buildJsonObject {
                             put("type", "string")

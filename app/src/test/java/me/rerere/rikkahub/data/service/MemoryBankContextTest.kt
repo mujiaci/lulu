@@ -35,6 +35,12 @@ class MemoryBankContextTest {
         assertTrue(context.contains("身体和五感："))
         assertTrue(context.contains("未完成承诺："))
         assertTrue(context.contains("露露觉得自己被认真看见"))
+        assertTrue(context.contains("代入当前角色"))
+        assertTrue(context.contains("第一人称"))
+        assertTrue(context.contains("我当时的感觉：开心、害羞、想靠近"))
+        assertTrue(context.contains("我的身体感：胸口发热，回复变轻快"))
+        assertTrue(context.contains("我的关系判断：亲密度上升"))
+        assertTrue(!context.contains("露露当时的感觉"))
         assertTrue(context.contains("胸口发热"))
         assertTrue(context.contains("默认在 master 分支修改"))
     }

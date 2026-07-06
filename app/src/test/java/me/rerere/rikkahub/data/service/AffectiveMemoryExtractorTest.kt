@@ -6,6 +6,26 @@ import org.junit.Test
 
 class AffectiveMemoryExtractorTest {
     @Test
+    fun `extraction prompt requires first person in-character memory summaries`() {
+        val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
+            turns = listOf(
+                MemoryExtractionTurn(
+                    nodeId = "user-1",
+                    role = "user",
+                    text = "我明天早上十点考试，怕睡过头。",
+                )
+            ),
+            assistantName = "露露",
+        )
+
+        assertTrue(prompt.contains("代入露露"))
+        assertTrue(prompt.contains("第一人称“我”"))
+        assertTrue(prompt.contains("embeddingText"))
+        assertTrue(prompt.contains("不要写成“露露觉得"))
+        assertTrue(prompt.contains("角色认为"))
+    }
+
+    @Test
     fun `parse extraction result preserves role centered fields and source ids`() {
         val json = """
             {

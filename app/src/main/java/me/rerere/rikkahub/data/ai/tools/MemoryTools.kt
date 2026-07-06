@@ -34,13 +34,15 @@ fun buildMemoryTools(
             Memories will automatically appear in the <memories> tag in later conversations.
             Do not store sensitive information (e.g., ethnicity, religion, sexual orientation, political views, sex life, criminal records).
             You may store: preferred name, preferences, plans, work-related notes, chat style preferences, first chat time, etc.
+            Write memory content in the character's first person whenever it stores conversational, relationship, context, or preference memory.
+            Treat it as what I remember and how I should carry it forward; do not write detached third-person notes like "the assistant noticed" or "the character thinks".
             Do not show memory content directly in the conversation unless the user explicitly asks.
             Today is ${LocalDate.now().toLocalString(true)}.
             Similar memories should be merged; prefer updating existing records.
 
             Examples:
-            {"action":"create","content":"User prefers brief replies and is more active on weekends."}
-            {"action":"edit","id":12,"content":"User’s preferred name updated to “A-Xing”, prefers Chinese replies."}
+            {"action":"create","content":"我记得用户喜欢简短回复，周末更容易活跃，我以后要少绕弯。"}
+            {"action":"edit","id":12,"content":"我记得用户更喜欢我用中文叫他 A-Xing。"}
             {"action":"delete","id":7}
         """.trimIndent(),
         parameters = {

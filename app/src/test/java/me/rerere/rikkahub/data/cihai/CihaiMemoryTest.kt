@@ -43,11 +43,15 @@ class CihaiMemoryTest {
             conversationId = null,
             createdAt = entry.createdAt,
         )
+        val candidate = entry.toMemoryCandidate()
 
         assertEquals("cihai_journal", memory.memoryKind)
         assertEquals("pending", memory.vectorStatus)
         assertTrue(memory.embeddingText!!.contains("担心但克制"))
         assertTrue(memory.tagsJson!!.contains("辞海"))
+        assertTrue(candidate.relationshipEffect!!.startsWith("我在用户沉默时"))
+        assertTrue(candidate.embeddingText!!.contains("我应该参考这次判断"))
+        assertTrue(!candidate.relationshipEffect!!.contains("角色在用户"))
     }
 
     @Test
