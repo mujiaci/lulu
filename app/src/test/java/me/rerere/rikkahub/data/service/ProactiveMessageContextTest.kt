@@ -83,7 +83,7 @@ class ProactiveMessageContextTest {
             desire = "安静陪着，但继续守住这件事。",
             intention = "不发消息，先记住这个判断。",
             thought = "我先不去吵你，但我会把这件事放在心里，等你回来时接住你。",
-            action = "PASS, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            action = "PASS, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION",
             observation = "用户说要学习。",
             decision = "静默记录并等待下一轮。",
             createdAt = NOW,

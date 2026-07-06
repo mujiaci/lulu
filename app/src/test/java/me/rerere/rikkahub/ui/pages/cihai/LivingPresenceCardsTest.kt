@@ -9,7 +9,7 @@ import org.junit.Test
 
 class LivingPresenceCardsTest {
     @Test
-    fun `cards show only selected assistant intents sorted by next evaluation`() {
+    fun `cards show selected assistant concerns sorted by next perception`() {
         val later = RollingJudgmentLoop.createIntent(
             assistantId = "lulu",
             assistantName = "露露",
@@ -40,11 +40,11 @@ class LivingPresenceCardsTest {
 
         assertEquals(listOf(LivingIntentKind.HEALTH_SAFETY, LivingIntentKind.STUDY_FOCUS), cards.map { it.kind })
         assertTrue(cards.first().title.contains("身体"))
-        assertTrue(cards.first().stateLine.contains("信念"))
-        assertTrue(cards.first().stateLine.contains("长期动机"))
-        assertTrue(cards.first().stateLine.contains("情境动机"))
+        assertTrue(cards.first().eventLine.contains("事件："))
+        assertTrue(cards.first().goalLine.contains("目标："))
+        assertTrue(cards.first().stateLine.contains("本轮判断"))
         assertTrue(cards.first().emotionLine.contains("冲动"))
-        assertTrue(cards.first().cadenceLine.contains("5/10/20/40/90"))
+        assertTrue(cards.first().perceptionLine.contains("重新从感知层开始"))
     }
 
     @Test
@@ -68,7 +68,7 @@ class LivingPresenceCardsTest {
             nowMillis = NOW,
         ).single()
 
-        assertEquals("现在该重新判断", card.nextEvaluateText)
+        assertEquals("现在该重新感知", card.nextPerceptionText)
         assertTrue(card.countLine.contains("默默判断 3 次"))
         assertTrue(card.countLine.contains("开口 1 次"))
         assertTrue(card.countLine.contains("克制 9/10"))

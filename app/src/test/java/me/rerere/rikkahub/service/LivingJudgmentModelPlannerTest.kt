@@ -6,7 +6,7 @@ import org.junit.Test
 
 class LivingJudgmentModelPlannerTest {
     @Test
-    fun `prompt asks model to choose next evaluation delay`() {
+    fun `prompt asks model to choose next perception delay`() {
         val intent = RollingJudgmentLoop.createIntent(
             assistantName = "露露",
             userText = "我先忙一下",
@@ -23,16 +23,17 @@ class LivingJudgmentModelPlannerTest {
             )
         )
 
-        assertTrue(prompt.contains("nextEvaluateDelayMinutes"))
-        assertTrue(prompt.contains("情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀"))
-        assertTrue(prompt.contains("traitMotive"))
-        assertTrue(prompt.contains("situationalMotive"))
+        assertTrue(prompt.contains("nextPerceptionDelayMinutes"))
+        assertTrue(prompt.contains("感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆"))
+        assertTrue(prompt.contains("Perception 是本轮完整世界包"))
+        assertTrue(prompt.contains("角色的一切判断、行动、沉默、回复和状态栏都必须按照人设和上下文"))
         assertTrue(prompt.contains("emotionLabel"))
-        assertTrue(prompt.contains("ReAct 属于这里"))
+        assertTrue(prompt.contains("同步查询工具的结果补入本轮上下文"))
         assertTrue(prompt.contains("不要照抄固定表"))
         assertTrue(prompt.contains("不等于多久后发消息"))
-        assertTrue(prompt.contains("不设置系统层工具安全门"))
-        assertTrue(prompt.contains("是否需要向用户澄清或确认"))
+        assertTrue(prompt.contains("WRITE_DIARY"))
+        assertTrue(prompt.contains("SCHEDULE_NEXT_PERCEPTION"))
+        assertTrue(prompt.contains("MEMORY_UPDATE 不要再输出"))
         assertTrue(prompt.contains("thought 必须是第一人称"))
         assertTrue(prompt.contains("状态栏"))
         assertTrue(prompt.contains("不要写 Seven-layer trace"))
@@ -79,7 +80,7 @@ class LivingJudgmentModelPlannerTest {
                   "action": "TOOL_CHECK, MESSAGE, SCHEDULE_NEXT_TICK",
                   "observation": "get_gadgetbridge_data is missing.",
                   "decision": "可以准备轻声确认，但允许后续生成时 PASS。",
-                  "nextEvaluateDelayMinutes": 17,
+                  "nextPerceptionDelayMinutes": 17,
                   "appraisal": {
                     "meaning": "身体安全优先。",
                     "value": "确认用户安全。",
@@ -102,8 +103,8 @@ class LivingJudgmentModelPlannerTest {
         )
 
         assertEquals(LivingJudgmentSource.MAIN_API_STRUCTURED_JUDGMENT, trace?.source)
-        assertEquals("TOOL_USE, MESSAGE, SCHEDULE_NEXT_TICK", trace?.action)
-        assertEquals(17, trace?.nextEvaluateDelayMinutes)
+        assertEquals("TOOL_USE, MESSAGE, SCHEDULE_NEXT_PERCEPTION", trace?.action)
+        assertEquals(17, trace?.effectiveNextPerceptionDelayMinutes)
         assertTrue(trace?.thought?.contains("不能假装知道") == true)
         assertTrue(trace?.motive?.contains("确认安全") == true)
         assertTrue(trace?.traitMotive?.contains("保护用户") == true)

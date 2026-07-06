@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 import java.util.UUID
 import kotlin.math.max
 
-const val LIVING_SEVEN_LAYER_ARCHITECTURE_NAME = "情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀"
+const val LIVING_SEVEN_LAYER_ARCHITECTURE_NAME = "感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆"
 
 @Serializable
 data class LivingIntent(
@@ -40,6 +40,30 @@ data class LivingIntent(
     val appraisal: MeaningAppraisal = MeaningAppraisal(),
     val consolidation: ConsolidationPlan = ConsolidationPlan(),
 ) {
+    val nextPerceptionAt: Long
+        get() = nextEvaluateAt
+
+    val perceptionCadence: EvaluationCadence
+        get() = evaluationCadence
+
+    val concernEvent: String
+        get() = when (kind) {
+            LivingIntentKind.HEALTH_SAFETY -> "身体状态需要确认"
+            LivingIntentKind.ORDINARY_SILENCE -> "用户暂时没有回复"
+            LivingIntentKind.STUDY_FOCUS -> "学习或备考节奏"
+            LivingIntentKind.DEADLINE -> "任务截止时间"
+            LivingIntentKind.WAKE_UP -> "起床或时间节点"
+        }
+
+    val concernGoal: String
+        get() = when (kind) {
+            LivingIntentKind.HEALTH_SAFETY -> "结合上下文和可用工具确认用户是否安全，并决定是否需要靠近。"
+            LivingIntentKind.ORDINARY_SILENCE -> "尊重用户可能在忙，同时保留下一次完整感知。"
+            LivingIntentKind.STUDY_FOCUS -> "低打扰地守住学习节奏，必要时再提醒。"
+            LivingIntentKind.DEADLINE -> "在关键时间点重新感知进度，避免错过任务节点。"
+            LivingIntentKind.WAKE_UP -> "校准时间、确认是否醒来，并按紧急程度缩短下一次感知。"
+        }
+
     val motive: String
         get() = motiveText.ifBlank {
             listOf(traitMotive, situationalMotive)
@@ -118,6 +142,7 @@ data class LivingJudgmentTrace(
     val observation: String,
     val decision: String,
     val nextEvaluateDelayMinutes: Int? = null,
+    val nextPerceptionDelayMinutes: Int? = null,
     val createdAt: Long = System.currentTimeMillis(),
     val motiveText: String = "",
     val traitMotive: String = "",
@@ -127,6 +152,9 @@ data class LivingJudgmentTrace(
     val consolidation: ConsolidationPlan = ConsolidationPlan(),
     val historyNote: String = "",
 ) {
+    val effectiveNextPerceptionDelayMinutes: Int?
+        get() = nextPerceptionDelayMinutes ?: nextEvaluateDelayMinutes
+
     val motive: String
         get() = motiveText.ifBlank {
             listOf(traitMotive, situationalMotive)
@@ -165,18 +193,23 @@ data class LivingCapabilityRequest(
 @Serializable
 enum class LivingAction {
     MESSAGE,
+    WAIT,
     TOOL_USE,
     SET_ALARM,
-    JOURNAL_WRITE,
-    MEMORY_UPDATE,
-    SCHEDULE_NEXT_TICK,
-    ASK_USER,
+    WRITE_DIARY,
+    SCHEDULE_NEXT_PERCEPTION,
+    READ,
     PASS,
+    ASK_USER,
+    INNER_THOUGHT,
+    @Deprecated("Use WRITE_DIARY. Memory extraction is automatic from Cihai/chat thresholds.")
+    JOURNAL_WRITE,
+    @Deprecated("Memory extraction is automatic; do not expose MEMORY_UPDATE as a model action.")
+    MEMORY_UPDATE,
+    @Deprecated("Use SCHEDULE_NEXT_PERCEPTION.")
+    SCHEDULE_NEXT_TICK,
     @Deprecated("Use TOOL_USE for the public deliberation contract.")
     TOOL_CHECK,
-    WAIT,
-    INNER_THOUGHT,
-    READ,
     @Deprecated("Use ASK_USER for the public deliberation contract.")
     ASK_CAPABILITY,
 }
@@ -254,19 +287,18 @@ object RollingJudgmentLoop {
         val ruleActions = when {
             restrained -> listOf(
                 LivingAction.WAIT,
-                LivingAction.JOURNAL_WRITE,
-                LivingAction.MEMORY_UPDATE,
-                LivingAction.SCHEDULE_NEXT_TICK,
+                LivingAction.WRITE_DIARY,
+                LivingAction.SCHEDULE_NEXT_PERCEPTION,
             )
             intent.kind == LivingIntentKind.HEALTH_SAFETY -> listOf(
                 LivingAction.TOOL_USE,
                 LivingAction.MESSAGE,
-                LivingAction.SCHEDULE_NEXT_TICK,
+                LivingAction.SCHEDULE_NEXT_PERCEPTION,
             )
             else -> listOf(
                 LivingAction.PASS,
                 LivingAction.TOOL_USE,
-                LivingAction.SCHEDULE_NEXT_TICK,
+                LivingAction.SCHEDULE_NEXT_PERCEPTION,
             )
         }
 
@@ -278,7 +310,7 @@ object RollingJudgmentLoop {
             source = LivingJudgmentSource.MAIN_API_STRUCTURED_JUDGMENT,
             createdAt = nowMillis,
         ) ?: buildJudgmentTrace(intent, observation, actions, thought, nowMillis)
-        val nextEvaluateAt = nowMillis + nextDelayMinutes(intent, nextSilentCount, trace) * MINUTE_MILLIS
+        val nextPerceptionAt = nowMillis + nextDelayMinutes(intent, nextSilentCount, trace) * MINUTE_MILLIS
         val evolvedEmotion = evolveEmotion(intent, actions, restrained, nowMillis)
         val updatedAppraisal = trace.appraisal.takeIf { it != MeaningAppraisal() } ?: intent.appraisal
         val updatedConsolidation = trace.consolidation.takeIf { it != ConsolidationPlan() } ?: intent.consolidation
@@ -286,7 +318,7 @@ object RollingJudgmentLoop {
             lastEvaluatedAt = nowMillis,
             silentEvaluationCount = nextSilentCount,
             restraint = if (restrained) (intent.restraint + 1).coerceAtMost(10) else intent.restraint,
-            nextEvaluateAt = nextEvaluateAt,
+            nextEvaluateAt = nextPerceptionAt,
             status = if (restrained) LivingIntentStatus.RESTRAINED else LivingIntentStatus.ACTIVE,
             lastObservation = observation,
             lastJudgmentTrace = trace,
@@ -379,20 +411,19 @@ object RollingJudgmentLoop {
         observation: LivingObservation,
         restrained: Boolean,
     ): String = buildString {
-        append("Seven-layer trace: 情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀。")
+        append("Living presence trace: 感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆。")
         append(" Perception=${observation.summary}")
-        append(" Appraisal=${intent.appraisal.meaning}；威胁/风险=${intent.appraisal.risk}；机会/价值=${intent.appraisal.value}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}")
-        append(" Belief=${intent.belief}")
-        append(" TraitMotive=${intent.traitMotive}")
-        append(" SituationalMotive=${intent.situationalMotive}")
+        append(" Appraisal=${intent.appraisal.meaning}；风险=${intent.appraisal.risk}；价值=${intent.appraisal.value}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}")
+        append(" ConcernEvent=${intent.concernEvent}")
+        append(" ConcernGoal=${intent.concernGoal}")
         append(" Emotion=${intent.emotion.emotionLabel}；felt=${intent.emotion.feltSense}；impulse=${intent.emotion.impulse}；restraint=${intent.emotion.restraintText}")
         append(" Intention=${intent.intention}")
-        append(" Deliberation=ReAct belongs here: think, use tools when useful, observe, revise, then choose action/cadence/history. Decision=")
+        append(" Judgment=根据完整感知包、人设和意义评估决定是否查工具、是否开口、是否写辞海、下次何时感知。Decision=")
         append(
             if (restrained) {
-                "我已经开过口，这一轮先克制、记录、等待下一次判断。"
+                "我已经开过口，这一轮先克制、记录、等待下一次完整感知。"
             } else {
-                "先观察线索，再在发消息、查工具、等待、写日志、阅读、整理记忆之间选动作。"
+                "先观察线索，再在发消息、查工具、等待、写辞海、阅读之间选动作。"
             }
         )
     }
@@ -414,8 +445,8 @@ object RollingJudgmentLoop {
             observation = observation.summary,
             decision = when {
                 LivingAction.MESSAGE in actions -> "允许主 API 在触发消息前再次判断是否开口；如果不自然可以 PASS 并写日志。"
-                LivingAction.JOURNAL_WRITE in actions -> "本轮不强行说话，把内心判断写入辞海并进入记忆。"
-                else -> "本轮主要等待和重新排下一次判断。"
+                LivingAction.WRITE_DIARY in actions -> "本轮不强行说话，把第一人称内心想法写入辞海；记忆由辞海和聊天阈值自动沉淀。"
+                else -> "本轮主要等待，并重新安排下一次完整感知。"
             },
             createdAt = nowMillis,
             motiveText = intent.motive,
@@ -424,7 +455,7 @@ object RollingJudgmentLoop {
             emotion = intent.emotion,
             appraisal = intent.appraisal,
             consolidation = intent.consolidation,
-            historyNote = "第 ${intent.silentEvaluationCount + 1} 次静默判断；此前开口 ${intent.spokenCount} 次。cadence 由本轮审议决定，不作为原始感知。",
+            historyNote = "第 ${intent.silentEvaluationCount + 1} 次静默判断；此前开口 ${intent.spokenCount} 次。nextPerceptionAt 由本轮判断决定，下一轮必须重新从感知开始。",
         )
 
     private fun buildSevenLayerTrace(
@@ -445,11 +476,12 @@ object RollingJudgmentLoop {
                 append("；资源=${intent.appraisal.resources}")
             },
             state = buildString {
-                append("belief=${intent.belief}")
-                append("；traitMotive=${intent.traitMotive}")
-                append("；situationalMotive=${intent.situationalMotive}")
+                append("mood=${intent.emotion.emotionLabel}")
+                append("；bodyState=${if (intent.kind == LivingIntentKind.HEALTH_SAFETY) "需要关注身体线索" else "未见明确身体线索"}")
+                append("；mindState=${intent.emotion.feltSense}")
+                append("；relationship=${intent.concernGoal}")
                 append("；intention=${intent.intention}")
-                append("；emotion=${intent.emotion.emotionLabel}/${intent.emotion.feltSense}")
+                append("；innerThought=${trace.thought.take(180)}")
                 append("；impulse=${intent.emotion.impulse}")
                 append("；restraint=${intent.emotion.restraintText}")
             },
@@ -457,7 +489,7 @@ object RollingJudgmentLoop {
                 append("ReAct 审议：")
                 append(thought)
                 append("；decision=${trace.decision}")
-                trace.nextEvaluateDelayMinutes?.let { append("；nextEvaluateDelayMinutes=$it") }
+                trace.effectiveNextPerceptionDelayMinutes?.let { append("；nextPerceptionDelayMinutes=$it") }
                 trace.historyNote.takeIf { it.isNotBlank() }?.let { append("；history=$it") }
             },
             actionPlanning = buildString {
@@ -493,7 +525,7 @@ object RollingJudgmentLoop {
             restrained -> 0
             else -> -1
         }
-        val restraintDelta = if (restrained || LivingAction.JOURNAL_WRITE in actions) 1 else 0
+        val restraintDelta = if (restrained || LivingAction.WRITE_DIARY in actions) 1 else 0
         val attachmentDelta = if (intent.silentEvaluationCount >= 2) 1 else 0
         val tensionDelta = when {
             intent.kind == LivingIntentKind.HEALTH_SAFETY -> 1
@@ -548,10 +580,10 @@ object RollingJudgmentLoop {
         return parsed
             .takeIf { it.isNotEmpty() }
             ?.let { actions ->
-                if (LivingAction.SCHEDULE_NEXT_TICK in actions) {
+                if (LivingAction.SCHEDULE_NEXT_PERCEPTION in actions) {
                     actions
                 } else {
-                    actions + LivingAction.SCHEDULE_NEXT_TICK
+                    actions + LivingAction.SCHEDULE_NEXT_PERCEPTION
                 }
             }
             ?.distinct()
@@ -563,6 +595,9 @@ object RollingJudgmentLoop {
     private fun LivingAction.normalized(): LivingAction = when (this) {
         LivingAction.TOOL_CHECK -> LivingAction.TOOL_USE
         LivingAction.ASK_CAPABILITY -> LivingAction.ASK_USER
+        LivingAction.JOURNAL_WRITE -> LivingAction.WRITE_DIARY
+        LivingAction.SCHEDULE_NEXT_TICK -> LivingAction.SCHEDULE_NEXT_PERCEPTION
+        LivingAction.MEMORY_UPDATE -> LivingAction.WRITE_DIARY
         else -> this
     }
 
@@ -619,7 +654,7 @@ object RollingJudgmentLoop {
             delaysMinutes = delays,
             reason = when (kind) {
                 LivingIntentKind.HEALTH_SAFETY -> "身体安全优先，短间隔确认，逐步拉长。"
-                LivingIntentKind.ORDINARY_SILENCE -> "普通沉默不随机打扰，用 10/25/60/120 分钟重新判断。"
+                LivingIntentKind.ORDINARY_SILENCE -> "普通沉默不随机打扰；只安排下一次感知，之后每轮动态判断。"
                 LivingIntentKind.STUDY_FOCUS -> "学习中默认少说多看，保护专注。"
                 LivingIntentKind.DEADLINE -> "DDL 按到期前关键节点提醒和复盘。"
                 LivingIntentKind.WAKE_UP -> "起床按提前、到点、到点后复查的节奏。"
@@ -660,7 +695,7 @@ object RollingJudgmentLoop {
         trace: LivingJudgmentTrace?,
     ): Long =
         trace
-            ?.nextEvaluateDelayMinutes
+            ?.effectiveNextPerceptionDelayMinutes
             ?.takeIf { it > 0 }
             ?.coerceIn(minNextDelayMinutes(intent), maxNextDelayMinutes(intent))
             ?.toLong()
@@ -888,9 +923,9 @@ object RollingJudgmentLoop {
             LivingAction.WAIT,
             LivingAction.TOOL_USE,
             LivingAction.SET_ALARM,
-            LivingAction.JOURNAL_WRITE,
-            LivingAction.MEMORY_UPDATE,
-            LivingAction.SCHEDULE_NEXT_TICK,
+            LivingAction.WRITE_DIARY,
+            LivingAction.SCHEDULE_NEXT_PERCEPTION,
+            LivingAction.READ,
             LivingAction.ASK_USER,
             LivingAction.PASS,
         )

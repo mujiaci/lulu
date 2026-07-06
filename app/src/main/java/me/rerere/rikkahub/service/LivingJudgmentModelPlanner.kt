@@ -44,32 +44,30 @@ object LivingJudgmentModelPlanner {
     fun buildPrompt(input: LivingJudgmentModelInput): String = buildString {
         appendLine("你是${input.assistantName}的 Living Presence OS 后台主 API 判断器。")
         appendLine("你只做结构化活人感判断，不生成聊天正文。")
-        appendLine("最终架构名：情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀。")
-        appendLine("情境感知 Perception 只收集事实：当前时间、对话上下文、工具结果、工具可用状态、考研计划状态、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；它不决定意义。")
-        appendLine("意义评估 Appraisal 评估重要性、威胁、机会、身体安全、精神安全、时间压力、行动成本、可能收益、不行动后果、可用资源；它接近 Lazarus appraisal theory，是给行动选择提供重量，不是直接选择行动。")
-        appendLine("状态保持 State 保存持续心理状态，不重新裁判：belief 是第一视角解释，不是原始感知；traitMotive 是长期人设底层动机；situationalMotive 是本次 concern 为什么在意；emotion 用 emotionLabel/feltSense/impulse/restraint/intensity 表达。")
-        appendLine("审议决策 Deliberation 综合前三层回答是否行动、是否开口、是否查工具、是否等待、是否写辞海、是否安排下一轮、优先级和不行动理由；ReAct 属于这里，是边想、边查、边修正的审议过程，不是另一个想法层。")
-        appendLine("行为实现 Action Planning 决定怎么做：调哪个工具、参数、先后顺序、失败怎么办、是否需要向用户澄清或确认、结果如何反馈给表达层。涉及时钟动作必须先 Temporal Grounding，锚定当前时间和目标时间。这里的确认是表达/补问信息策略，不设置系统层工具安全门。")
-        appendLine("人格表达 Expression 只把已决定的行动说成人话，不决定政策；经验沉淀 Consolidation 输出情节痕迹、情感残留、语义记忆、行为经验。")
-        appendLine("必须贴合角色人设：同一事件可以多次判断；每次判断不等于每次发消息。")
-        appendLine("先读 observation，再决定 action。工具不可用也是 observation，不能假装知道；工具可用时把它当作角色本地感知/行动能力，不要在活人感架构里额外设置系统层阻拦。")
-        appendLine("行动池只能从 MESSAGE, WAIT, TOOL_USE, SET_ALARM, JOURNAL_WRITE, MEMORY_UPDATE, SCHEDULE_NEXT_TICK, ASK_USER, PASS 中选；旧名 TOOL_CHECK 等同 TOOL_USE，旧名 ASK_CAPABILITY 等同 ASK_USER。")
-        appendLine("下一轮判断时间不能写死。你必须根据这一次意义评估和审议判断决定 nextEvaluateDelayMinutes；这表示多久后再次想这件事，不等于多久后发消息。")
+        appendLine("最终架构名：感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆。")
+        appendLine("感知 Perception 是本轮完整世界包，不是摘要：角色人设、角色规则、当前时间、对话上下文、未总结上下文、活跃挂心、最近辞海、未总结辞海、向量记忆召回、上一轮状态栏、工具可用状态、工具结果都必须先进入感知。")
+        appendLine("后续每一层都必须能回看完整感知包；不要只吃上一层压缩后的几行结论。角色的一切判断、行动、沉默、回复和状态栏都必须按照人设和上下文来。")
+        appendLine("意义评估 Appraisal 只理解重量：对用户意味着什么、对角色自己意味着什么、重要性、紧急性、风险、情绪读法、关系意味、缺失信息和把握度。它不直接选择行动。")
+        appendLine("动态判断 Judgment 决定 intention、是否需要同步查询工具、实际动作、是否沉默、是否更新挂心、nextPerceptionDelayMinutes。下一轮到点后必须重新从感知开始。")
+        appendLine("工具链路分清：同步查询工具的结果补入本轮上下文后重新评估/判断；执行型工具失败要回到判断层补救；异步工具结果才触发下一轮感知。")
+        appendLine("行动实现 Action 只执行判断结果：MESSAGE, WAIT, TOOL_USE, SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION, READ, ASK_USER, PASS。记忆提取不作为模型动作，辞海和聊天达到阈值后自动总结入向量记忆。")
+        appendLine("状态生成在行动后发生，只生成 mood/bodyState/mindState/relationship/innerThought。innerThought 必须是角色第一人称没说出口的心理活动。")
+        appendLine("辞海保存挂心任务和第一人称日记。挂心任务展示事件、目标、下次感知；不要把 belief、traitMotive、situationalMotive 当成用户可见状态栏。")
+        appendLine("行动池只能从 MESSAGE, WAIT, TOOL_USE, SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION, READ, ASK_USER, PASS 中选；旧名 TOOL_CHECK 等同 TOOL_USE，旧名 JOURNAL_WRITE 等同 WRITE_DIARY，旧名 SCHEDULE_NEXT_TICK 等同 SCHEDULE_NEXT_PERCEPTION，MEMORY_UPDATE 不要再输出。")
+        appendLine("下一次感知时间不能写死。你必须根据这一次意义评估和动态判断决定 nextPerceptionDelayMinutes；这表示多久后重新从感知层开始，不等于多久后发消息。")
         appendLine("普通无风险沉默不要机械 5 分钟；身体安全/起床/DDL 可以更短，学习或忙碌应更克制。")
         appendLine("thought 必须是第一人称、角色本人没有说出口的一小段心声，会进入状态栏“没说出口”；不要写 Seven-layer trace、Perception=、工具 JSON、字段名或分析提纲。")
         appendLine("只返回 JSON，不要 markdown，不要解释。")
-        appendLine("JSON 字段：belief, traitMotive, situationalMotive, motive, emotion, intention, thought, action, observation, decision, nextEvaluateDelayMinutes, appraisal, consolidation, historyNote。")
+        appendLine("JSON 字段：belief, motive, emotion, intention, thought, action, observation, decision, nextPerceptionDelayMinutes, appraisal, consolidation, historyNote。")
         appendLine("emotion 字段：emotionLabel, feltSense, impulse, restraint, intensity。")
-        appendLine("appraisal 字段：meaning, value, risk, cost, consequence, resources。consolidation 字段：episodicTrace, affectiveResidue, semanticMemory, policyLearning。")
-        appendLine("nextEvaluateDelayMinutes 为 1 到 1440 的整数分钟；由角色判断，不要照抄固定表。")
+        appendLine("appraisal 字段：meaning, value, risk, cost, consequence, resources。meaning 里必须包含对用户和对角色自己的意义；consolidation 字段：episodicTrace, affectiveResidue, semanticMemory, policyLearning。")
+        appendLine("nextPerceptionDelayMinutes 为 1 到 1440 的整数分钟；由角色判断，不要照抄固定表。")
         appendLine("<persona>")
         appendLine(input.persona.take(2400))
         appendLine("</persona>")
         appendLine("<intent>")
         appendLine("kind=${input.intent.kind}")
         appendLine("belief=${input.intent.belief}")
-        appendLine("traitMotive=${input.intent.traitMotive}")
-        appendLine("situationalMotive=${input.intent.situationalMotive}")
         appendLine("motive=${input.intent.motive}")
         appendLine("intention=${input.intent.intention}")
         appendLine("hypotheses=${input.intent.hypotheses.joinToString(" / ")}")
@@ -101,10 +99,11 @@ object LivingJudgmentModelPlanner {
                 ?: input.intent.motive,
             intention = obj.string("intention")?.take(500)?.ifBlank { null } ?: input.intent.intention,
             thought = obj.string("thought")?.take(900)?.ifBlank { null } ?: "主 API 已读取 observation，但没有给出可用 thought。",
-            action = obj.string("action")?.normalizeActionNames()?.take(240)?.ifBlank { null } ?: "SCHEDULE_NEXT_TICK",
+            action = obj.string("action")?.normalizeActionNames()?.take(240)?.ifBlank { null } ?: "SCHEDULE_NEXT_PERCEPTION",
             observation = obj.string("observation")?.take(900)?.ifBlank { null } ?: input.observation.summary,
             decision = obj.string("decision")?.take(700)?.ifBlank { null } ?: "保留下一轮判断。",
             nextEvaluateDelayMinutes = obj["nextEvaluateDelayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60),
+            nextPerceptionDelayMinutes = obj["nextPerceptionDelayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60),
             motiveText = obj.string("motive")?.take(500)?.ifBlank { null }
                 ?: obj.string("desire")?.take(500)?.ifBlank { null }
                 ?: input.intent.motive,
@@ -132,6 +131,9 @@ object LivingJudgmentModelPlanner {
     private fun String.normalizeActionNames(): String =
         replace(Regex("\\bTOOL_CHECK\\b", RegexOption.IGNORE_CASE), "TOOL_USE")
             .replace(Regex("\\bASK_CAPABILITY\\b", RegexOption.IGNORE_CASE), "ASK_USER")
+            .replace(Regex("\\bJOURNAL_WRITE\\b", RegexOption.IGNORE_CASE), "WRITE_DIARY")
+            .replace(Regex("\\bSCHEDULE_NEXT_TICK\\b", RegexOption.IGNORE_CASE), "SCHEDULE_NEXT_PERCEPTION")
+            .replace(Regex("\\bMEMORY_UPDATE\\b", RegexOption.IGNORE_CASE), "WRITE_DIARY")
 
     private fun JsonObject.appraisal(key: String): MeaningAppraisal? {
         val obj = this[key] as? JsonObject ?: return null

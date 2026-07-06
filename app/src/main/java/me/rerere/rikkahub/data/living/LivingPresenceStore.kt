@@ -121,7 +121,7 @@ class LivingPresenceStore(
         state.value.activeIntents.firstOrNull { intent ->
             intent.status != LivingIntentStatus.COMPLETED &&
                 intent.status != LivingIntentStatus.CANCELLED &&
-                intent.nextEvaluateAt <= nowMillis &&
+                intent.nextPerceptionAt <= nowMillis &&
                 (intent.assistantId.isBlank() || intent.assistantId == assistantId)
         }
 
@@ -177,7 +177,7 @@ class LivingPresenceStore(
         copy(
             activeIntents = activeIntents
                 .distinctBy { it.id }
-                .sortedBy { it.nextEvaluateAt }
+                .sortedBy { it.nextPerceptionAt }
                 .take(ACTIVE_LIMIT),
             archivedIntents = archivedIntents
                 .distinctBy { it.id }

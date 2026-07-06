@@ -37,13 +37,13 @@ class LivingPresencePlannerTest {
             nowMillis = now,
         )
 
-        assertEquals(listOf(5L, 10L, 20L, 40L, 90L), plans.map { (it.triggerAtMillis - now) / 60_000L })
+        assertEquals(listOf(5L), plans.map { (it.triggerAtMillis - now) / 60_000L })
         assertEquals(ProactiveReminderKind.GENERAL, plans.first().kind)
         assertTrue(plans.first().preferredToolNames.contains("get_gadgetbridge_data"))
-        assertTrue(plans.first().reason.contains("七层活人感滚动判断"))
+        assertTrue(plans.first().reason.contains("活人感动态感知"))
         assertTrue(plans.first().reason.contains("Appraisal="))
-        assertTrue(plans.first().reason.contains("traitMotive="))
-        assertTrue(plans.first().reason.contains("situationalMotive="))
+        assertTrue(plans.first().reason.contains("感知层必须先装入角色人设"))
+        assertTrue(plans.first().reason.contains("下次什么时候感知"))
         assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceConsolidationHint.WRITE_JOURNAL.name })
         assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceConsolidationHint.MEMORY_REFLECT.name })
         assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceAction.TOOL_USE.name })
@@ -60,9 +60,9 @@ class LivingPresencePlannerTest {
                 "WAIT",
                 "TOOL_USE",
                 "SET_ALARM",
-                "JOURNAL_WRITE",
-                "MEMORY_UPDATE",
-                "SCHEDULE_NEXT_TICK",
+                "WRITE_DIARY",
+                "SCHEDULE_NEXT_PERCEPTION",
+                "READ",
                 "ASK_USER",
                 "PASS",
             ),
@@ -97,7 +97,7 @@ class LivingPresencePlannerTest {
             nowMillis = now,
         )
 
-        assertEquals(listOf(30L, 60L, 90L), plans.map { (it.triggerAtMillis - now) / 60_000L })
+        assertEquals(listOf(30L), plans.map { (it.triggerAtMillis - now) / 60_000L })
         assertEquals(ProactiveReminderKind.STUDY, plans.first().kind)
     }
 }

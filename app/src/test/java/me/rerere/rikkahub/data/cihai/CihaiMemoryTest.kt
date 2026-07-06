@@ -6,6 +6,28 @@ import org.junit.Test
 
 class CihaiMemoryTest {
     @Test
+    fun `cihai memory context keeps recent and unsummarized entries with sixty entry threshold`() {
+        val entries = (1..75).map { index ->
+            CihaiEntry(
+                assistantId = "lulu",
+                kind = CihaiEntryKind.INNER_JOURNAL,
+                title = "entry-$index",
+                content = "content-$index",
+                createdAt = index.toLong(),
+                memorySaved = index <= 10,
+            )
+        }
+
+        val context = buildCihaiMemoryContext(entries)
+
+        assertEquals(60, context.recentEntries.size)
+        assertEquals("entry-16", context.recentEntries.first().title)
+        assertEquals(60, context.unsummarizedEntries.size)
+        assertEquals("entry-11", context.unsummarizedEntries.first().title)
+        assertTrue(context.shouldSummarize)
+    }
+
+    @Test
     fun `journal entry becomes pending vector memory candidate`() {
         val entry = CihaiEntry(
             assistantId = "lulu",

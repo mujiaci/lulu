@@ -8,16 +8,16 @@ class RollingJudgmentLoopTest {
     @Test
     fun `health event uses dense semantic cadence`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我现在肚子好难受",
-            assistantText = "先坐下，我有点担心你。",
+            assistantName = "闇查湶",
+            userText = "鎴戠幇鍦ㄨ倸瀛愬ソ闅惧彈",
+            assistantText = "鍏堝潗涓嬶紝鎴戞湁鐐规媴蹇冧綘銆?,
             nowMillis = NOW,
         )
 
         assertEquals(LivingIntentKind.HEALTH_SAFETY, intent.kind)
         assertEquals(listOf(5L, 10L, 20L, 40L, 90L), intent.evaluationCadence.delaysMinutes)
         assertEquals(NOW + 5 * MINUTE, intent.nextEvaluateAt)
-        assertTrue(intent.hypotheses.contains("用户身体不舒服，可能需要安全确认"))
+        assertTrue(intent.hypotheses.contains("鐢ㄦ埛韬綋涓嶈垝鏈嶏紝鍙兘闇€瑕佸畨鍏ㄧ‘璁?))
         assertTrue(intent.candidateActions.contains(LivingAction.TOOL_USE))
         assertTrue(intent.candidateActions.contains(LivingAction.PASS))
         assertTrue(intent.candidateActions.contains(LivingAction.ASK_USER))
@@ -26,38 +26,39 @@ class RollingJudgmentLoopTest {
     @Test
     fun `ordinary silence uses non random rolling cadence`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我先忙一下",
-            assistantText = "好，我在这里。",
+            assistantName = "闇查湶",
+            userText = "鎴戝厛蹇欎竴涓?,
+            assistantText = "濂斤紝鎴戝湪杩欓噷銆?,
             nowMillis = NOW,
         )
 
         assertEquals(LivingIntentKind.ORDINARY_SILENCE, intent.kind)
         assertEquals(listOf(10L, 25L, 60L, 120L), intent.evaluationCadence.delaysMinutes)
-        assertEquals("用户可能在忙", intent.hypotheses.first())
+        assertEquals("鐢ㄦ埛鍙兘鍦ㄥ繖", intent.hypotheses.first())
     }
 
     @Test
     fun `study event protects focus with slower cadence`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我要去学习专业课",
-            assistantText = "嗯，我帮你守着节奏。",
+            assistantName = "闇查湶",
+            userText = "鎴戣鍘诲涔犱笓涓氳",
+            assistantText = "鍡紝鎴戝府浣犲畧鐫€鑺傚銆?,
             nowMillis = NOW,
         )
 
         assertEquals(LivingIntentKind.STUDY_FOCUS, intent.kind)
         assertEquals(listOf(30L, 60L, 90L), intent.evaluationCadence.delaysMinutes)
-        assertTrue(intent.candidateActions.contains(LivingAction.MEMORY_UPDATE))
+        assertTrue(intent.candidateActions.contains(LivingAction.WRITE_DIARY))
+        assertTrue(LivingAction.MEMORY_UPDATE !in intent.candidateActions)
     }
 
     @Test
     fun `deadline event schedules checks before due time`() {
         val dueAt = NOW + 6 * 60 * MINUTE
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "这个任务晚上 6 点前要完成",
-            assistantText = "我会帮你盯进度。",
+            assistantName = "闇查湶",
+            userText = "杩欎釜浠诲姟鏅氫笂 6 鐐瑰墠瑕佸畬鎴?,
+            assistantText = "鎴戜細甯綘鐩繘搴︺€?,
             nowMillis = NOW,
             deadlineAtMillis = dueAt,
         )
@@ -71,9 +72,9 @@ class RollingJudgmentLoopTest {
     fun `wake up event schedules before and after target`() {
         val wakeAt = NOW + 60 * MINUTE
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我 9 点要起床",
-            assistantText = "那我提前一点惦记你。",
+            assistantName = "闇查湶",
+            userText = "鎴?9 鐐硅璧峰簥",
+            assistantText = "閭ｆ垜鎻愬墠涓€鐐规儲璁颁綘銆?,
             nowMillis = NOW,
             targetAtMillis = wakeAt,
         )
@@ -87,9 +88,9 @@ class RollingJudgmentLoopTest {
     fun `wake up observation carries temporal grounding before alarm action`() {
         val wakeAt = NOW + 60 * MINUTE
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我 9 点要起床",
-            assistantText = "那我先校准时间，再帮你盯着。",
+            assistantName = "闇查湶",
+            userText = "鎴?9 鐐硅璧峰簥",
+            assistantText = "閭ｆ垜鍏堟牎鍑嗘椂闂达紝鍐嶅府浣犵洴鐫€銆?,
             nowMillis = NOW,
             targetAtMillis = wakeAt,
         )
@@ -125,7 +126,7 @@ class RollingJudgmentLoopTest {
             motiveText = "Act like a local digital caretaker.",
             intention = "Keep the reminder action available when deliberation wants it.",
             thought = "The system should not block a tool action just because the concern kind is ordinary silence.",
-            action = "SET_ALARM, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            action = "SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION",
             observation = "The user mentioned being busy and may need a later reminder.",
             decision = "Keep the alarm action selected by deliberation.",
             createdAt = NOW,
@@ -139,15 +140,15 @@ class RollingJudgmentLoopTest {
 
         assertTrue(intent.candidateActions.contains(LivingAction.SET_ALARM))
         assertTrue(decision.actions.contains(LivingAction.SET_ALARM))
-        assertTrue(decision.actions.contains(LivingAction.JOURNAL_WRITE))
+        assertTrue(decision.actions.contains(LivingAction.WRITE_DIARY))
     }
 
     @Test
     fun `spoken intent becomes restrained on later silent evaluation`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我先忙一下",
-            assistantText = "好，我在这里。",
+            assistantName = "闇查湶",
+            userText = "鎴戝厛蹇欎竴涓?,
+            assistantText = "濂斤紝鎴戝湪杩欓噷銆?,
             nowMillis = NOW,
         ).copy(
             spokenCount = 1,
@@ -159,21 +160,21 @@ class RollingJudgmentLoopTest {
 
         assertEquals(LivingIntentStatus.RESTRAINED, decision.updatedIntent.status)
         assertTrue(decision.actions.contains(LivingAction.WAIT))
-        assertTrue(decision.actions.contains(LivingAction.JOURNAL_WRITE))
-        assertTrue(decision.actions.contains(LivingAction.SCHEDULE_NEXT_TICK))
+        assertTrue(decision.actions.contains(LivingAction.WRITE_DIARY))
+        assertTrue(decision.actions.contains(LivingAction.SCHEDULE_NEXT_PERCEPTION))
         assertTrue(decision.updatedIntent.restraint > intent.restraint)
         assertEquals(1, decision.updatedIntent.silentEvaluationCount)
         assertTrue(decision.observation?.requestedTools?.contains("get_app_usage") == true)
-        assertTrue(decision.judgmentTrace?.thought?.contains("情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀") == true)
+        assertTrue(decision.judgmentTrace?.thought?.contains("鎯呭鎰熺煡-鎰忎箟璇勪及-鐘舵€佷繚鎸?瀹¤鍐崇瓥-琛屼负瀹炵幇-浜烘牸琛ㄨ揪-缁忛獙娌夋穩") == true)
         assertEquals(LivingJudgmentSource.MAIN_API_READY_CONTRACT, decision.judgmentTrace?.source)
     }
 
     @Test
     fun `external observation is used before structured judgment`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我要去学习专业课",
-            assistantText = "嗯，我帮你守着节奏。",
+            assistantName = "闇查湶",
+            userText = "鎴戣鍘诲涔犱笓涓氳",
+            assistantText = "鍡紝鎴戝府浣犲畧鐫€鑺傚銆?,
             nowMillis = NOW,
         )
         val observation = LivingObservation(
@@ -198,9 +199,9 @@ class RollingJudgmentLoopTest {
     @Test
     fun `decision exposes seven layer trace as structured fields`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我要去学习专业课",
-            assistantText = "嗯，我帮你守着节奏。",
+            assistantName = "闇查湶",
+            userText = "鎴戣鍘诲涔犱笓涓氳",
+            assistantText = "鍡紝鎴戝府浣犲畧鐫€鑺傚銆?,
             nowMillis = NOW,
         )
         val observation = LivingObservation(
@@ -217,12 +218,13 @@ class RollingJudgmentLoopTest {
         )
 
         val trace = decision.sevenLayerTrace
-        assertEquals("情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀", trace.architectureName)
+        assertEquals("感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆", trace.architectureName)
         assertTrue(trace.perception.contains("Runtime observation"))
         assertTrue(trace.appraisal.contains(intent.appraisal.meaning))
-        assertTrue(trace.state.contains(intent.belief))
-        assertTrue(trace.state.contains(intent.traitMotive))
-        assertTrue(trace.deliberation.contains("ReAct"))
+        assertTrue(trace.state.contains("mood="))
+        assertTrue(trace.state.contains("relationship="))
+        assertTrue(trace.state.contains("innerThought="))
+        assertTrue(trace.deliberation.contains("Living presence trace"))
         assertTrue(trace.actionPlanning.contains("TOOL_USE"))
         assertTrue(trace.expression.contains(intent.emotion.emotionLabel))
         assertTrue(trace.consolidation.contains(intent.consolidation.policyLearning))
@@ -268,9 +270,9 @@ class RollingJudgmentLoopTest {
     @Test
     fun `main api structured trace overrides rule fallback trace`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我先忙三个小时",
-            assistantText = "好，我会自己判断什么时候靠近。",
+            assistantName = "闇查湶",
+            userText = "鎴戝厛蹇欎笁涓皬鏃?,
+            assistantText = "濂斤紝鎴戜細鑷繁鍒ゆ柇浠€涔堟椂鍊欓潬杩戙€?,
             nowMillis = NOW,
         )
         val trace = LivingJudgmentTrace(
@@ -280,7 +282,7 @@ class RollingJudgmentLoopTest {
             motiveText = "Stay near without interrupting.",
             intention = "Wait and write journal first.",
             thought = "I checked the observation and chose restraint.",
-            action = "WAIT, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            action = "WAIT, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION",
             observation = "Runtime observation is available.",
             decision = "Do not message now.",
             createdAt = NOW,
@@ -300,9 +302,9 @@ class RollingJudgmentLoopTest {
     @Test
     fun `main api structured action can choose restraint from action pool`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我现在肚子好痛",
-            assistantText = "先坐下，我会确认你安全。",
+            assistantName = "闇查湶",
+            userText = "鎴戠幇鍦ㄨ倸瀛愬ソ鐥?,
+            assistantText = "鍏堝潗涓嬶紝鎴戜細纭浣犲畨鍏ㄣ€?,
             nowMillis = NOW,
         )
         val trace = LivingJudgmentTrace(
@@ -312,7 +314,7 @@ class RollingJudgmentLoopTest {
             motiveText = "Care without making panic.",
             intention = "Check quietly first and write down the concern.",
             thought = "A message is not the only caring action.",
-            action = "TOOL_USE, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            action = "TOOL_USE, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION",
             observation = "Battery and app usage are available; health data is missing.",
             decision = "Do not send another message yet.",
             createdAt = NOW,
@@ -325,7 +327,7 @@ class RollingJudgmentLoopTest {
         )
 
         assertEquals(
-            listOf(LivingAction.TOOL_USE, LivingAction.JOURNAL_WRITE, LivingAction.SCHEDULE_NEXT_TICK),
+            listOf(LivingAction.TOOL_USE, LivingAction.WRITE_DIARY, LivingAction.SCHEDULE_NEXT_PERCEPTION),
             decision.actions,
         )
         assertTrue(LivingAction.MESSAGE !in decision.actions)
@@ -346,7 +348,7 @@ class RollingJudgmentLoopTest {
             desire = "Use the tool if it helps.",
             intention = "Observe first.",
             thought = "Old planner name should still be accepted.",
-            action = "TOOL_CHECK, ASK_CAPABILITY, SCHEDULE_NEXT_TICK",
+            action = "TOOL_CHECK, ASK_CAPABILITY, SCHEDULE_NEXT_PERCEPTION",
             observation = "No tool has run yet.",
             decision = "Normalize legacy action names.",
             createdAt = NOW,
@@ -379,7 +381,7 @@ class RollingJudgmentLoopTest {
             desire = "Stay present without speaking.",
             intention = "Do not speak this round.",
             thought = "Silence is the chosen action.",
-            action = "PASS, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            action = "PASS, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION",
             observation = "No urgent signal.",
             decision = "Record and wait.",
             createdAt = NOW,
@@ -392,16 +394,16 @@ class RollingJudgmentLoopTest {
         )
 
         assertTrue(decision.actions.contains(LivingAction.PASS))
-        assertTrue(decision.actions.contains(LivingAction.JOURNAL_WRITE))
+        assertTrue(decision.actions.contains(LivingAction.WRITE_DIARY))
         assertTrue(LivingAction.MESSAGE !in decision.actions)
     }
 
     @Test
     fun `main api structured judgment controls next evaluation time`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我忙三个小时，可能不回你",
-            assistantText = "好，我会自己判断什么时候再想这件事。",
+            assistantName = "闇查湶",
+            userText = "鎴戝繖涓変釜灏忔椂锛屽彲鑳戒笉鍥炰綘",
+            assistantText = "濂斤紝鎴戜細鑷繁鍒ゆ柇浠€涔堟椂鍊欏啀鎯宠繖浠朵簨銆?,
             nowMillis = NOW,
         )
         val trace = LivingJudgmentTrace(
@@ -411,7 +413,7 @@ class RollingJudgmentLoopTest {
             motiveText = "Stay nearby without checking too soon.",
             intention = "Wait longer, then reassess.",
             thought = "Five minutes would be too clingy here.",
-            action = "WAIT, JOURNAL_WRITE, SCHEDULE_NEXT_TICK",
+            action = "WAIT, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION",
             observation = "No risk signals.",
             decision = "Re-evaluate after a character-chosen interval.",
             nextEvaluateDelayMinutes = 37,
@@ -451,7 +453,7 @@ class RollingJudgmentLoopTest {
             motiveText = "Care without making panic.",
             intention = "Check quietly first.",
             thought = "The state layer should keep the model-generated felt emotion.",
-            action = "TOOL_CHECK, SCHEDULE_NEXT_TICK",
+            action = "TOOL_CHECK, SCHEDULE_NEXT_PERCEPTION",
             observation = "Health data is worth checking.",
             decision = "Update state with structured emotion.",
             emotion = traceEmotion,
@@ -472,9 +474,9 @@ class RollingJudgmentLoopTest {
     @Test
     fun `emotion state accumulates across restrained silent evaluations`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我先忙一会儿",
-            assistantText = "好，我在这里等你。",
+            assistantName = "闇查湶",
+            userText = "鎴戝厛蹇欎竴浼氬効",
+            assistantText = "濂斤紝鎴戝湪杩欓噷绛変綘銆?,
             nowMillis = NOW,
         ).copy(
             spokenCount = 1,
@@ -488,22 +490,22 @@ class RollingJudgmentLoopTest {
         assertTrue(decision.updatedIntent.emotion.disappointment > intent.emotion.disappointment)
         assertTrue(decision.updatedIntent.emotion.tension >= intent.emotion.tension)
         assertEquals(NOW + 60 * MINUTE, decision.updatedIntent.emotion.lastChangedAt)
-        assertTrue(decision.updatedIntent.emotion.label.contains("忍住"))
+        assertTrue(decision.updatedIntent.emotion.label.contains("蹇嶄綇"))
     }
 
     @Test
     fun `emotion state decays across long quiet gaps before new deltas`() {
         val intent = RollingJudgmentLoop.createIntent(
-            assistantName = "露露",
-            userText = "我先忙一下",
-            assistantText = "好，我在这里等你。",
+            assistantName = "闇查湶",
+            userText = "鎴戝厛蹇欎竴涓?,
+            assistantText = "濂斤紝鎴戝湪杩欓噷绛変綘銆?,
             nowMillis = NOW,
         ).copy(
             emotion = EmotionSnapshot(
                 concern = 8,
                 attachment = 8,
                 restraint = 8,
-                label = "很紧张",
+                label = "寰堢揣寮?,
                 tension = 8,
                 disappointment = 6,
                 relief = 4,

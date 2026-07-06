@@ -13,6 +13,32 @@ data class CihaiState(
 )
 
 @Serializable
+data class CihaiMemoryPolicy(
+    val recentCihaiContextLimit: Int = 60,
+    val unsummarizedCihaiLimit: Int = 60,
+    val summarizeEveryEntries: Int = 60,
+)
+
+data class CihaiMemoryContext(
+    val recentEntries: List<CihaiEntry>,
+    val unsummarizedEntries: List<CihaiEntry>,
+    val shouldSummarize: Boolean,
+)
+
+fun buildCihaiMemoryContext(
+    entries: List<CihaiEntry>,
+    policy: CihaiMemoryPolicy = CihaiMemoryPolicy(),
+): CihaiMemoryContext {
+    val ordered = entries.sortedBy { it.createdAt }
+    val unsummarized = ordered.filterNot { it.memorySaved }
+    return CihaiMemoryContext(
+        recentEntries = ordered.takeLast(policy.recentCihaiContextLimit.coerceAtLeast(0)),
+        unsummarizedEntries = unsummarized.take(policy.unsummarizedCihaiLimit.coerceAtLeast(0)),
+        shouldSummarize = unsummarized.size >= policy.summarizeEveryEntries.coerceAtLeast(1),
+    )
+}
+
+@Serializable
 data class CihaiEntry(
     val id: String = Uuid.random().toString(),
     val assistantId: String,
@@ -156,7 +182,7 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
             kind = CihaiEntryKind.REFLECTION,
             title = "${input.assistantName.ifBlank { "角色" }} 的下一轮判断沉淀",
             content = buildString {
-                append("本轮情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀架构的结果：我先整理时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录。\n")
+                append("本轮感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构的结果：我先整理时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录。\n")
                 append("意义评估只给这件事加重量：重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源；状态保持把它压成第一视角信念、长期/情境动机、意图和情绪。\n")
                 append("审议层用 ReAct 边想边查边修正，决定本轮不立刻开口，而是保留行动池和下一次审议时间；沉淀层把这次经历压缩成情节痕迹、情感残留、语义记忆和行为经验。")
             },

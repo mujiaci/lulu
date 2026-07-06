@@ -1432,7 +1432,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
     private fun RollingJudgmentDecision.toCihaiActionHints(): List<String> = buildList {
         if (
-            LivingAction.JOURNAL_WRITE in actions ||
+            LivingAction.WRITE_DIARY in actions ||
             LivingAction.PASS in actions ||
             LivingAction.WAIT in actions ||
             LivingAction.INNER_THOUGHT in actions
@@ -1455,12 +1455,12 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         assistantName: String,
         decision: RollingJudgmentDecision,
     ): Boolean {
-        val nextEvaluateAt = decision.updatedIntent.nextEvaluateAt
-        if (nextEvaluateAt <= System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1)) return false
+        val nextPerceptionAt = decision.updatedIntent.nextPerceptionAt
+        if (nextPerceptionAt <= System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1)) return false
         ProactiveMessageService.scheduleTargeted(
             context = this@ProactiveMessageTriggerService,
             setting = setting,
-            triggerAtMillis = nextEvaluateAt,
+            triggerAtMillis = nextPerceptionAt,
             reason = decision.toTargetedReason(assistantName),
             userText = decision.updatedIntent.belief.take(160),
             kind = decision.updatedIntent.kind.toTargetedKind(),
@@ -2107,9 +2107,9 @@ internal fun buildTargetedProactiveSensingInstruction(
         }
         "living_presence" -> {
             appendLine("本次目标的感知重点：这是 Living Presence OS 的下一轮滚动判断，不是随机主动消息。")
-            appendLine("按情境感知-意义评估-状态保持-审议决策-行为实现-人格表达-经验沉淀架构重新判断：先整理当前时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录；再评估重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源。")
+            appendLine("按感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构重新判断：先整理当前时间、上下文、工具结果、工具状态、考研计划、召回记忆和历史挂心记录；再评估重要性、威胁、机会、身心安全、时间压力、成本、收益、不行动后果和可用资源。")
             appendLine("状态保持只保存第一视角信念、长期/情境动机、意图和结构化情绪；审议决策用 ReAct 边想边查边修正，再决定发消息、看工具、等待、写露露日记、阅读、安排下一轮或沉淀记忆。")
-            appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把内心想法和行动写入露露日记并进入记忆。")
+            appendLine("如果已经开过口或用户明显在忙，可以 [PASS]，但要把第一人称内心想法写入辞海；记忆由辞海和聊天阈值自动沉淀。")
         }
         else -> when {
             reason.contains("睡") -> appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量。")
