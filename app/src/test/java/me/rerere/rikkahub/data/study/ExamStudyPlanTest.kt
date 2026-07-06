@@ -78,6 +78,28 @@ class ExamStudyPlanTest {
     }
 
     @Test
+    fun criminalAndCivilLawUseStaggeredBlocksInsteadOfDailyFragmentation() {
+        val habit = ExamStudyPlan.studyHabitReference
+        val julySix = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 6))
+        val julyNine = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 9))
+        val prompt = ExamStudyPlan.dynamicSchedulePrompt(
+            date = LocalDate.of(2026, 7, 9),
+            presetPlan = julyNine,
+            defaultSchedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 9)),
+            tasks = emptyList(),
+        )
+
+        assertTrue(habit.contains("错峰并行"))
+        assertTrue(habit.contains("累计约 3 小时"))
+        assertTrue(habit.contains("不新开大块"))
+        assertTrue(julySix?.title.orEmpty().contains("连续主块"))
+        assertFalse(julySix?.tasks.orEmpty().any { it.title.contains("听众合法硕民法课程") })
+        assertTrue(julyNine?.title.orEmpty().contains("民法1连续主块"))
+        assertTrue(prompt.contains("2-3 天一个学科小单元"))
+        assertTrue(prompt.contains("另一科在连续主块期间最多安排 15-30 分钟复述或框架保温"))
+    }
+
+    @Test
     fun vocabularyPlanTreatsBacklogAsTwentyWordGroups() {
         assertEquals(1550, ExamStudyPlan.vocabularyBacklog)
         assertEquals(120, ExamStudyPlan.dailyVocabularyTarget)
