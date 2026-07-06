@@ -179,6 +179,26 @@ class LuluIntentPlannerTest {
     }
 
     @Test
+    fun `chat turn prompt keeps state generation after judgment`() {
+        val prompt = LuluIntentModelPlanner.buildChatTurnPrompt(
+            LuluChatTurnPlanInput(
+                assistantName = "露露",
+                assistantPersona = "管家型角色，会认真照看用户的学习和身体状态。",
+                state = LuluState(assistantId = assistantId),
+                recentMessages = emptyList(),
+                availableToolNames = setOf("get_app_usage", "set_alarm"),
+            )
+        )
+
+        assertTrue(prompt.contains("状态生成放在行动后"))
+        assertTrue(prompt.contains("只生成心情、身体状况、精神状况、亲密关系和第一人称没说出口"))
+        assertTrue(prompt.contains("动态判断"))
+        assertFalse(prompt.contains("State 只保存第一视角 belief"))
+        assertFalse(prompt.contains("trait/situational motive"))
+        assertFalse(prompt.contains("ReAct 属于审议层"))
+    }
+
+    @Test
     fun `model planner clamps chat turn action plan and limits tools`() {
         val plan = LuluIntentModelPlanner.parseChatTurnPlan(
             rawText = """

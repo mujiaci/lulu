@@ -65,10 +65,7 @@ fun CihaiPage(onBack: () -> Unit) {
     val selectedAssistant = settings.assistants.firstOrNull { it.id.toString() == selectedAssistantId }
         ?: fallbackAssistant
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf(
-        CihaiEntryKind.INNER_JOURNAL,
-        CihaiEntryKind.ACTION_LOG,
-    )
+    val tabs = visibleCihaiEntryKinds()
     val concernCards = buildLivingIntentCards(
         intents = livingState.activeIntents,
         selectedAssistantId = selectedAssistantId,
@@ -175,6 +172,12 @@ fun CihaiPage(onBack: () -> Unit) {
         }
     }
 }
+
+internal fun visibleCihaiEntryKinds(): List<CihaiEntryKind> = listOf(
+    CihaiEntryKind.INNER_JOURNAL,
+    CihaiEntryKind.ACTION_LOG,
+    CihaiEntryKind.REFLECTION,
+)
 
 @Composable
 private fun ConcernCard(card: LivingIntentCardModel) {
