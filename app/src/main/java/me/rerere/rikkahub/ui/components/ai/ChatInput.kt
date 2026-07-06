@@ -13,7 +13,6 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.content.MediaType
 import androidx.compose.foundation.content.ReceiveContentListener
 import androidx.compose.foundation.content.consume
@@ -92,10 +91,11 @@ import me.rerere.asr.ASRStatus
 import me.rerere.common.android.appTempFolder
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Add01
-import me.rerere.hugeicons.stroke.ArrowUp02
+import me.rerere.hugeicons.stroke.BubbleChatSpark
 import me.rerere.hugeicons.stroke.Call02
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.MessageOutgoing02
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.hugeicons.stroke.Zap
 import me.rerere.rikkahub.R
@@ -144,7 +144,8 @@ fun ChatInput(
     onCompressContext: (additionalPrompt: String, targetTokens: Int, keepRecentMessages: Int) -> Job,
     onCancelClick: () -> Unit,
     onSendClick: () -> Unit,
-    onLongSendClick: () -> Unit,
+    onReplyClick: () -> Unit,
+    canReplyToCurrentConversation: Boolean,
     onVoiceMessage: ((url: String, duration: Long, transcript: String) -> Unit)? = null,
     onStartVoiceCall: (() -> Unit)? = null,
     onOpenVoiceCallHistory: (() -> Unit)? = null,
@@ -157,16 +158,16 @@ fun ChatInput(
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
 
-    fun sendMessage() {
+    fun sendMessageWithoutAnswer() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
         if (loading) onCancelClick() else onSendClick()
     }
 
-    fun sendMessageWithoutAnswer() {
+    fun requestReply() {
         focusManager.clearFocus(force = true)
         keyboardController?.hide()
-        if (loading) onCancelClick() else onLongSendClick()
+        if (loading) onCancelClick() else onReplyClick()
     }
 
     var expand by remember { mutableStateOf(ExpandState.Collapsed) }
@@ -528,7 +529,7 @@ fun ChatInput(
 
                         TextInputRow(
                             state = state,
-                            onSendMessage = { sendMessage() }
+                            onSendMessage = { sendMessageWithoutAnswer() }
                         )
 
                         Row(
@@ -661,52 +662,88 @@ fun ChatInput(
                                 enter = fadeIn() + scaleIn(),
                                 exit = fadeOut() + scaleOut(),
                             ) {
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .combinedClickable(
-                                            enabled = loading || !state.isEmpty(),
-                                            onClick = {
-                                                dismissExpand()
-                                                sendMessage()
-                                            }, onLongClick = {
-                                                dismissExpand()
-                                                sendMessageWithoutAnswer()
-                                            }
-                                        )
-                                ) {
-                                    val containerColor = when {
-                                        loading -> MaterialTheme.colorScheme.errorContainer
-                                        state.isEmpty() -> MaterialTheme.colorScheme.surfaceContainerHigh
-                                        else -> MaterialTheme.colorScheme.primary
-                                    }
-                                    val contentColor = when {
-                                        loading -> MaterialTheme.colorScheme.onErrorContainer
-                                        state.isEmpty() -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-                                        else -> MaterialTheme.colorScheme.onPrimary
-                                    }
-                                    Surface(
-                                        modifier = Modifier.fillMaxSize(),
-                                        shape = CircleShape,
-                                        color = containerColor,
-                                        content = {})
-                                    if (loading) {
+                                if (loading) {
+                                    ChatInputRoundAction(
+                                        enabled = true,
+                                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                        onClick = {
+                                            dismissExpand()
+                                            onCancelClick()
+                                        },
+                                    ) {
                                         KeepScreenOn()
                                         Icon(
                                             imageVector = HugeIcons.Cancel01,
                                             contentDescription = stringResource(R.string.stop),
-                                            tint = contentColor,
+                                            tint = MaterialTheme.colorScheme.onErrorContainer,
                                             modifier = Modifier.size(18.dp)
                                         )
-                                    } else {
-                                        Icon(
-                                            imageVector = HugeIcons.ArrowUp02,
-                                            contentDescription = stringResource(R.string.send),
-                                            tint = contentColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
+                                    }
+                                } else {
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        val canSendMessage = !state.isEmpty()
+                                        ChatInputRoundAction(
+                                            enabled = canSendMessage,
+                                            containerColor = if (canSendMessage) {
+                                                MaterialTheme.colorScheme.secondaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                            },
+                                            contentColor = if (canSendMessage) {
+                                                MaterialTheme.colorScheme.onSecondaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                            },
+                                            onClick = {
+                                                dismissExpand()
+                                                sendMessageWithoutAnswer()
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = HugeIcons.MessageOutgoing02,
+                                                contentDescription = stringResource(R.string.send),
+                                                tint = if (canSendMessage) {
+                                                    MaterialTheme.colorScheme.onSecondaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                },
+                                                modifier = Modifier.size(17.dp)
+                                            )
+                                        }
+
+                                        val canRequestReply = canSendMessage || canReplyToCurrentConversation
+                                        ChatInputRoundAction(
+                                            enabled = canRequestReply,
+                                            containerColor = if (canRequestReply) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.surfaceContainerHigh
+                                            },
+                                            contentColor = if (canRequestReply) {
+                                                MaterialTheme.colorScheme.onPrimary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                            },
+                                            onClick = {
+                                                dismissExpand()
+                                                requestReply()
+                                            },
+                                        ) {
+                                            Icon(
+                                                imageVector = HugeIcons.BubbleChatSpark,
+                                                contentDescription = "回复",
+                                                tint = if (canRequestReply) {
+                                                    MaterialTheme.colorScheme.onPrimary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                                                },
+                                                modifier = Modifier.size(17.dp)
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -762,6 +799,32 @@ fun ChatInput(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatInputRoundAction(
+    enabled: Boolean,
+    containerColor: Color,
+    contentColor: Color,
+    onClick: () -> Unit,
+    content: @Composable () -> Unit,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = Modifier.size(30.dp),
+        shape = CircleShape,
+        color = containerColor,
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            ProvideTextStyle(MaterialTheme.typography.labelMedium.copy(color = contentColor)) {
+                content()
             }
         }
     }

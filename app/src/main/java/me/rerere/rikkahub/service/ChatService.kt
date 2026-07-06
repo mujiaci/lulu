@@ -634,6 +634,27 @@ class ChatService(
         session.setJob(job)
     }
 
+    fun requestReply(conversationId: Uuid) {
+        val session = getOrCreateSession(conversationId)
+        session.getJob()?.cancel()
+
+        val job = appScope.launch {
+            try {
+                val currentConversation = session.state.value
+                if (currentConversation.currentMessages.lastOrNull()?.role != MessageRole.USER) {
+                    return@launch
+                }
+
+                handleMessageComplete(conversationId)
+                _generationDoneFlow.emit(conversationId)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                addError(e, conversationId, title = context.getString(R.string.error_title_generation))
+            }
+        }
+        session.setJob(job)
+    }
+
     // ---- 添加主动消息 ----
 
     suspend fun sendVoiceCallTurn(
