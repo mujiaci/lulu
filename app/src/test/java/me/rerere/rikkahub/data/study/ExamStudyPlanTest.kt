@@ -63,7 +63,7 @@ class ExamStudyPlanTest {
         assertTrue(julyEightTasks.contains("刑法第 1 章：做文运/众合章节题"))
         assertTrue(julyEightTasks.contains("15-20 道"))
         assertTrue(julyEightTasks.contains("不算完整闭环"))
-        assertTrue(julyEightTasks.contains("民法第 1 章：课前目录预览"))
+        assertTrue(julyEightTasks.contains("不单独安排预习目录"))
         assertTrue(julyEightTasks.contains("法理第 1-3 章：正式背诵 30-40 分钟"))
         assertTrue(julyEightTasks.contains("有效学习量至少凑够 2 小时"))
     }
@@ -111,8 +111,11 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun criminalAndCivilLawUseStaggeredBlocksInsteadOfDailyFragmentation() {
+    fun singleNewBookMainLineUsesLawTheoryRecitationAsSideLine() {
         val habit = ExamStudyPlan.studyHabitReference
+        val subject = ExamStudyPlan.subjectExecutionReference
+        val july = ExamStudyPlan.monthlyPlans.single { it.month == "2026-07" }.tasks.joinToString("\n")
+        val week = ExamStudyPlan.julyWeeks.single { it.id == "2026-07-w2" }.tasks.joinToString("\n")
         val julySix = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 6))
         val julyNine = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 9))
         val prompt = ExamStudyPlan.dynamicSchedulePrompt(
@@ -121,17 +124,39 @@ class ExamStudyPlanTest {
             defaultSchedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 9)),
             tasks = emptyList(),
         )
+        val julyNineTasks = julyNine?.tasks.orEmpty().joinToString("\n") { it.title }
 
-        assertTrue(habit.contains("错峰并行"))
-        assertTrue(habit.contains("累计约 3 小时"))
+        assertTrue(habit.contains("一本学完再学下一本"))
+        assertTrue(habit.contains("整本书顺序推进"))
+        assertTrue(habit.contains("倍速听课"))
+        assertTrue(habit.contains("9 月底前基本收完"))
+        assertTrue(habit.contains("不能压缩课后消化、做题、错题、框架和背诵痕迹"))
+        assertTrue(habit.contains("法理学背诵可以作为复线"))
+        assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
+        assertTrue(habit.contains("不把民法作为刑法期间的新开副线"))
+        assertTrue(habit.contains("从每天 2-3 小时有效学习起步"))
         assertTrue(habit.contains("不新开大块"))
         assertTrue(habit.contains("不要拆成 4-5 个碎片"))
+        assertTrue(subject.contains("不单独安排预习目录"))
+        assertFalse(subject.contains("课前 5 分钟看考试分析目录"))
+        assertTrue(july.contains("7 月新学主线只放刑法"))
+        assertFalse(july.contains("民法第 1 章连续听完"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("9 月 15 日前完成民法"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("法制史第 1-7 章"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("不再把新课当主线"))
+        assertTrue(week.contains("刑法主线 + 法理背诵复线"))
+        assertTrue(week.contains("民法第 1 章不在刑法主线期间启动"))
         assertTrue(julySix?.title.orEmpty().contains("连续主块"))
         assertFalse(julySix?.tasks.orEmpty().any { it.title.contains("听众合法硕民法课程") })
-        assertTrue(julyNine?.title.orEmpty().contains("民法1连续主块"))
-        assertTrue(prompt.contains("2-3 天一个学科小单元"))
+        assertTrue(julyNine?.title.orEmpty().contains("刑法1补闭环"))
+        assertTrue(julyNineTasks.contains("刑法第 1 章未完成框架图"))
+        assertTrue(julyNineTasks.contains("法理第 1-3 章未完成背诵"))
+        assertFalse(julyNineTasks.contains("民法第 1 章"))
+        assertFalse(julyNineTasks.contains("预览"))
+        assertTrue(prompt.contains("一本新课主线学完再学下一本"))
         assertTrue(prompt.contains("做题、错题收集和框架闭环优先集中完成"))
-        assertTrue(prompt.contains("另一科在连续主块期间最多安排 15-30 分钟复述或框架保温"))
+        assertTrue(prompt.contains("法理学背诵可以作为复线"))
+        assertFalse(prompt.contains("另一科在连续主块期间最多安排 15-30 分钟复述或框架保温"))
     }
 
     @Test
@@ -297,8 +322,8 @@ class ExamStudyPlanTest {
                     source = StudyTaskSource.Plan,
                 ),
                 StudyTask(
-                    id = "plan-civil",
-                    title = "专业课 | 民法第 1 章：课前目录预览 10-15 分钟",
+                    id = "plan-law-theory",
+                    title = "背诵 | 法理第 1-3 章：正式背诵 30-40 分钟",
                     source = StudyTaskSource.Plan,
                 ),
                 StudyTask(
@@ -331,7 +356,7 @@ class ExamStudyPlanTest {
         assertTrue(prompt.contains("不要从早上补排"))
         assertTrue(prompt.contains("所有未完成待办必须在剩余时间里出现"))
         assertTrue(prompt.contains("复盘 | 刑法第 1 章"))
-        assertTrue(prompt.contains("专业课 | 民法第 1 章"))
+        assertTrue(prompt.contains("背诵 | 法理第 1-3 章"))
         assertTrue(prompt.contains("英语 | 不背单词 120 个"))
         assertTrue(prompt.contains("修改并且打印六分开题报告"))
         assertTrue(prompt.contains("打羽毛球在晚上"))
