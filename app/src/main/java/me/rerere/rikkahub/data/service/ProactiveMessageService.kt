@@ -1431,13 +1431,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     }.trim()
 
     private fun RollingJudgmentDecision.toCihaiActionHints(): List<String> = buildList {
-        if (
-            LivingAction.WRITE_DIARY in actions ||
-            LivingAction.PASS in actions ||
-            LivingAction.WAIT in actions ||
-            LivingAction.INNER_THOUGHT in actions
-        ) {
-            add(LivingPresenceConsolidationHint.WRITE_JOURNAL.name)
+        if (LivingAction.WRITE_DIARY in actions) {
+            add("WRITE_DIARY")
+        }
+        if (LivingAction.PASS in actions || LivingAction.WAIT in actions || LivingAction.INNER_THOUGHT in actions) {
+            add(LivingPresenceConsolidationHint.MEMORY_REFLECT.name)
         }
         if (LivingAction.READ in actions) {
             add(LivingPresenceConsolidationHint.READ_BOOK.name)
@@ -2083,9 +2081,9 @@ private fun RollingJudgmentDecision.toFallbackSilentInnerVoice(): String = when 
         "我先不把想你说出口，也不把沉默想坏；我会在旁边等下一轮判断。"
 }
 
-private fun defaultSilentPresenceActionHints(): List<String> = listOf(
-    LivingPresenceConsolidationHint.WRITE_JOURNAL.name,
+internal fun defaultSilentPresenceActionHints(): List<String> = listOf(
     LivingPresenceConsolidationHint.READ_BOOK.name,
+    LivingPresenceConsolidationHint.MEMORY_REFLECT.name,
 )
 
 internal fun buildTargetedProactiveSensingInstruction(

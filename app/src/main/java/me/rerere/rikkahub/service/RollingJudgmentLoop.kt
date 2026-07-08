@@ -418,12 +418,12 @@ object RollingJudgmentLoop {
         append(" ConcernGoal=${intent.concernGoal}")
         append(" Emotion=${intent.emotion.emotionLabel}；felt=${intent.emotion.feltSense}；impulse=${intent.emotion.impulse}；restraint=${intent.emotion.restraintText}")
         append(" Intention=${intent.intention}")
-        append(" Judgment=根据完整感知包、人设和意义评估决定是否查工具、是否开口、是否写辞海、下次何时感知。Decision=")
+        append(" Judgment=根据完整感知包、人设和意义评估决定是否查工具、是否开口、是否记录后台心迹、下次何时感知。Decision=")
         append(
             if (restrained) {
                 "我已经开过口，这一轮先克制、记录、等待下一次完整感知。"
             } else {
-                "先观察线索，再在发消息、查工具、等待、写辞海、阅读之间选动作。"
+                "先观察线索，再在发消息、查工具、等待、记录后台心迹、阅读之间选动作。"
             }
         )
     }
@@ -444,8 +444,8 @@ object RollingJudgmentLoop {
             action = actions.joinToString(", ") { it.name },
             observation = observation.summary,
             decision = when {
-                LivingAction.MESSAGE in actions -> "允许主 API 在触发消息前再次判断是否开口；如果不自然可以 PASS 并写辞海日记。"
-                LivingAction.WRITE_DIARY in actions -> "本轮不强行说话，把第一人称真实想法写入辞海日记；记忆由辞海和聊天阈值自动沉淀。"
+                LivingAction.MESSAGE in actions -> "允许主 API 在触发消息前再次判断是否开口；如果不自然可以 PASS 并只留后台心迹。"
+                LivingAction.WRITE_DIARY in actions -> "本轮不强行说话，把第一人称真实想法留作后台心迹；正式日记只由 write_lulu_journal 工具写入。"
                 else -> "本轮主要等待，并重新安排下一次完整感知。"
             },
             createdAt = nowMillis,

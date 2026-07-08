@@ -199,6 +199,36 @@ class LuluIntentPlannerTest {
     }
 
     @Test
+    fun `model prompts keep formal diary behind journal tool only`() {
+        val input = LuluIntentInput(
+            assistantName = "露露",
+            assistantPersona = "认真照看用户学习和身体状态。",
+            state = LuluState(assistantId = assistantId),
+            userText = "",
+            assistantText = "",
+            minutesSinceLastChat = 30,
+            availableToolNames = setOf("write_lulu_journal", "get_app_usage"),
+        )
+        val prompt = LuluIntentModelPlanner.buildPrompt(input)
+        val chatPrompt = LuluIntentModelPlanner.buildChatTurnPrompt(
+            LuluChatTurnPlanInput(
+                assistantName = "露露",
+                assistantPersona = "认真照看用户学习和身体状态。",
+                state = LuluState(assistantId = assistantId),
+                recentMessages = emptyList(),
+                availableToolNames = setOf("write_lulu_journal", "get_app_usage"),
+            )
+        )
+
+        assertTrue(prompt.contains("正式日记只在角色明确调用 write_lulu_journal 工具"))
+        assertTrue(chatPrompt.contains("正式日记只在主动调用 write_lulu_journal"))
+        assertFalse(prompt.contains("写第一人称辞海日记"))
+        assertFalse(chatPrompt.contains("写第一人称辞海日记"))
+        assertFalse(prompt.contains("cihai-diary"))
+        assertFalse(chatPrompt.contains("cihai-diary"))
+    }
+
+    @Test
     fun `model planner clamps chat turn action plan and limits tools`() {
         val plan = LuluIntentModelPlanner.parseChatTurnPlan(
             rawText = """

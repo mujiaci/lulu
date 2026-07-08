@@ -161,6 +161,20 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
         null
     }
     val reading = readableBook?.readNextReflection(nowMillis = input.createdAt + 2)
+    val innerJournal = if (normalizedHints.any { it == CIHAI_ACTION_WRITE_DIARY || it == CIHAI_ACTION_WRITE_JOURNAL }) {
+        CihaiEntry.fromSilentJudgment(
+            assistantId = input.assistantId,
+            assistantName = input.assistantName,
+            reason = buildString {
+                append(input.reason)
+                append(" 后台感知只记录辞海心迹，不写正式日记；正式日记只认 write_lulu_journal 工具调用。")
+            },
+            userText = input.userText,
+            createdAt = input.createdAt + 1,
+        )
+    } else {
+        null
+    }
     val reflection = if (CIHAI_ACTION_MEMORY_REFLECT in normalizedHints) {
         CihaiEntry(
             assistantId = input.assistantId,
@@ -179,6 +193,7 @@ fun planCihaiSilentPresence(input: CihaiSilentPresenceInput): CihaiSilentPresenc
     }
     return CihaiSilentPresenceResult(
         entries = buildList {
+            innerJournal?.let(::add)
             reading?.entry?.let(::add)
             reflection?.let(::add)
         },
@@ -219,6 +234,8 @@ fun CihaiBook.readNextReflection(nowMillis: Long = System.currentTimeMillis()): 
 }
 
 private const val READING_EXCERPT_LENGTH = 700
+private const val CIHAI_ACTION_WRITE_DIARY = "WRITE_DIARY"
+private const val CIHAI_ACTION_WRITE_JOURNAL = "WRITE_JOURNAL"
 private const val CIHAI_ACTION_READ_BOOK = "READ_BOOK"
 private const val CIHAI_ACTION_MEMORY_REFLECT = "MEMORY_REFLECT"
 

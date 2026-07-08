@@ -108,7 +108,7 @@ object ProactiveReminderPlanner {
             },
             userText = userText.take(160),
             preferredToolNames = buildPreferredToolNames(kind),
-            actionHints = buildActionHints(kind, combined),
+            actionHints = buildActionHints(kind, combined, userText.lowercase()),
         )
     }
 
@@ -120,17 +120,13 @@ object ProactiveReminderPlanner {
         ProactiveReminderKind.GENERAL -> listOf("get_app_usage", "get_battery_info")
     }
 
-    private fun buildActionHints(kind: ProactiveReminderKind, text: String): List<ProactiveActionHint> = buildList {
+    private fun buildActionHints(
+        kind: ProactiveReminderKind,
+        text: String,
+        userText: String,
+    ): List<ProactiveActionHint> = buildList {
         when (kind) {
-            ProactiveReminderKind.SLEEP -> {
-                add(
-                    ProactiveActionHint(
-                        toolName = "write_lulu_journal",
-                        reason = "把这次催睡/休息约定写成第一人称辞海日记，后续能延续关心。",
-                        argumentsJson = """{"entry_type":"care","content":"用户刚才提到睡觉/休息，露露约好到点提醒。"}""",
-                    )
-                )
-            }
+            ProactiveReminderKind.SLEEP -> Unit
             ProactiveReminderKind.SCHEDULE -> {
                 add(
                     ProactiveActionHint(
@@ -146,28 +142,12 @@ object ProactiveReminderPlanner {
                     )
                 )
             }
-            ProactiveReminderKind.MEAL -> {
-                add(
-                    ProactiveActionHint(
-                        toolName = "write_lulu_journal",
-                        reason = "把这次吃饭关心写成第一人称辞海日记，后续能延续照看。",
-                        argumentsJson = """{"entry_type":"care","content":"用户刚才提到还没吃饭，露露约好稍后确认。"}""",
-                    )
-                )
-            }
-            ProactiveReminderKind.STUDY -> {
-                add(
-                    ProactiveActionHint(
-                        toolName = "write_lulu_journal",
-                        reason = "把这次学习/写作业约定写成第一人称辞海日记，后续能延续陪伴。",
-                        argumentsJson = """{"entry_type":"care","content":"用户刚才去学习/写作业，露露约好晚点轻轻确认。"}""",
-                    )
-                )
-            }
+            ProactiveReminderKind.MEAL -> Unit
+            ProactiveReminderKind.STUDY -> Unit
             ProactiveReminderKind.GENERAL -> Unit
         }
 
-        if (text.containsAny(JOURNAL_WORDS)) {
+        if (userText.containsAny(JOURNAL_WORDS)) {
             add(
                 ProactiveActionHint(
                     toolName = "write_lulu_journal",

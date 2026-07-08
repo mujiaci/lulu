@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -30,7 +31,7 @@ class ProactiveReminderPlannerTest {
         assertEquals(ProactiveReminderKind.SLEEP, plan.kind)
         assertTrue(plan.preferredToolNames.contains("get_gadgetbridge_data"))
         assertTrue(plan.preferredToolNames.contains("get_app_usage"))
-        assertTrue(plan.actionHints.any { it.toolName == "write_lulu_journal" && it.autoExecutable })
+        assertFalse(plan.actionHints.any { it.toolName == "write_lulu_journal" })
     }
 
     @Test
@@ -82,6 +83,20 @@ class ProactiveReminderPlannerTest {
     }
 
     @Test
+    fun `assistant journal wording alone does not request formal diary tool`() {
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "十分钟后提醒我睡觉",
+            assistantText = "好，我会记到日志里，十分钟后叫你。",
+            nowMillis = now,
+            zoneId = zone,
+        )
+
+        assertNotNull(plan)
+        assertEquals(ProactiveReminderKind.SLEEP, plan!!.kind)
+        assertFalse(plan.actionHints.any { it.toolName == "write_lulu_journal" })
+    }
+
+    @Test
     fun `meal mention schedules a short care follow up`() {
         val plan = ProactiveReminderPlanner.plan(
             userText = "我还没吃饭，等会儿再弄点东西吃",
@@ -95,6 +110,7 @@ class ProactiveReminderPlannerTest {
         assertEquals(20L, (plan.triggerAtMillis - now) / 60_000L)
         assertTrue(plan.preferredToolNames.contains("get_app_usage"))
         assertTrue(plan.preferredToolNames.contains("get_battery_info"))
+        assertFalse(plan.actionHints.any { it.toolName == "write_lulu_journal" })
     }
 
     @Test
@@ -110,5 +126,6 @@ class ProactiveReminderPlannerTest {
         assertEquals(ProactiveReminderKind.STUDY, plan!!.kind)
         assertEquals(45L, (plan.triggerAtMillis - now) / 60_000L)
         assertTrue(plan.preferredToolNames.contains("get_app_usage"))
+        assertFalse(plan.actionHints.any { it.toolName == "write_lulu_journal" })
     }
 }

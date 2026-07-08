@@ -70,8 +70,8 @@ object LivingPresencePlanner {
         append("事件=${intent.concernEvent}。目标=${intent.concernGoal}。")
         append("感知层必须先装入角色人设、上下文、未总结聊天、辞海、挂心任务、工具状态、工具结果、向量记忆和上一轮状态栏。")
         append("意义评估 Appraisal=${intent.appraisal.meaning}；风险=${intent.appraisal.risk}；价值=${intent.appraisal.value}；成本=${intent.appraisal.cost}；资源=${intent.appraisal.resources}.")
-        append("判断层 intention=${intent.intention}；是否开口、是否查工具、是否等待、是否写辞海、下一次什么时候感知，都必须根据本轮感知和人设重新决定。")
-        append("行动池 includes MESSAGE, WAIT, TOOL_USE, SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION, READ, ASK_USER, PASS；WRITE_DIARY 代表写入辞海日记：按角色人设和上下文生成 100-500 字第一人称真实想法；记忆沉淀由辞海/聊天阈值自动触发，不作为模型动作。")
+        append("判断层 intention=${intent.intention}；是否开口、是否查工具、是否等待、是否记录后台心迹、下一次什么时候感知，都必须根据本轮感知和人设重新决定。")
+        append("行动池 includes MESSAGE, WAIT, TOOL_USE, SET_ALARM, WRITE_DIARY, SCHEDULE_NEXT_PERCEPTION, READ, ASK_USER, PASS；WRITE_DIARY 只代表后台心迹，不是正式日记；正式日记只通过 write_lulu_journal 工具保存。记忆沉淀由辞海/聊天阈值自动触发，不作为模型动作。")
         append("状态栏只生成心情、身体、精神、亲密和第一人称没说出口；不要把 belief/motive/intention 当成状态栏展示。")
         append("Consolidation=${intent.consolidation.episodicTrace} / ${intent.consolidation.policyLearning}.")
         append("Hypotheses: ${intent.hypotheses.joinToString(" / ")}.")
@@ -81,12 +81,6 @@ object LivingPresencePlanner {
     private fun buildActionHints(kind: LivingIntentKind): List<ProactiveActionHint> = buildList {
         add(
             ProactiveActionHint(
-                toolName = LivingPresenceConsolidationHint.WRITE_JOURNAL.name,
-                reason = "如果不适合打扰用户，把这次未说出口的担心、克制和判断写成 100-500 字第一人称辞海日记，并进入向量记忆。",
-            )
-        )
-        add(
-            ProactiveActionHint(
                 toolName = LivingPresenceConsolidationHint.READ_BOOK.name,
                 reason = "如果用户持续沉默且没有紧急风险，可以阅读辞海里用户交给角色的材料，留下阅读感悟并进入记忆。",
             )
@@ -94,7 +88,7 @@ object LivingPresencePlanner {
         add(
             ProactiveActionHint(
                 toolName = LivingPresenceConsolidationHint.MEMORY_REFLECT.name,
-                reason = "把本轮感知、意义评估、审议判断、辞海记录、向量记忆和图谱记忆整理成沉淀，供下一轮判断复用。",
+                reason = "把本轮感知、意义评估、审议判断、后台心迹、向量记忆和图谱记忆整理成沉淀，供下一轮判断复用；不要写正式日记。",
             )
         )
         if (kind == LivingIntentKind.HEALTH_SAFETY) {

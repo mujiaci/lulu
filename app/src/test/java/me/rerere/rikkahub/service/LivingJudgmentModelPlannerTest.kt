@@ -36,6 +36,8 @@ class LivingJudgmentModelPlannerTest {
         assertFalse(prompt.contains("学习或忙碌应更克制"))
         assertTrue(prompt.contains("不等于多久后发消息"))
         assertTrue(prompt.contains("WRITE_DIARY"))
+        assertTrue(prompt.contains("正式日记只通过 write_lulu_journal 工具保存"))
+        assertTrue(prompt.contains("WRITE_DIARY 只表示后台心迹"))
         assertTrue(prompt.contains("SCHEDULE_NEXT_PERCEPTION"))
         assertTrue(prompt.contains("MEMORY_UPDATE 不要再输出"))
         assertTrue(prompt.contains("thought 必须是第一人称"))

@@ -6,6 +6,7 @@ import me.rerere.rikkahub.service.LivingAction
 import me.rerere.rikkahub.service.LivingIntentKind
 import me.rerere.rikkahub.service.LivingJudgmentSource
 import me.rerere.rikkahub.service.LivingJudgmentTrace
+import me.rerere.rikkahub.service.LivingPresenceConsolidationHint
 import me.rerere.rikkahub.service.LuluIntent
 import me.rerere.rikkahub.service.LuluIntentPlan
 import me.rerere.rikkahub.service.RollingJudgmentLoop
@@ -108,6 +109,15 @@ class ProactiveMessageContextTest {
         assertTrue(state.selfScene.contains("没有发消息"))
         assertTrue(state.reason.contains("静默判断"))
         assertTrue(state.perceptionSummary.contains("用户说要学习"))
+    }
+
+    @Test
+    fun `default silent presence hints do not request formal journal writing`() {
+        val hints = defaultSilentPresenceActionHints()
+
+        assertFalse(hints.contains(LivingPresenceConsolidationHint.WRITE_JOURNAL.name))
+        assertTrue(hints.contains(LivingPresenceConsolidationHint.READ_BOOK.name))
+        assertTrue(hints.contains(LivingPresenceConsolidationHint.MEMORY_REFLECT.name))
     }
 
     @Test

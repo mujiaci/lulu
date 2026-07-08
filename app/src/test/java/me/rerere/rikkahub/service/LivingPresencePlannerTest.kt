@@ -44,7 +44,7 @@ class LivingPresencePlannerTest {
         assertTrue(plans.first().reason.contains("Appraisal="))
         assertTrue(plans.first().reason.contains("感知层必须先装入角色人设"))
         assertTrue(plans.first().reason.contains("下次什么时候感知"))
-        assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceConsolidationHint.WRITE_JOURNAL.name })
+        assertFalse(plans.first().actionHints.any { it.toolName == LivingPresenceConsolidationHint.WRITE_JOURNAL.name })
         assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceConsolidationHint.MEMORY_REFLECT.name })
         assertTrue(plans.first().actionHints.any { it.toolName == LivingPresenceAction.TOOL_USE.name })
     }
