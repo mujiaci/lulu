@@ -78,6 +78,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
+import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
 import me.rerere.rikkahub.data.living.LivingPresenceStore
@@ -575,13 +576,10 @@ class ProactiveMessageService : KoinComponent {
         try {
             val assistantId = settings.assistantId.toString()
             val cihaiState = cihaiStore.state.first()
-            val recentEntries = cihaiState.entries
-                .filter { entry ->
-                    entry.assistantId == assistantId &&
-                        (entry.kind == CihaiEntryKind.DIARY || entry.kind == CihaiEntryKind.INNER_JOURNAL)
-                }
-                .sortedBy { it.createdAt }
-                .takeLast(3)
+            val recentEntries = recentFormalDiaryOrInnerJournalEntries(
+                entries = cihaiState.entries,
+                assistantId = assistantId,
+            )
             val readingBooks = cihaiState.books.filter { it.assistantId == assistantId }.take(3)
             if (recentEntries.isNotEmpty() || readingBooks.isNotEmpty()) {
                 sb.appendLine("辞海上下文:")
@@ -2095,6 +2093,18 @@ internal fun defaultSilentPresenceActionHints(): List<String> = listOf(
     LivingPresenceConsolidationHint.READ_BOOK.name,
     LivingPresenceConsolidationHint.MEMORY_REFLECT.name,
 )
+
+internal fun recentFormalDiaryOrInnerJournalEntries(
+    entries: List<CihaiEntry>,
+    assistantId: String,
+    limit: Int = 3,
+): List<CihaiEntry> = entries
+    .filter { entry ->
+        entry.assistantId == assistantId &&
+            (entry.kind == CihaiEntryKind.DIARY || entry.kind == CihaiEntryKind.INNER_JOURNAL)
+    }
+    .sortedBy { it.createdAt }
+    .takeLast(limit.coerceAtLeast(0))
 
 internal fun buildTargetedProactiveSensingInstruction(
     targetedKind: String?,

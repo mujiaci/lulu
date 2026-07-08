@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.cihai.CihaiEntry
+import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.model.LuluMode
 import me.rerere.rikkahub.data.model.LuluState
 import me.rerere.rikkahub.service.LivingAction
@@ -121,6 +123,26 @@ class ProactiveMessageContextTest {
     }
 
     @Test
+    fun `recent diary context keeps latest three formal diary or inner journal entries`() {
+        val entries = listOf(
+            cihaiEntry("old-diary", CihaiEntryKind.DIARY, createdAt = 1),
+            cihaiEntry("reading", CihaiEntryKind.READING_NOTE, createdAt = 2),
+            cihaiEntry("inner-1", CihaiEntryKind.INNER_JOURNAL, createdAt = 3),
+            cihaiEntry("other-assistant", CihaiEntryKind.DIARY, assistantId = "other", createdAt = 4),
+            cihaiEntry("inner-2", CihaiEntryKind.INNER_JOURNAL, createdAt = 5),
+            cihaiEntry("new-diary", CihaiEntryKind.DIARY, createdAt = 6),
+        )
+
+        val recent = recentFormalDiaryOrInnerJournalEntries(entries, assistantId = "lulu")
+
+        assertEquals(
+            listOf("inner-1", "inner-2", "new-diary"),
+            recent.map { it.title },
+        )
+        assertTrue(recent.all { it.kind == CihaiEntryKind.DIARY || it.kind == CihaiEntryKind.INNER_JOURNAL })
+    }
+
+    @Test
     fun `technical fallback trace is not shown as status bar inner voice`() {
         val assistantId = Uuid.parse("22222222-2222-2222-2222-222222222222")
         val intent = RollingJudgmentLoop.createIntent(
@@ -180,5 +202,18 @@ class ProactiveMessageContextTest {
     private companion object {
         const val NOW = 1_700_000_000_000L
         const val MINUTE = 60_000L
+
+        fun cihaiEntry(
+            title: String,
+            kind: CihaiEntryKind,
+            assistantId: String = "lulu",
+            createdAt: Long,
+        ) = CihaiEntry(
+            assistantId = assistantId,
+            kind = kind,
+            title = title,
+            content = "content-$title",
+            createdAt = createdAt,
+        )
     }
 }
