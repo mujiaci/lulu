@@ -663,6 +663,7 @@ private fun StudyHero(
     onSelectCompanion: (Assistant) -> Unit,
 ) {
     val daysLeft = remember { ExamStudyPlan.daysLeft() }
+    val studyTimeOverview = StudyRules.studyTimeOverview(state)
     var showCompanionPicker by remember { mutableStateOf(false) }
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = StudyColors.hero),
@@ -691,6 +692,18 @@ private fun StudyHero(
                     HeroMetric("倒计时", "${daysLeft}天", Modifier.weight(1f))
                     HeroMetric("夸夸值", state.wallet.kudos.toString(), Modifier.weight(1f))
                     HeroMetric("Lv", StudyRules.currentLevel(state).level.toString(), Modifier.weight(1f), onOpenLevel)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    HeroMetric(
+                        "今日学习",
+                        formatStudyTimeMetric(studyTimeOverview.todayMinutes, studyTimeOverview.todayPomodoros),
+                        Modifier.weight(1f),
+                    )
+                    HeroMetric(
+                        "本周学习",
+                        formatStudyTimeMetric(studyTimeOverview.weekMinutes, studyTimeOverview.weekPomodoros),
+                        Modifier.weight(1f),
+                    )
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     FilledTonalButton(onClick = onSignIn, modifier = Modifier.weight(1f)) {
@@ -1502,6 +1515,9 @@ private fun DrawOpeningVideoLayer(
         )
     }
 }
+
+private fun formatStudyTimeMetric(minutes: Int, pomodoros: Int): String =
+    "${minutes}分 · ${pomodoros}个"
 
 @Composable
 private fun DrawRewardVideoLayer(
@@ -2355,7 +2371,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到：每天固定 50 夸夸值。",
                 "完成 1 个番茄钟：50 夸夸值 + 1 个盲盒。",
-                "完成 1 项待办：100 夸夸值。",
+                "完成 1 项待办：50 夸夸值。",
                 "今日待办全清：触发超神时刻，固定给十连券 x1。",
             ),
         )

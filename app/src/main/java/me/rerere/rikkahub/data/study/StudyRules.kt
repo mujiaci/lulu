@@ -8,6 +8,8 @@ object StudyRules {
     const val SINGLE_DRAW_COST = 100
     const val DISCOUNT_SINGLE_DRAW_COST = 100
     const val TEN_DRAW_COST = 800
+    const val TASK_COMPLETE_KUDOS = 50
+    const val POMODORO_KUDOS = 50
     const val OFFICIAL_ECONOMY_RESET_VERSION = 2
     const val DATA_LOSS_COMPENSATION_VERSION = 3
     const val NORMAL_FRAGMENTS_PER_OUTFIT = 10
@@ -215,7 +217,11 @@ object StudyRules {
         if (index < 0 || state.tasks[index].done == done) return StudyActionResult(state)
         val nextTasks = state.tasks.toMutableList()
         nextTasks[index] = nextTasks[index].copy(done = done, completedAt = if (done) nowMillis else null)
-        val reward = if (done) StudyReward(kudos = 100, title = "完成待办 +100") else StudyReward()
+        val reward = if (done) {
+            StudyReward(kudos = TASK_COMPLETE_KUDOS, title = "完成待办 +$TASK_COMPLETE_KUDOS")
+        } else {
+            StudyReward()
+        }
         val completedAll = nextTasks.isNotEmpty() && nextTasks.all { it.done }
         val canRecordPerfect = completedAll && state.lastPerfectDate != state.today
         val nextPerfectStreak = if (canRecordPerfect) state.perfectStreak + 1 else state.perfectStreak
@@ -247,26 +253,34 @@ object StudyRules {
         random: Random = Random.Default,
     ): StudyActionResult {
         val box = mysteryBox(random)
+        val date = state.today.ifBlank { LocalDate.now().toString() }
+        val todayRecord = state.dailyStudyRecords[date] ?: StudyDailyRecord()
         val reward = StudyReward(
-            kudos = 50,
+            kudos = POMODORO_KUDOS,
             mysteryBoxKudos = box.kudos,
             universalNormalFragments = box.universalNormalFragments,
-            title = "番茄钟 +50 + 盲盒待开启",
+            title = "番茄钟 +$POMODORO_KUDOS + 盲盒待开启",
         )
         return StudyActionResult(
             state = state.copy(
-                wallet = state.wallet.add(StudyReward(kudos = 50)),
+                wallet = state.wallet.add(StudyReward(kudos = POMODORO_KUDOS)),
                 inventory = state.inventory.copy(
                     unopenedMysteryBoxes = state.inventory.unopenedMysteryBoxes + box,
                 ),
                 inactiveStudyDays = 0,
-                lastStudyDate = state.today,
+                lastStudyDate = date,
                 stats = state.stats.copy(
                     totalPomodoros = state.stats.totalPomodoros + 1,
                     totalStudyMinutes = state.stats.totalStudyMinutes + minutes,
                 ),
+                dailyStudyRecords = state.dailyStudyRecords + (
+                    date to todayRecord.copy(
+                        pomodoros = todayRecord.pomodoros + 1,
+                        studyMinutes = todayRecord.studyMinutes + minutes,
+                    )
+                    ),
                 recentEvents = state.recentEvents
-                    .addEvent(StudyEventType.Pomodoro, "番茄钟完成", "获得 50 夸夸值")
+                    .addEvent(StudyEventType.Pomodoro, "番茄钟完成", "获得 $POMODORO_KUDOS 夸夸值")
                     .addEvent(
                         StudyEventType.MysteryBox,
                         "盲盒待开启",
@@ -274,6 +288,28 @@ object StudyRules {
                     ),
             ),
             reward = reward,
+        )
+    }
+
+    fun studyTimeOverview(
+        state: StudyState,
+        today: LocalDate = state.today.toLocalDateOrToday(),
+    ): StudyTimeOverview {
+        val weekStart = today.minusDays((today.dayOfWeek.value - 1).toLong())
+        val weekEnd = weekStart.plusDays(6)
+        val todayRecord = state.dailyStudyRecords[today.toString()] ?: StudyDailyRecord()
+        val weekRecords = state.dailyStudyRecords
+            .mapNotNull { (rawDate, record) ->
+                rawDate.toLocalDateOrNull()?.let { date -> date to record }
+            }
+            .filter { (date, _) -> !date.isBefore(weekStart) && !date.isAfter(weekEnd) }
+            .map { (_, record) -> record }
+
+        return StudyTimeOverview(
+            todayMinutes = todayRecord.studyMinutes,
+            todayPomodoros = todayRecord.pomodoros,
+            weekMinutes = weekRecords.sumOf { it.studyMinutes },
+            weekPomodoros = weekRecords.sumOf { it.pomodoros },
         )
     }
 
@@ -705,6 +741,12 @@ private fun StudyInventory.addReward(reward: StudyReward): StudyInventory {
         specialStoryFragments = specialStoryFragments + reward.specialStoryFragments,
     )
 }
+
+private fun String.toLocalDateOrToday(): LocalDate =
+    toLocalDateOrNull() ?: LocalDate.now()
+
+private fun String.toLocalDateOrNull(): LocalDate? =
+    runCatching { LocalDate.parse(this) }.getOrNull()
 
 private fun StudyInventory.unlockFirstIncompleteOutfit(): StudyInventory {
     val target = StudyRules.outfitNames.firstOrNull { outfit ->

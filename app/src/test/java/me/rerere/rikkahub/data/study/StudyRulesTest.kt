@@ -41,11 +41,11 @@ class StudyRulesTest {
         val first = StudyRules.toggleTask(state, "a", true)
         val second = StudyRules.toggleTask(first.state, "b", true)
 
-        assertEquals(100, first.reward.kudos)
+        assertEquals(50, first.reward.kudos)
         assertFalse(first.state.superMomentAvailable)
-        assertEquals(100, second.reward.kudos)
+        assertEquals(50, second.reward.kudos)
         assertTrue(second.state.superMomentAvailable)
-        assertEquals(200, second.state.wallet.kudos)
+        assertEquals(100, second.state.wallet.kudos)
     }
 
     @Test
@@ -62,6 +62,26 @@ class StudyRulesTest {
         assertEquals(1, result.state.inventory.unopenedMysteryBoxes.size)
         assertEquals(1, result.state.stats.totalPomodoros)
         assertEquals(18, result.state.stats.totalStudyMinutes)
+    }
+
+    @Test
+    fun `pomodoro completion records daily and weekly study time`() {
+        val monday = StudyRules.completePomodoro(
+            state = StudyState(today = "2026-07-06"),
+            minutes = 25,
+            random = Random(1),
+        ).state
+        val tuesday = StudyRules.completePomodoro(
+            state = monday.copy(today = "2026-07-07"),
+            minutes = 15,
+            random = Random(2),
+        ).state
+        val overview = StudyRules.studyTimeOverview(tuesday, LocalDate.of(2026, 7, 7))
+
+        assertEquals(15, overview.todayMinutes)
+        assertEquals(1, overview.todayPomodoros)
+        assertEquals(40, overview.weekMinutes)
+        assertEquals(2, overview.weekPomodoros)
     }
 
     @Test

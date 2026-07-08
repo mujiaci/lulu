@@ -10,6 +10,7 @@ data class StudyState(
     val tasks: List<StudyTask> = emptyList(),
     val inventory: StudyInventory = StudyInventory(),
     val stats: StudyStats = StudyStats(),
+    val dailyStudyRecords: Map<String, StudyDailyRecord> = emptyMap(),
     val signInStreak: Int = 0,
     val lastSignInDate: String? = null,
     val lastStudyDate: String? = null,
@@ -82,6 +83,12 @@ data class StudyStats(
 )
 
 @Serializable
+data class StudyDailyRecord(
+    val pomodoros: Int = 0,
+    val studyMinutes: Int = 0,
+)
+
+@Serializable
 data class StudyEvent(
     val id: String,
     val type: StudyEventType,
@@ -129,6 +136,13 @@ data class StudyMysteryBoxReward(
 data class StudyActionResult(
     val state: StudyState,
     val reward: StudyReward = StudyReward(),
+)
+
+data class StudyTimeOverview(
+    val todayMinutes: Int = 0,
+    val todayPomodoros: Int = 0,
+    val weekMinutes: Int = 0,
+    val weekPomodoros: Int = 0,
 )
 
 data class StudyDrawActionResult(

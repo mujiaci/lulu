@@ -61,7 +61,11 @@ class ExamStudyPlanTest {
         assertTrue(restPrompt.contains("今天是用户明确选择的完整休息日"))
         assertTrue(julyEightTasks.contains("顺延自 7 月 7 日"))
         assertTrue(julyEightTasks.contains("刑法第 1 章：做文运/众合章节题"))
+        assertTrue(julyEightTasks.contains("15-20 道"))
+        assertTrue(julyEightTasks.contains("不算完整闭环"))
         assertTrue(julyEightTasks.contains("民法第 1 章：课前目录预览"))
+        assertTrue(julyEightTasks.contains("法理第 1-3 章：正式背诵 30-40 分钟"))
+        assertTrue(julyEightTasks.contains("有效学习量至少凑够 2 小时"))
     }
 
     @Test
@@ -70,6 +74,7 @@ class ExamStudyPlanTest {
         val titles = plan?.tasks.orEmpty().joinToString("\n") { it.title }
 
         assertTrue(titles.contains("刑法第 1 章：整章章节题"))
+        assertTrue(titles.contains("约 40 道"))
         assertTrue(titles.contains("错题"))
         assertTrue(titles.contains("第一轮关键词背诵"))
     }
@@ -99,6 +104,9 @@ class ExamStudyPlanTest {
         assertTrue(text.contains("法理学不重听"))
         assertTrue(text.contains("第一轮背诵"))
         assertTrue(text.contains("不是只看目录"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("不能长期停留在“看错题、搞目录”"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("正式背诵 30-40 分钟"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("至少安排约 2 小时有效学习"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("单纯看框架不算"))
     }
 
@@ -117,11 +125,33 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("错峰并行"))
         assertTrue(habit.contains("累计约 3 小时"))
         assertTrue(habit.contains("不新开大块"))
+        assertTrue(habit.contains("不要拆成 4-5 个碎片"))
         assertTrue(julySix?.title.orEmpty().contains("连续主块"))
         assertFalse(julySix?.tasks.orEmpty().any { it.title.contains("听众合法硕民法课程") })
         assertTrue(julyNine?.title.orEmpty().contains("民法1连续主块"))
         assertTrue(prompt.contains("2-3 天一个学科小单元"))
+        assertTrue(prompt.contains("做题、错题收集和框架闭环优先集中完成"))
         assertTrue(prompt.contains("另一科在连续主块期间最多安排 15-30 分钟复述或框架保温"))
+    }
+
+    @Test
+    fun chapterPracticeUsesFortyQuestionSetsInsteadOfTinyChunks() {
+        val week = ExamStudyPlan.julyWeeks.single { it.id == "2026-07-w2" }
+        val julyEight = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 8))
+        val julyThirteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))
+        val text = listOf(
+            ExamStudyPlan.studyHabitReference,
+            week.tasks.joinToString("\n"),
+            julyEight?.tasks.orEmpty().joinToString("\n") { it.title },
+            julyThirteen?.tasks.orEmpty().joinToString("\n") { it.title },
+        ).joinToString("\n")
+
+        assertEquals(40, ExamStudyPlan.chapterPracticeQuestionsPerSet)
+        assertTrue(text.contains("一张按约 40 道估算"))
+        assertTrue(text.contains("本周完成文运/众合章节题 1 张约 40 道"))
+        assertTrue(text.contains("7 月 8 日先做 15-20 道启动"))
+        assertTrue(text.contains("7 月 13 日补完剩余 20-25 道"))
+        assertFalse(week.tasks.joinToString("\n").contains("本周集中做文运/众合章节题 10-15 题"))
     }
 
     @Test

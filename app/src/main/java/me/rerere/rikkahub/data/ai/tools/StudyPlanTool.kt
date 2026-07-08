@@ -46,6 +46,7 @@ fun buildTodayStudyPlanPayload(
     val undoneTasks = state.tasks.filterNot { it.done }
     val schedule = state.generatedSchedules[state.today] ?: ExamStudyPlan.todaySchedule(today)
     val level = StudyRules.currentLevel(state)
+    val timeOverview = StudyRules.studyTimeOverview(state, today)
     return buildJsonObject {
         put("success", true)
         put("source", "study_app_local_store")
@@ -55,6 +56,10 @@ fun buildTodayStudyPlanPayload(
         put("plan_tasks_total", planTasks.size)
         put("manual_tasks_done", manualTasks.count { it.done })
         put("manual_tasks_total", manualTasks.size)
+        put("pomodoros_today", timeOverview.todayPomodoros)
+        put("study_minutes_today", timeOverview.todayMinutes)
+        put("pomodoros_this_week", timeOverview.weekPomodoros)
+        put("study_minutes_this_week", timeOverview.weekMinutes)
         put("pomodoros_total", state.stats.totalPomodoros)
         put("study_minutes_total", state.stats.totalStudyMinutes)
         put("kudos", state.wallet.kudos)
@@ -92,7 +97,9 @@ fun buildTodayStudyPlanPayload(
         put("human_summary", buildString {
             append("今日学习状态：计划待办 ${planTasks.count { it.done }}/${planTasks.size}，")
             append("手动待办 ${manualTasks.count { it.done }}/${manualTasks.size}，")
-            append("番茄钟 ${state.stats.totalPomodoros} 个，累计学习 ${state.stats.totalStudyMinutes} 分钟。")
+            append("今日番茄 ${timeOverview.todayPomodoros} 个/${timeOverview.todayMinutes} 分钟，")
+            append("本周番茄 ${timeOverview.weekPomodoros} 个/${timeOverview.weekMinutes} 分钟，")
+            append("累计番茄 ${state.stats.totalPomodoros} 个，累计学习 ${state.stats.totalStudyMinutes} 分钟。")
             if (undoneTasks.isNotEmpty()) {
                 append("未完成：")
                 append(undoneTasks.take(6).joinToString("；") { it.title })

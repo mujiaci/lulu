@@ -47,6 +47,7 @@ internal fun buildStudyCompanionContext(
     val undoneTasks = state.tasks.filterNot { it.done }
     val schedule = state.generatedSchedules[state.today] ?: ExamStudyPlan.todaySchedule(today)
     val level = StudyRules.currentLevel(state)
+    val timeOverview = StudyRules.studyTimeOverview(state, today)
 
     return buildString {
         appendLine("<study_companion_state>")
@@ -54,6 +55,8 @@ internal fun buildStudyCompanionContext(
         appendLine("日期：${state.today.ifBlank { today.toString() }}")
         appendLine("计划待办：${planTasks.count { it.done }}/${planTasks.size}")
         appendLine("手动待办：${manualTasks.count { it.done }}/${manualTasks.size}")
+        appendLine("今日学习：${timeOverview.todayPomodoros} 个番茄，${timeOverview.todayMinutes} 分钟")
+        appendLine("本周学习：${timeOverview.weekPomodoros} 个番茄，${timeOverview.weekMinutes} 分钟")
         appendLine("累计番茄钟：${state.stats.totalPomodoros} 个；累计学习：${state.stats.totalStudyMinutes} 分钟")
         appendLine("夸夸值：当前 ${state.wallet.kudos}；累计 ${state.wallet.totalKudosEarned}；等级 Lv${level.level} ${level.title}")
         if (completedTasks.isNotEmpty()) {
