@@ -78,6 +78,7 @@ import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
+import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
 import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.data.model.Assistant
@@ -574,7 +575,15 @@ class ProactiveMessageService : KoinComponent {
         try {
             val assistantId = settings.assistantId.toString()
             val cihaiState = cihaiStore.state.first()
-            val recentEntries = cihaiState.entries.filter { it.assistantId == assistantId }.take(4)
+            val recentEntries = cihaiState.entries
+                .asSequence()
+                .filter { entry ->
+                    entry.assistantId == assistantId &&
+                        (entry.kind == CihaiEntryKind.DIARY || entry.kind == CihaiEntryKind.INNER_JOURNAL)
+                }
+                .sortedBy { it.createdAt }
+                .takeLast(3)
+                .toList()
             val readingBooks = cihaiState.books.filter { it.assistantId == assistantId }.take(3)
             if (recentEntries.isNotEmpty() || readingBooks.isNotEmpty()) {
                 sb.appendLine("辞海上下文:")
@@ -583,6 +592,9 @@ class ProactiveMessageService : KoinComponent {
                     recentEntries.forEach { entry ->
                         sb.appendLine("    · ${entry.kind.label}｜${entry.title}: ${entry.content.take(80)}")
                     }
+                }
+                if (recentEntries.isNotEmpty()) {
+                    sb.appendLine("  - 调用 write_lulu_journal 前必须对比以上最近 3 篇正式日记/后台心迹；只能写本轮新增感知、新变化或新判断，没有新东西就不要写正式日记。")
                 }
                 if (readingBooks.isNotEmpty()) {
                     sb.appendLine("  - 可阅读材料:")
