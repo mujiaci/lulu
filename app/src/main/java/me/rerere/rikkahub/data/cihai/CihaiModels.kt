@@ -53,7 +53,7 @@ fun buildCihaiMemoryContext(
     policy: CihaiMemoryPolicy = CihaiMemoryPolicy(),
 ): CihaiMemoryContext {
     val ordered = entries.sortedBy { it.createdAt }
-    val unsummarized = ordered.filterNot { it.memorySaved }
+    val unsummarized = ordered.filter { it.resolvedMemoryDisposition == CihaiMemoryDisposition.PENDING }
     return CihaiMemoryContext(
         recentEntries = ordered.takeLast(policy.recentCihaiContextLimit.coerceAtLeast(0)),
         unsummarizedEntries = unsummarized.take(policy.unsummarizedCihaiLimit.coerceAtLeast(0)),

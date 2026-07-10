@@ -9,6 +9,96 @@ import org.junit.Test
 
 class CihaiMemoryTest {
     @Test
+    fun `adding a new entry makes it visible and queues it atomically`() {
+        val entry = memoryEntry(id = "new-entry", createdAt = 1_000)
+
+        val updated = CihaiState().addEntryToMemoryQueue(entry)
+
+        assertEquals(listOf("new-entry"), updated.entries.map { it.id })
+        assertEquals(CihaiMemoryDisposition.PENDING, updated.entries.single().resolvedMemoryDisposition)
+        assertEquals(listOf("new-entry"), updated.memoryQueue.map { it.entryId })
+        assertEquals(1_000L, updated.memoryQueue.single().enqueuedAt)
+    }
+
+    @Test
+    fun `completing a settlement marks evidence saved and other reviewed entries cihai only`() {
+        val initial = CihaiState()
+            .addEntryToMemoryQueue(memoryEntry(id = "saved", createdAt = 100))
+            .addEntryToMemoryQueue(memoryEntry(id = "reviewed", createdAt = 200))
+
+        val updated = initial.completeMemorySettlement(
+            reviewedEntryIds = setOf("saved", "reviewed"),
+            savedEvidenceEntryIds = setOf("saved"),
+        )
+
+        assertEquals(CihaiMemoryDisposition.SAVED, updated.entries.first { it.id == "saved" }.resolvedMemoryDisposition)
+        assertEquals(
+            CihaiMemoryDisposition.CIHAI_ONLY,
+            updated.entries.first { it.id == "reviewed" }.resolvedMemoryDisposition,
+        )
+        assertTrue(updated.memoryQueue.isEmpty())
+    }
+
+    @Test
+    fun `failed settlement keeps entries pending and applies capped retry backoff`() {
+        val initial = CihaiState()
+            .addEntryToMemoryQueue(memoryEntry(id = "retry", createdAt = 100))
+
+        val first = initial.retryMemorySettlement(
+            entryIds = setOf("retry"),
+            failedAt = 1_000,
+            error = "network unavailable",
+        )
+        val heavilyRetried = first.copy(
+            memoryQueue = first.memoryQueue.map { it.copy(attemptCount = 20) },
+        ).retryMemorySettlement(
+            entryIds = setOf("retry"),
+            failedAt = 2_000,
+            error = "x".repeat(500),
+        )
+
+        assertEquals(1, first.memoryQueue.single().attemptCount)
+        assertTrue(first.memoryQueue.single().nextAttemptAt > 1_000)
+        assertEquals(CihaiMemoryDisposition.PENDING, first.entries.single().resolvedMemoryDisposition)
+        assertTrue(heavilyRetried.memoryQueue.single().nextAttemptAt <= 2_000 + 6 * 60 * 60 * 1_000L)
+        assertTrue(heavilyRetried.memoryQueue.single().lastError!!.length <= 300)
+    }
+
+    @Test
+    fun `deleting an entry also removes its pending queue item`() {
+        val initial = CihaiState()
+            .addEntryToMemoryQueue(memoryEntry(id = "delete-me"))
+            .addEntryToMemoryQueue(memoryEntry(id = "keep-me"))
+
+        val updated = initial.removeCihaiEntry("delete-me")
+
+        assertEquals(listOf("keep-me"), updated.entries.map { it.id })
+        assertEquals(listOf("keep-me"), updated.memoryQueue.map { it.entryId })
+    }
+
+    @Test
+    fun `normalization removes queue items whose entries are invalid or no longer pending`() {
+        val invalidEntry = memoryEntry(id = "invalid").copy(content = "")
+        val savedEntry = memoryEntry(id = "saved").copy(
+            memoryDisposition = CihaiMemoryDisposition.SAVED,
+            memorySaved = true,
+        )
+        val state = CihaiState(
+            entries = listOf(invalidEntry, savedEntry),
+            memoryQueue = listOf(
+                queueItem(entryId = "invalid"),
+                queueItem(entryId = "saved"),
+                queueItem(entryId = "missing"),
+            ),
+        )
+
+        val normalized = state.normalizedCihaiState()
+
+        assertEquals(listOf("saved"), normalized.entries.map { it.id })
+        assertTrue(normalized.memoryQueue.isEmpty())
+    }
+
+    @Test
     fun `legacy memory flags resolve without enqueueing old entries`() {
         val state = Json.decodeFromString(
             CihaiState.serializer(),
@@ -331,6 +421,11 @@ class CihaiMemoryTest {
                 title = "entry-$index",
                 content = "content-$index",
                 createdAt = index.toLong(),
+                memoryDisposition = if (index <= 10) {
+                    CihaiMemoryDisposition.SAVED
+                } else {
+                    CihaiMemoryDisposition.PENDING
+                },
                 memorySaved = index <= 10,
             )
         }
