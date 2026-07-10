@@ -9,6 +9,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.decodeFromString
@@ -43,6 +44,10 @@ class CihaiStore(
             prefs[stateKey] = json.encodeToString(transform(current).normalizedCihaiState())
         }
     }
+
+    suspend fun snapshot(): CihaiState = context.cihaiDataStore.data.first()[stateKey]?.let { raw ->
+        runCatching { json.decodeFromString<CihaiState>(raw) }.getOrDefault(CihaiState())
+    } ?: CihaiState()
 
     suspend fun selectAssistant(assistantId: String) {
         update { it.copy(selectedAssistantId = assistantId) }

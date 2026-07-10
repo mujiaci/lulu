@@ -378,7 +378,7 @@ class LocalTools(private val context: Context) {
                     val koin = GlobalContext.get()
                     val settings = koin.get<SettingsStore>().settingsFlow.value
                     val assistant = settings.getCurrentAssistant()
-                    koin.get<CihaiService>().addEntryAndRemember(
+                    koin.get<CihaiService>().addEntry(
                         CihaiEntry(
                             assistantId = assistant.id.toString(),
                             kind = CihaiEntryKind.DIARY,

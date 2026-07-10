@@ -99,6 +99,7 @@ val appModule = module {
             memoryBankService = get(),
             settingsStore = get(),
             generationHandler = get(),
+            scope = get(),
         )
     }
 

@@ -322,6 +322,28 @@ class MemoryBankService(
             .toSet()
     }
 
+    suspend fun getProcessedCihaiEntryIds(assistantId: String): Set<String> = withContext(Dispatchers.IO) {
+        memoryBankDAO.getMemoriesByAssistant(assistantId)
+            .asSequence()
+            .flatMap { memory -> memory.cihaiSourceEntryIds().asSequence() }
+            .toSet()
+    }
+
+    suspend fun saveCihaiSettledMemories(
+        candidates: List<AffectiveMemoryCandidate>,
+        assistantId: String,
+        createdAt: Long = System.currentTimeMillis(),
+    ): Set<String> {
+        return saveExtractedMemories(
+            candidates = candidates,
+            assistantId = assistantId,
+            conversationId = null,
+            createdAt = createdAt,
+        ).asSequence()
+            .flatMap { memory -> memory.cihaiSourceEntryIds().asSequence() }
+            .toSet()
+    }
+
     suspend fun recallMemories(query: String, count: Int): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
         if (query.isNotBlank()) {
             memoryBankDAO.searchMemoriesByKeyword(query, count)
@@ -643,12 +665,24 @@ private fun MemoryBankEntity.relatedMemoryIds(): List<String> =
         JsonInstant.decodeFromString(ListSerializer(String.serializer()), relatedMemoryIdsJson.orEmpty())
     }.getOrDefault(emptyList())
 
+private fun MemoryBankEntity.cihaiSourceEntryIds(): List<String> =
+    runCatching {
+        JsonInstant.decodeFromString(ListSerializer(String.serializer()), sourceMessageNodeIdsJson.orEmpty())
+    }.getOrDefault(emptyList())
+        .mapNotNull { sourceId ->
+            sourceId.takeIf { it.startsWith(CIHAI_MEMORY_SOURCE_PREFIX) }
+                ?.removePrefix(CIHAI_MEMORY_SOURCE_PREFIX)
+                ?.takeIf { it.isNotBlank() }
+        }
+
 private fun hebbianDelta(source: MemoryBankEntity, target: MemoryBankEntity?): Double {
     val sourceStrength = source.importance.coerceIn(1, 5) / 5.0 * source.confidence.coerceIn(0.0, 1.0)
     val targetStrength = (target?.importance ?: source.importance).coerceIn(1, 5) / 5.0 *
         (target?.confidence ?: source.confidence).coerceIn(0.0, 1.0)
     return MEMORY_HEBBIAN_EDGE_DELTA + (sourceStrength + targetStrength) * 0.05
 }
+
+private const val CIHAI_MEMORY_SOURCE_PREFIX = "cihai:"
 
 private fun List<RerankItem>.toMemoryRerankResults(): List<MemoryRerankResult> =
     map { item ->
