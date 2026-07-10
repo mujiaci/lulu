@@ -10,14 +10,15 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.companion.CompanionPerceptionPacket
+import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
-import me.rerere.rikkahub.data.model.LuluState
 import me.rerere.rikkahub.utils.JsonInstant
 
 object CompanionChatTurnModelPlanner {
     suspend fun planChatTurnOrNull(
-        input: LuluChatTurnPlanInput,
+        input: CompanionChatTurnPlanInput,
         settings: Settings,
         model: Model,
         providerManager: ProviderManager,
@@ -40,17 +41,18 @@ object CompanionChatTurnModelPlanner {
             JsonInstant.parseToJsonElement(jsonText)
         }.getOrNull()
         if (root !is JsonObject) return null
-        return parseChatTurnPlan(raw, input.availableToolNames)
+        return parseChatTurnPlan(raw, input.perception.availableToolNames)
     }
 
-    fun buildChatTurnPrompt(input: LuluChatTurnPlanInput): String = buildString {
-        appendLine("你是${input.assistantName}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
+    fun buildChatTurnPrompt(input: CompanionChatTurnPlanInput): String = buildString {
+        val perception = input.perception
+        appendLine("你是${perception.assistantName.ifBlank { "当前角色" }}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
         appendLine("你可以像角色本人一样判断：当前角色现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
         appendLine("活人感系统采用：感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构。")
         appendLine("情境感知包括当前时间、上下文、考研 App 计划、工具结果、工具状态、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；工具结果包括电量、位置、穿戴、摄像头等所有本地能力。")
         appendLine("意义评估只评估重要性、威胁、机会、身体/精神安全、时间压力、成本、收益、不行动后果和资源；它不直接选择行动。")
         appendLine("动态判断负责决定 intention、工具需求、是否行动、行动池选择和下一次感知时间；工具结果如果能同步得到，就补回本轮再决定行动。")
-        appendLine("状态生成放在行动后，只生成心情、身体状况、精神状况、亲密关系和第一人称没说出口；belief/motive/intention 不作为状态栏字段。")
+        appendLine("状态生成放在行动后，只生成心情、身体状况、精神状况、关系状态和第一人称没说出口；belief/motive/intention 不作为状态栏字段。")
         appendLine("如果用户不回消息，角色的选项池不是只有发消息：还可以等待、先看工具、记录后台心迹、阅读用户给的书/资料、把感悟沉淀进记忆、之后再判断。后台心迹不是正式日记；正式日记只在主动调用 write_lulu_journal 且能写出新内容时保存。")
         appendLine("工具是角色的本地感知和行动能力；只要角色形成意图，就可以主动选择工具、记录后台心迹、必要时调用正式日记工具、设闹钟、查短信/日历/位置/摄像头等。仍然要贴合人设和上下文，不要为了调用工具而调用。")
         appendLine("必须读取并服从 <persona>：包括角色语言风格、性格、职责和边界。不要把动作写进聊天正文括号里；如果需要动作/状态方向，放进 expressionGuidance，让 UI 状态栏承接。")
@@ -65,16 +67,25 @@ object CompanionChatTurnModelPlanner {
         appendLine("不要给普通回来、普通闲聊、无风险沉默安排固定 5 分钟 follow-up；只有身体不适、明确提醒/DDL/起床、学习承诺、吃饭睡觉照看这类语义才安排后续主动消息。")
         appendLine("Living Presence contract: perception packet gathers persona/context/tools/memory/cihai/concerns/status -> appraisal understands meaningToUser and meaningToRole -> judgment decides intention, tool needs, actions, and nextPerceptionAt -> action executes message/tool/inner-journal/schedule/wait; formal diary is written only by write_lulu_journal -> status generates mood/body/mind/relationship/innerThought -> Cihai keeps concern cards, formal tool-written diary entries, unsummarized context, and automatic vector summaries.")
         appendLine("<persona>")
-        appendLine(input.assistantPersona.take(2000))
+        appendLine(perception.persona.take(2000))
         appendLine("</persona>")
-        appendLine("<state>${input.state.toPlannerText()}</state>")
-        appendLine("<availableTools>${input.availableToolNames.joinToString(", ")}</availableTools>")
-        appendLine("<pendingThoughts>")
-        input.pendingThoughts.take(8).forEach { appendLine("- ${it.take(160)}") }
-        appendLine("</pendingThoughts>")
+        appendLine(perception.toPromptContext())
+        if (perception.contextFacts.isNotEmpty()) {
+            appendLine("<observed_facts>")
+            perception.contextFacts.forEach { fact ->
+                appendLine("${fact.key}=${fact.value}")
+            }
+            appendLine("</observed_facts>")
+        }
+        if (perception.memoryContext.isNotBlank()) {
+            appendLine("<memory_context>")
+            appendLine(perception.memoryContext)
+            appendLine("</memory_context>")
+        }
+        appendLine("<availableTools>${perception.availableToolNames.joinToString(", ")}</availableTools>")
         appendLine("<conversation>")
-        input.recentMessages.takeLast(8).forEach { message ->
-            appendLine("${message.role.name}: ${message.toText().take(500)}")
+        perception.recentTurns.takeLast(8).forEach { turn ->
+            appendLine("${turn.role.name}: ${turn.content.take(500)}")
         }
         appendLine("</conversation>")
     }
@@ -148,9 +159,6 @@ object CompanionChatTurnModelPlanner {
             ?.take(5)
             ?: emptyList()
 
-    private fun LuluState.toPlannerText(): String =
-        "mood=${mood.label}, energy=${energy.label}, relationship=${relationship.label}, mode=${mode.label}, status=$statusText, scene=$selfScene, inner=$innerVoice"
-
     private fun JsonObject.string(name: String): String? =
         this[name]?.jsonPrimitive?.contentOrNull
 
@@ -171,14 +179,8 @@ private fun String.cleanInnerThought(): String? {
     return compact.takeUnless { text -> forbidden.any { text.contains(it, ignoreCase = true) } }
 }
 
-data class LuluChatTurnPlanInput(
-    val assistantName: String,
-    val assistantPersona: String = "",
-    val state: LuluState,
-    val recentMessages: List<UIMessage>,
-    val pendingThoughts: List<String> = emptyList(),
-    val availableToolNames: Set<String> = emptySet(),
-    val recentlyUsedToolNames: Set<String> = emptySet(),
+data class CompanionChatTurnPlanInput(
+    val perception: CompanionPerceptionPacket,
 )
 
 data class LuluChatTurnPlan(

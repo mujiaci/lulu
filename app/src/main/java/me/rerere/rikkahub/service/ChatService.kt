@@ -107,6 +107,7 @@ import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionFollowUpDraft
 import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
+import me.rerere.rikkahub.data.companion.CompanionPerceptionPacket
 import me.rerere.rikkahub.data.companion.CompanionRuntime
 import me.rerere.rikkahub.data.companion.CompanionTurnMutation
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
@@ -124,9 +125,7 @@ import me.rerere.rikkahub.data.model.appendLuluThoughts
 import me.rerere.rikkahub.data.model.buildLuluStateFromTurn
 import me.rerere.rikkahub.data.model.buildLuluThoughtFromTurn
 import me.rerere.rikkahub.data.model.currentLuluState
-import me.rerere.rikkahub.data.model.currentProjectedLuluState
 import me.rerere.rikkahub.data.model.LuluPerceptionInput
-import me.rerere.rikkahub.data.model.thoughtHistory
 import me.rerere.rikkahub.data.model.luluStateHistory
 import me.rerere.rikkahub.data.model.markResolvedLuluThoughts
 import me.rerere.rikkahub.data.model.replaceRegexes
@@ -1640,11 +1639,8 @@ class ChatService(
         val unifiedContext = companionPerception.toPromptContext()
         val roleName = assistant.name.ifBlank { "当前角色" }
         val planResult = buildChatTurnPlan(
-            messages = messages,
             settings = settings,
-            assistant = assistant,
-            availableToolNames = tools.map { it.name }.toSet(),
-            recentlyUsedToolNames = emptySet(),
+            perception = companionPerception,
         )
         val plan = planResult.plan
         val toolRequests = plan.toolRequests
@@ -1724,25 +1720,10 @@ class ChatService(
     }
 
     private suspend fun buildChatTurnPlan(
-        messages: List<UIMessage>,
         settings: Settings,
-        assistant: Assistant,
-        availableToolNames: Set<String>,
-        recentlyUsedToolNames: Set<String>,
+        perception: CompanionPerceptionPacket,
     ): ChatTurnPlanResult {
-        val currentState = settings.luluStates.currentProjectedLuluState(assistant.id)
-        val pendingThoughts = settings.luluThoughts
-            .thoughtHistory(assistant.id)
-            .map { it.content }
-        val input = LuluChatTurnPlanInput(
-            assistantName = assistant.name,
-            assistantPersona = assistant.toLuluPlannerPersona(),
-            state = currentState,
-            recentMessages = messages,
-            pendingThoughts = pendingThoughts,
-            availableToolNames = availableToolNames,
-            recentlyUsedToolNames = recentlyUsedToolNames,
-        )
+        val input = CompanionChatTurnPlanInput(perception = perception)
         val modelPlan = settings.luluIntentModelId
             ?.let { settings.findModelById(it) }
             ?.takeIf { it.type == ModelType.CHAT }

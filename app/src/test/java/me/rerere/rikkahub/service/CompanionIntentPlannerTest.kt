@@ -1,15 +1,17 @@
 package me.rerere.rikkahub.service
 
+import me.rerere.rikkahub.data.companion.CompanionContextFact
+import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionPerceptionAssembler
 import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
 import me.rerere.rikkahub.data.companion.CompanionRelationshipState
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
-import me.rerere.rikkahub.data.model.LuluState
+import me.rerere.rikkahub.data.companion.CompanionState
+import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import kotlin.uuid.Uuid
 
 class CompanionIntentPlannerTest {
     @Test
@@ -109,20 +111,47 @@ class CompanionIntentPlannerTest {
     }
 
     @Test
-    fun `chat turn prompt does not force female pronouns or Lulu identity`() {
-        val prompt = CompanionChatTurnModelPlanner.buildChatTurnPrompt(
-            LuluChatTurnPlanInput(
+    fun `chat turn prompt uses unified perception without legacy thought state`() {
+        val packet = CompanionPerceptionAssembler.assemble(
+            input = CompanionPerceptionInput(
+                assistantId = "assistant-a",
                 assistantName = "阿澈",
-                assistantPersona = "沉稳的男性朋友，尊重边界。",
-                state = LuluState(
-                    assistantId = Uuid.parse("11111111-1111-1111-1111-111111111111"),
+                persona = "沉稳的男性朋友，尊重边界。",
+                recentTurns = listOf(
+                    CompanionConversationTurn(
+                        role = CompanionTurnRole.USER,
+                        content = "今天有点累",
+                        createdAt = 900L,
+                    ),
                 ),
-                recentMessages = emptyList(),
+                contextFacts = listOf(
+                    CompanionContextFact(
+                        key = "minutes_since_previous_interaction",
+                        value = "45",
+                        observedAt = 1_000L,
+                    ),
+                ),
+                availableToolNames = setOf("get_battery_info"),
+                memoryContext = "用户不喜欢被连续追问。",
+                nowMillis = 1_000L,
             ),
+            snapshot = CompanionSnapshot.empty("assistant-a").copy(
+                state = CompanionState(statusText = "安静留意", mindState = "专注"),
+            ),
+        )
+        val prompt = CompanionChatTurnModelPlanner.buildChatTurnPrompt(
+            CompanionChatTurnPlanInput(perception = packet),
         )
 
         assertTrue(prompt.contains("当前角色现在想先知道什么"))
         assertTrue(prompt.contains("如果当前角色决定稍后主动找用户"))
+        assertTrue(prompt.contains("<companion_runtime"))
+        assertTrue(prompt.contains("安静留意"))
+        assertTrue(prompt.contains("minutes_since_previous_interaction=45"))
+        assertTrue(prompt.contains("用户不喜欢被连续追问。"))
+        assertTrue(prompt.contains("USER: 今天有点累"))
+        assertTrue(prompt.contains("get_battery_info"))
+        assertFalse(prompt.contains("<pendingThoughts>"))
         assertFalse(prompt.contains("她现在"))
         assertFalse(prompt.contains("如果她决定"))
         assertFalse(prompt.contains("露露"))
