@@ -926,6 +926,14 @@
   <string name="setting_tts_page_edit_provider">編輯提供商</string>
   <string name="setting_tts_page_emotion">情緒</string>
   <string name="setting_tts_page_emotion_description">語音合成的情感風格</string>
+  <string name="setting_tts_page_group_id">Group ID</string>
+  <string name="setting_tts_page_group_id_description">MiniMax 的 TTS 請求 URL 需要 Group ID。</string>
+  <string name="setting_tts_page_group_id_placeholder">MiniMax Group ID</string>
+  <string name="setting_tts_page_language">語言</string>
+  <string name="setting_tts_page_language_auto">自動</string>
+  <string name="setting_tts_page_language_auto_detect">自動偵測</string>
+  <string name="setting_tts_page_language_type">語言類型</string>
+  <string name="setting_tts_page_language_type_description">用於語音合成的語言類型</string>
   <string name="setting_tts_page_model">模型</string>
   <string name="setting_tts_page_model_description">要使用的TTS模型</string>
   <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>

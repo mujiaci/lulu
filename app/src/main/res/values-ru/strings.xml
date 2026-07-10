@@ -928,6 +928,14 @@
   <string name="setting_tts_page_edit_provider">Редактировать поставщика</string>
   <string name="setting_tts_page_emotion">Эмоция</string>
   <string name="setting_tts_page_emotion_description">Эмоциональный стиль для синтеза речи</string>
+  <string name="setting_tts_page_group_id">Group ID</string>
+  <string name="setting_tts_page_group_id_description">Для URL запроса TTS MiniMax требуется Group ID.</string>
+  <string name="setting_tts_page_group_id_placeholder">MiniMax Group ID</string>
+  <string name="setting_tts_page_language">Язык</string>
+  <string name="setting_tts_page_language_auto">Авто</string>
+  <string name="setting_tts_page_language_auto_detect">Автоопределение</string>
+  <string name="setting_tts_page_language_type">Тип языка</string>
+  <string name="setting_tts_page_language_type_description">Тип языка для синтеза речи</string>
   <string name="setting_tts_page_model">Модель</string>
   <string name="setting_tts_page_model_description">Модель TTS для использования</string>
   <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>

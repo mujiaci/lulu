@@ -953,6 +953,14 @@
   <string name="setting_tts_page_edit_provider">Edit Provider</string>
   <string name="setting_tts_page_emotion">Emotion</string>
   <string name="setting_tts_page_emotion_description">Emotion style for speech synthesis</string>
+  <string name="setting_tts_page_group_id">Group ID</string>
+  <string name="setting_tts_page_group_id_description">MiniMax requires Group ID in the TTS request URL.</string>
+  <string name="setting_tts_page_group_id_placeholder">MiniMax Group ID</string>
+  <string name="setting_tts_page_language">Language</string>
+  <string name="setting_tts_page_language_auto">Auto</string>
+  <string name="setting_tts_page_language_auto_detect">Auto-detect</string>
+  <string name="setting_tts_page_language_type">Language Type</string>
+  <string name="setting_tts_page_language_type_description">Language type for TTS synthesis</string>
   <string name="setting_tts_page_model">Model</string>
   <string name="setting_tts_page_model_description">TTS model to use</string>
   <string name="setting_tts_page_model_placeholder_gemini">gemini-2.5-flash-preview-tts</string>

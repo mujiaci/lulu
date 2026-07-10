@@ -23,6 +23,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.ui.components.ui.FormItem
 import me.rerere.rikkahub.ui.components.ui.OutlinedNumberInput
 import me.rerere.tts.provider.TTSProviderSetting
+import java.util.Locale
 
 @Composable
 fun TTSProviderConfigure(
@@ -349,8 +350,8 @@ private fun MiniMaxTTSConfiguration(
 
     // Group ID
     FormItem(
-        label = { Text("Group ID") },
-        description = { Text("MiniMax requires Group ID in the TTS request URL.") }
+        label = { Text(stringResource(R.string.setting_tts_page_group_id)) },
+        description = { Text(stringResource(R.string.setting_tts_page_group_id_description)) }
     ) {
         OutlinedTextField(
             value = setting.groupId,
@@ -358,7 +359,7 @@ private fun MiniMaxTTSConfiguration(
                 onValueChange(setting.copy(groupId = newGroupId))
             },
             modifier = Modifier.fillMaxWidth(),
-            placeholder = { Text("MiniMax Group ID") },
+            placeholder = { Text(stringResource(R.string.setting_tts_page_group_id_placeholder)) },
         )
     }
 
@@ -740,21 +741,20 @@ private fun QwenTTSConfiguration(
     val languageTypes = listOf("Auto", "Chinese", "English", "Japanese", "Korean")
 
     FormItem(
-        label = { Text("Language Type") },
-        description = { Text("Language type for TTS synthesis") }
+        label = { Text(stringResource(R.string.setting_tts_page_language_type)) },
+        description = { Text(stringResource(R.string.setting_tts_page_language_type_description)) }
     ) {
         ExposedDropdownMenuBox(
             expanded = languageExpanded,
             onExpandedChange = { languageExpanded = !languageExpanded }
         ) {
             OutlinedTextField(
-                value = setting.languageType,
-                onValueChange = { newLanguageType ->
-                    onValueChange(setting.copy(languageType = newLanguageType))
-                },
+                value = localizedTTSLanguageType(setting.languageType),
+                onValueChange = {},
+                readOnly = true,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable),
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = languageExpanded)
                 }
@@ -765,7 +765,7 @@ private fun QwenTTSConfiguration(
             ) {
                 languageTypes.forEach { languageType ->
                     DropdownMenuItem(
-                        text = { Text(languageType) },
+                        text = { Text(localizedTTSLanguageType(languageType)) },
                         onClick = {
                             languageExpanded = false
                             onValueChange(setting.copy(languageType = languageType))
@@ -954,29 +954,29 @@ private fun XAITTSConfiguration(
     // Language
     var languageExpanded by remember { mutableStateOf(false) }
     val languages = listOf(
-        "auto" to "Auto-detect",
-        "en" to "English",
-        "zh" to "Chinese (Simplified)",
-        "ja" to "Japanese",
-        "ko" to "Korean",
-        "fr" to "French",
-        "de" to "German",
-        "es-ES" to "Spanish (Spain)",
-        "es-MX" to "Spanish (Mexico)",
-        "pt-BR" to "Portuguese (Brazil)",
-        "pt-PT" to "Portuguese (Portugal)",
-        "it" to "Italian",
-        "ru" to "Russian",
-        "ar-EG" to "Arabic (Egypt)",
-        "hi" to "Hindi",
-        "tr" to "Turkish",
-        "vi" to "Vietnamese",
-        "id" to "Indonesian",
-        "bn" to "Bengali"
+        "auto" to stringResource(R.string.setting_tts_page_language_auto_detect),
+        "en" to localizedLanguageName(Locale.ENGLISH),
+        "zh" to localizedLanguageName(Locale.SIMPLIFIED_CHINESE),
+        "ja" to localizedLanguageName(Locale.JAPANESE),
+        "ko" to localizedLanguageName(Locale.KOREAN),
+        "fr" to localizedLanguageName(Locale.FRENCH),
+        "de" to localizedLanguageName(Locale.GERMAN),
+        "es-ES" to localizedLanguageName(Locale.forLanguageTag("es-ES")),
+        "es-MX" to localizedLanguageName(Locale.forLanguageTag("es-MX")),
+        "pt-BR" to localizedLanguageName(Locale.forLanguageTag("pt-BR")),
+        "pt-PT" to localizedLanguageName(Locale.forLanguageTag("pt-PT")),
+        "it" to localizedLanguageName(Locale.ITALIAN),
+        "ru" to localizedLanguageName(Locale.forLanguageTag("ru")),
+        "ar-EG" to localizedLanguageName(Locale.forLanguageTag("ar-EG")),
+        "hi" to localizedLanguageName(Locale.forLanguageTag("hi")),
+        "tr" to localizedLanguageName(Locale.forLanguageTag("tr")),
+        "vi" to localizedLanguageName(Locale.forLanguageTag("vi")),
+        "id" to localizedLanguageName(Locale.forLanguageTag("id")),
+        "bn" to localizedLanguageName(Locale.forLanguageTag("bn"))
     )
 
     FormItem(
-        label = { Text("Language") },
+        label = { Text(stringResource(R.string.setting_tts_page_language)) },
     ) {
         ExposedDropdownMenuBox(
             expanded = languageExpanded,
@@ -1009,5 +1009,23 @@ private fun XAITTSConfiguration(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun localizedTTSLanguageType(value: String): String {
+    return when (value) {
+        "Auto" -> stringResource(R.string.setting_tts_page_language_auto)
+        "Chinese" -> localizedLanguageName(Locale.SIMPLIFIED_CHINESE)
+        "English" -> localizedLanguageName(Locale.ENGLISH)
+        "Japanese" -> localizedLanguageName(Locale.JAPANESE)
+        "Korean" -> localizedLanguageName(Locale.KOREAN)
+        else -> value
+    }
+}
+
+private fun localizedLanguageName(locale: Locale): String {
+    return locale.getDisplayName(Locale.getDefault()).replaceFirstChar {
+        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
     }
 }
