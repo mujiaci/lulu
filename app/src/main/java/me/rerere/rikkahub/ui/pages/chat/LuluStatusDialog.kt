@@ -48,7 +48,7 @@ fun LuluStatusDialog(
         title = {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = assistant.name.ifBlank { "露露" },
+                    text = assistant.name.ifBlank { "角色" },
                     style = MaterialTheme.typography.titleLarge,
                 )
                 Text(

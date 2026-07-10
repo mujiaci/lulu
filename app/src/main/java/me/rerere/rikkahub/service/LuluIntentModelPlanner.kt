@@ -45,7 +45,7 @@ object CompanionChatTurnModelPlanner {
 
     fun buildChatTurnPrompt(input: LuluChatTurnPlanInput): String = buildString {
         appendLine("你是${input.assistantName}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
-        appendLine("你可以像角色本人一样判断：她现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
+        appendLine("你可以像角色本人一样判断：当前角色现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
         appendLine("活人感系统采用：感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构。")
         appendLine("情境感知包括当前时间、上下文、考研 App 计划、工具结果、工具状态、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；工具结果包括电量、位置、穿戴、摄像头等所有本地能力。")
         appendLine("意义评估只评估重要性、威胁、机会、身体/精神安全、时间压力、成本、收益、不行动后果和资源；它不直接选择行动。")
@@ -61,7 +61,7 @@ object CompanionChatTurnModelPlanner {
         appendLine("JSON 字段：toolRequests, followUpDelayMinutes, followUpReason, expressionGuidance, expressionAffordances, innerThought。")
         appendLine("toolRequests 最多 5 个；toolName 只能从 availableTools 中选。")
         appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 仅为兼容字段，角色形成意图的工具请求都会在回复前尝试执行。")
-        appendLine("followUpDelayMinutes 可以是 null；如果她决定稍后主动找用户，填 1 到 1440 的分钟数。")
+        appendLine("followUpDelayMinutes 可以是 null；如果当前角色决定稍后主动找用户，填 1 到 1440 的分钟数。")
         appendLine("不要给普通回来、普通闲聊、无风险沉默安排固定 5 分钟 follow-up；只有身体不适、明确提醒/DDL/起床、学习承诺、吃饭睡觉照看这类语义才安排后续主动消息。")
         appendLine("Living Presence contract: perception packet gathers persona/context/tools/memory/cihai/concerns/status -> appraisal understands meaningToUser and meaningToRole -> judgment decides intention, tool needs, actions, and nextPerceptionAt -> action executes message/tool/inner-journal/schedule/wait; formal diary is written only by write_lulu_journal -> status generates mood/body/mind/relationship/innerThought -> Cihai keeps concern cards, formal tool-written diary entries, unsummarized context, and automatic vector summaries.")
         appendLine("<persona>")

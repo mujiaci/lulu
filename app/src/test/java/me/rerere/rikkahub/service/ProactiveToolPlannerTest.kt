@@ -37,6 +37,7 @@ class ProactiveToolPlannerTest {
         assertTrue(plan.any { it.toolName == "set_alarm" && it.autoExecutable })
         assertTrue(plan.any { it.toolName == "set_alarm" && it.argumentsJson.contains("\"hour\":7") })
         assertTrue(plan.any { it.toolName == "set_alarm" && it.argumentsJson.contains("\"minute\":55") })
+        assertTrue(plan.any { it.toolName == "set_alarm" && !it.argumentsJson.contains("露露") })
         assertTrue(plan.any { it.toolName == "calendar_tool" && it.autoExecutable })
     }
 
@@ -69,6 +70,7 @@ class ProactiveToolPlannerTest {
         )
 
         assertTrue(plan.any { it.toolName == "camera_capture" && it.autoExecutable })
+        assertTrue(plan.none { it.reason.contains("露露") })
         assertTrue(plan.any { it.toolName == "write_lulu_journal" && it.autoExecutable })
     }
 

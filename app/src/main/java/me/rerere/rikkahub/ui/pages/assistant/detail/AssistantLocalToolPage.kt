@@ -194,7 +194,7 @@ private fun AssistantLocalToolContent(
                 }
             )
             item(
-                headlineContent = { Text("露露表达状态") },
+                headlineContent = { Text("角色表达状态") },
                 supportingContent = { Text("允许AI记录本轮完整动作描写，用一句话合并表情、动作和姿势") },
                 trailingContent = {
                     Switch(

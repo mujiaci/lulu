@@ -1637,6 +1637,7 @@ class ChatService(
             ),
         )
         val unifiedContext = companionPerception.toPromptContext()
+        val roleName = assistant.name.ifBlank { "当前角色" }
         val planResult = buildChatTurnPlan(
             messages = messages,
             settings = settings,
@@ -1691,12 +1692,12 @@ class ChatService(
             appendLine(unifiedContext)
             appendLine()
             plan.innerThought?.takeIf { it.isNotBlank() }?.let { thought ->
-                appendLine("本轮露露没说出口的心里话：$thought")
+                appendLine("本轮${roleName}没说出口的心里话：$thought")
                 appendLine("这只是后台第一人称心声，不要把它当成工具结果，也不要原样复述。")
                 appendLine()
             }
             plan.expressionGuidance?.takeIf { it.isNotBlank() }?.let { guidance ->
-                appendLine("本轮露露自己的表达打算：$guidance")
+                appendLine("本轮${roleName}自己的表达打算：$guidance")
                 appendLine("这只是后台表达方向，不要把它原样说给用户。")
                 appendLine()
             }
@@ -1779,7 +1780,7 @@ class ChatService(
         }
         chatTurnFollowUpCooldowns[cooldownKey] = now
         val reason = plan.followUpReason?.takeIf { it.isNotBlank() }
-            ?: "露露在本轮聊天里自主决定稍后再来确认用户状态。"
+            ?: "${assistant.name.ifBlank { "当前角色" }}在本轮聊天里决定稍后根据新状态再判断是否需要联系用户。"
         ProactiveMessageService.scheduleTargeted(
             context = context,
             setting = settings.getProactiveMessageSetting(assistant.id),

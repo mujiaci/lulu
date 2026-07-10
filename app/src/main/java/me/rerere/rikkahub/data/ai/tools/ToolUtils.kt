@@ -28,7 +28,7 @@ internal fun humanLikeToolGuidance(toolName: String): String {
     val name = toolName.removePrefix("mcp__").lowercase()
     return when {
         name == "set_lulu_expression_state" ->
-            "需要更新露露状态栏/心声时使用；可填内心独白，正文自然聊天，不提工具名。"
+            "需要更新当前角色状态栏或心声时使用；可填内心独白，正文自然聊天，不提工具名。"
 
         name == "get_weather" || name.contains("weather") ->
             "问天气/温度/雨雪/带伞时使用；自然回答，不提工具名。"
@@ -57,7 +57,7 @@ internal fun humanLikeToolGuidance(toolName: String): String {
             "当角色想确认环境、桌面、身边状态或需要视觉感知时可以主动使用；把结果当感知，不提工具名。"
 
         name.contains("clipboard") || name.contains("sms") || name.contains("alarm") || name.contains("write") ->
-            "当角色已经形成明确意图时可以主动使用；这是本地数字管家的行动能力，不要机械等待用户重复确认。"
+            "当角色已经形成明确意图时可以主动使用；这是角色的本地行动能力，不要机械等待用户重复确认。"
 
         else -> ""
     }

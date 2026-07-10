@@ -183,7 +183,7 @@ private fun String.looksLikeVocabularyDrill(): Boolean {
 object AffectiveMemoryExtractor {
     fun buildExtractionPrompt(
         turns: List<MemoryExtractionTurn>,
-        assistantName: String = "露露",
+        assistantName: String = "当前角色",
         assistantPersona: String = "",
     ): String = buildString {
         val name = assistantName.ifBlank { "当前角色" }
@@ -196,7 +196,7 @@ object AffectiveMemoryExtractor {
         appendLine("所有 content、roleFeeling、bodySense、unspokenThought、relationshipEffect、embeddingText 都必须代入$name，用第一人称“我”来总结；不要写成“${name}觉得”“角色认为”“助手记录”这类旁白或第三人称。")
         appendLine("如果原文只是英文单词、工具结果、日程 JSON 或流水账，除非能提炼出用户偏好/承诺/关系变化/角色心声，否则不要写入 memories。")
         appendLine("unspokenThought 必须贴合$name 的人设、语言习惯和关系位置；不要写成旁白腔、客服腔或通用模板。")
-        appendLine("unspokenThought 要尽量具体：写$name 当时的猜测、顾虑、想靠近但没有说出口的话、想做但暂时压住的动作、对用户真实状态的判断。不要只写“很担心”这类空泛短句。")
+        appendLine("unspokenThought 要尽量具体：写$name 当时的猜测、顾虑、符合人设但没有说出口的意图、想做但暂时压住的动作、对用户真实状态的判断。不要默认亲密动作，也不要只写“很担心”这类空泛短句。")
         appendLine("返回 JSON，格式为 {\"memories\":[...]}。不要输出解释。")
         appendLine("每条字段：type, content, roleFeeling, bodySense, unspokenThought, userSignal, relationshipEffect, importance, confidence, tags, embeddingText, sourceMessageNodeIds, evidenceMessageNodeIds, relatedMemoryIds, people, topics, supersededByMemoryId, correctedAt。")
         appendLine("type 只能优先使用 role_emotion, body_sense, promise, relationship, user_preference, event。")

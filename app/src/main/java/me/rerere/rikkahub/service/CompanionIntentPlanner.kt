@@ -89,7 +89,7 @@ object CompanionIntentFallbackPlanner {
                 toolNames = chooseObservationTools(input.perception.availableToolNames),
                 reason = "A long quiet interval makes one fresh persona-led check-in reasonable.",
                 tone = "Use the configured persona; do not sound like a timer or generic reminder.",
-                innerThought = "安静了一阵，我想按自己的方式确认一下现在是否适合靠近。",
+                innerThought = "安静了一阵，我想按自己的方式确认一下现在是否适合联系或行动。",
                 category = "reach_out",
             )
         }

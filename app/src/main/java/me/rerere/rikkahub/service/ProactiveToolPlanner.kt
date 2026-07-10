@@ -99,7 +99,7 @@ object ProactiveToolPlanner {
         }
 
         if (normalized.containsAny(CAMERA_WORDS)) {
-            addAuto("camera_capture", "用户提到看一下周围、桌面或拍照；按露露人设可以主动打开摄像头理解用户环境。")
+            addAuto("camera_capture", "用户提到看一下周围、桌面或拍照；按当前角色人设和用户授权可以打开摄像头理解环境。")
         }
 
         if (normalized.containsAny(JOURNAL_WORDS)) {
@@ -139,7 +139,7 @@ object ProactiveToolPlanner {
         }
         val minute = inlineMinute ?: trailingMinute ?: 0
         if (hour !in 0..23 || minute !in 0..59) return null
-        return """{"hour":$hour,"minute":$minute,"label":"露露提醒"}"""
+        return """{"hour":$hour,"minute":$minute,"label":"提醒"}"""
     }
 
     private fun parseChineseNumber(raw: String): Int? {

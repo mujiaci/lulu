@@ -248,6 +248,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                     item {
                         DailyStudyDashboard(
                             tasks = state.tasks,
+                            assistantName = companionAssistant.name.ifBlank { "当前角色" },
                             generatedSchedule = state.generatedSchedules[LocalDate.now().toString()],
                             isGeneratingSchedule = isGeneratingSchedule,
                             newTask = newTask,
@@ -617,6 +618,7 @@ fun StudyPomodoroFocusPage(
             FocusChatPanel(
                 userLine = userLine,
                 chatText = chatText,
+                assistantName = assistant.name.ifBlank { "当前角色" },
                 onChatChange = { chatText = it },
                 onSend = {
                     val text = chatText.trim()
@@ -829,6 +831,7 @@ private fun TodayProgressCard(
 @Composable
 private fun DailyStudyDashboard(
     tasks: List<StudyTask>,
+    assistantName: String,
     generatedSchedule: List<StudyScheduleBlock>?,
     isGeneratingSchedule: Boolean,
     newTask: String,
@@ -869,6 +872,7 @@ private fun DailyStudyDashboard(
         when (dashboardView) {
             DailyDashboardView.Tasks -> TaskContent(
                 tasks = tasks,
+                assistantName = assistantName,
                 newTask = newTask,
                 onNewTask = onNewTask,
                 onAdd = onAdd,
@@ -889,29 +893,9 @@ private fun DailyStudyDashboard(
 }
 
 @Composable
-private fun TaskCard(
-    tasks: List<StudyTask>,
-    newTask: String,
-    onNewTask: (String) -> Unit,
-    onAdd: () -> Unit,
-    onToggle: (String, Boolean) -> Unit,
-    onDelete: (String) -> Unit,
-) {
-    StudyCard {
-        TaskContent(
-            tasks = tasks,
-            newTask = newTask,
-            onNewTask = onNewTask,
-            onAdd = onAdd,
-            onToggle = onToggle,
-            onDelete = onDelete,
-        )
-    }
-}
-
-@Composable
 private fun TaskContent(
     tasks: List<StudyTask>,
+    assistantName: String,
     newTask: String,
     onNewTask: (String) -> Unit,
     onAdd: () -> Unit,
@@ -940,7 +924,7 @@ private fun TaskContent(
             IconButton(onClick = onAdd) { Icon(HugeIcons.Add01, "添加") }
         }
         if (tasks.isEmpty()) {
-            Text("先写下今天最重要的 3-5 件事。露露会帮你守住节奏。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("先写下今天最重要的 3-5 件事。${assistantName}会按人设和约定陪你保持节奏。", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         tasks.forEach { task ->
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
@@ -2542,6 +2526,7 @@ private fun PomodoroTimerCircle(
 private fun FocusChatPanel(
     userLine: String,
     chatText: String,
+    assistantName: String,
     onChatChange: (String) -> Unit,
     onSend: () -> Unit,
 ) {
@@ -2571,7 +2556,7 @@ private fun FocusChatPanel(
                 OutlinedTextField(
                     value = chatText,
                     onValueChange = onChatChange,
-                    placeholder = { Text("跟露露说一句...") },
+                    placeholder = { Text("跟${assistantName}说一句...") },
                     singleLine = true,
                     modifier = Modifier.weight(1f),
                     textStyle = MaterialTheme.typography.bodyLarge,
@@ -2693,15 +2678,15 @@ private fun studyDurationText(seconds: Int): String {
 
 private fun buildEncourageLine(taskText: String, assistant: Assistant): String {
     val target = taskText.ifBlank { "这一轮任务" }
-    return "${assistant.name}：先不想那么远，我们只把“$target”往前推一点点。"
+    return "${assistant.name.ifBlank { "当前角色" }}：先不想那么远，我们只把“$target”往前推一点点。"
 }
 
 private fun buildStudyChatPrompt(userText: String, taskText: String): String {
     val target = taskText.ifBlank { "这一轮学习任务" }
-    return "我正在番茄钟学习，任务是“$target”。我想对你说：$userText\n请按你的角色人设自然回复，短一点，像真的在旁边陪我学习。只输出你要说出口的话。"
+    return "我正在番茄钟学习，任务是“$target”。我想对你说：$userText\n请按你的角色人设自然回复，短一点，并保持角色自己的关系边界和表达方式。只输出你要说出口的话。"
 }
 
 private fun buildPomodoroOpeningPrompt(taskText: String): String {
     val target = taskText.ifBlank { "这一轮学习任务" }
-    return "用户刚打开番茄钟专注页，准备开始“$target”。请按你的角色人设给一句非常短的鼓励，像坐在旁边陪她开始学习。不要解释任务，不要输出提示词。"
+    return "用户刚打开番茄钟专注页，准备开始“$target”。请按你的角色人设和关系边界给一句非常短的鼓励，不要预设监督职责或身体距离。不要解释任务，不要输出提示词。"
 }

@@ -4,10 +4,12 @@ import me.rerere.rikkahub.data.companion.CompanionPerceptionAssembler
 import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
 import me.rerere.rikkahub.data.companion.CompanionRelationshipState
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
+import me.rerere.rikkahub.data.model.LuluState
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.uuid.Uuid
 
 class CompanionIntentPlannerTest {
     @Test
@@ -104,6 +106,26 @@ class CompanionIntentPlannerTest {
         assertTrue(prompt.contains("<companion_runtime"))
         assertTrue(prompt.contains("FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, WAIT"))
         assertFalse(prompt.contains("study-supervisor"))
+    }
+
+    @Test
+    fun `chat turn prompt does not force female pronouns or Lulu identity`() {
+        val prompt = CompanionChatTurnModelPlanner.buildChatTurnPrompt(
+            LuluChatTurnPlanInput(
+                assistantName = "阿澈",
+                assistantPersona = "沉稳的男性朋友，尊重边界。",
+                state = LuluState(
+                    assistantId = Uuid.parse("11111111-1111-1111-1111-111111111111"),
+                ),
+                recentMessages = emptyList(),
+            ),
+        )
+
+        assertTrue(prompt.contains("当前角色现在想先知道什么"))
+        assertTrue(prompt.contains("如果当前角色决定稍后主动找用户"))
+        assertFalse(prompt.contains("她现在"))
+        assertFalse(prompt.contains("如果她决定"))
+        assertFalse(prompt.contains("露露"))
     }
 
     private fun perception(

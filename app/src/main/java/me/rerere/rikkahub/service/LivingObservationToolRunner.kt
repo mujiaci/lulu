@@ -69,7 +69,7 @@ object LivingObservationToolRunner {
                 if (target != null) {
                     put("hour", target.hour)
                     put("minute", target.minute)
-                    put("label", "露露提醒")
+                    put("label", "提醒")
                 }
             }
             else -> JsonObject(emptyMap())

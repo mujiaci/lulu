@@ -707,7 +707,7 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 涉及时间时必须以“当前本地时间”的 24 小时制为准，00:00-04:59 是凌晨，不能说成下午或中午。")
         sb.appendLine("- 如果工具能帮你更像真人一样判断用户状态，就大胆用；最终说出口的话仍然要自然，不要暴露工具细节。")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
-        sb.appendLine("- 表达要有身体感：可以自然带 0-1 个简短表情、一个轻动作或贴近感，例如轻轻敲门、探头、靠近、压低声音，但不要写成舞台剧。")
+        sb.appendLine("- 表达可以有适量的节奏和动作感，但必须服从角色人设与关系边界；没有明确依据时不要虚构身体接触、空间距离或亲密动作。")
         sb.appendLine("- 开心且精力高时可以更亮一点；担心、夜晚、学习、休息场景要轻声一点，不要突然抢走用户注意力。")
         sb.appendLine("- 如果你想换头像/表情状态，只能用自然语气暗示氛围，除非系统提供明确工具，否则不要声称已经实际换了头像。")
         sb.appendLine("- 如果 set_lulu_expression_state 可用，可以先记录一句完整动作描写，把表情、动作和姿势合在一起；不要把工具名说给用户。")
@@ -2402,15 +2402,15 @@ private fun String.cleanSilentInnerVoice(): String? {
 
 private fun RollingJudgmentDecision.toFallbackSilentInnerVoice(): String = when (updatedIntent.kind) {
     LivingIntentKind.HEALTH_SAFETY ->
-        "我先不把担心直接砸到你面前，但我没有真的放下，会继续看有没有需要靠近的信号。"
+        "我先不把担心直接压给你，但会继续确认是否出现需要行动的安全信号。"
     LivingIntentKind.STUDY_FOCUS ->
-        "我先不去吵你，把想提醒你的那句话收着；等你回来，我再接住你的节奏。"
+        "我先不打断你的专注；只有存在明确约定或新信号时，我才重新判断是否提醒。"
     LivingIntentKind.DEADLINE ->
         "我先忍住不催太紧，但这个时间点我记着，会在下一轮再确认你有没有被任务压住。"
     LivingIntentKind.WAKE_UP ->
-        "我先把叫醒这件事放在心里，不乱喊你；等到该看的时间点，我再轻轻靠近。"
+        "我先记住明确的唤醒目标，不在时间没有校准时行动；到节点后再重新确认。"
     LivingIntentKind.ORDINARY_SILENCE ->
-        "我先不把想你说出口，也不把沉默想坏；我会在旁边等下一轮判断。"
+        "我先保留上一轮上下文，不把沉默解释成关系信号；等下一轮新信息再判断。"
 }
 
 internal fun defaultSilentPresenceActionHints(): List<String> = listOf(

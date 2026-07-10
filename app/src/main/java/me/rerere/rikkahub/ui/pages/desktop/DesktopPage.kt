@@ -339,14 +339,14 @@ private fun DesktopHero(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 UIAvatar(
-                    name = assistant.name.ifBlank { "露露" },
+                    name = assistant.name.ifBlank { "角色" },
                     value = assistant.avatar,
                     modifier = Modifier.size(58.dp),
                 )
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = assistant.name.ifBlank { "露露" },
+                        text = assistant.name.ifBlank { "角色" },
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.SemiBold,
                     )
@@ -422,14 +422,14 @@ private fun ChatRoomRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             UIAvatar(
-                name = assistant.name.ifBlank { "露露" },
+                name = assistant.name.ifBlank { "角色" },
                 value = assistant.avatar,
                 modifier = Modifier.size(48.dp),
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = assistant.name.ifBlank { "露露" },
+                    text = assistant.name.ifBlank { "角色" },
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

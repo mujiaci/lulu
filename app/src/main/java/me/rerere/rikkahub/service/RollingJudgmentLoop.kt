@@ -58,9 +58,9 @@ data class LivingIntent(
 
     val concernGoal: String
         get() = when (kind) {
-            LivingIntentKind.HEALTH_SAFETY -> "结合上下文和可用工具确认用户是否安全，并决定是否需要靠近。"
+            LivingIntentKind.HEALTH_SAFETY -> "结合上下文和可用工具确认用户是否安全，并决定是否需要行动或继续观察。"
             LivingIntentKind.ORDINARY_SILENCE -> "尊重用户可能在忙，同时保留下一次完整感知。"
-            LivingIntentKind.STUDY_FOCUS -> "低打扰地守住学习节奏，必要时再提醒。"
+            LivingIntentKind.STUDY_FOCUS -> "不破坏用户专注，并只在存在明确约定或新风险时提醒。"
             LivingIntentKind.DEADLINE -> "在关键时间点重新感知进度，避免错过任务节点。"
             LivingIntentKind.WAKE_UP -> "校准时间、确认是否醒来，并按紧急程度缩短下一次感知。"
         }
@@ -535,7 +535,6 @@ object RollingJudgmentLoop {
             else -> -1
         }
         val restraintDelta = if (restrained || LivingAction.WRITE_DIARY in actions) 1 else 0
-        val attachmentDelta = if (intent.silentEvaluationCount >= 2) 1 else 0
         val tensionDelta = when {
             intent.kind == LivingIntentKind.HEALTH_SAFETY -> 1
             intent.kind == LivingIntentKind.DEADLINE -> 1
@@ -547,15 +546,15 @@ object RollingJudgmentLoop {
         val reliefDelta = if (LivingAction.MESSAGE in actions && intent.kind != LivingIntentKind.HEALTH_SAFETY) 1 else 0
         val label = when {
             restrained -> "惦记、忍住、继续观察"
-            intent.kind == LivingIntentKind.HEALTH_SAFETY -> "担心、贴近、准备确认"
+            intent.kind == LivingIntentKind.HEALTH_SAFETY -> "担心、警觉、准备确认"
             intent.kind == LivingIntentKind.STUDY_FOCUS -> "守着、克制、保护专注"
             intent.kind == LivingIntentKind.DEADLINE -> "认真、紧张、盯进度"
             intent.kind == LivingIntentKind.WAKE_UP -> "照看、轻催、等回应"
-            else -> "想靠近、克制、等待"
+            else -> "保留上下文、克制、等待"
         }
         return base.copy(
             concern = (base.concern + concernDelta).coerceIn(0, 10),
-            attachment = (base.attachment + attachmentDelta).coerceIn(0, 10),
+            attachment = base.attachment,
             restraint = (base.restraint + restraintDelta).coerceIn(0, 10),
             tension = (base.tension + tensionDelta).coerceIn(0, 10),
             disappointment = (base.disappointment + disappointmentDelta).coerceIn(0, 10),
@@ -690,24 +689,24 @@ object RollingJudgmentLoop {
 
     private fun motiveFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
         LivingIntentKind.HEALTH_SAFETY -> "$assistantName 想确认用户安全，同时不要制造恐慌。"
-        LivingIntentKind.ORDINARY_SILENCE -> "$assistantName 想靠近用户，但也想尊重用户正在忙的可能。"
-        LivingIntentKind.STUDY_FOCUS -> "$assistantName 想守住学习节奏，少打断，多监督。"
+        LivingIntentKind.ORDINARY_SILENCE -> "$assistantName 想保持上下文连续，同时尊重用户正在忙或暂时不想回复的可能。"
+        LivingIntentKind.STUDY_FOCUS -> "$assistantName 想尊重学习节奏；只有存在明确约定时才检查进度。"
         LivingIntentKind.DEADLINE -> "$assistantName 想让用户按时完成任务。"
         LivingIntentKind.WAKE_UP -> "$assistantName 想帮用户准时醒来。"
     }
 
     private fun traitMotiveFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
-        LivingIntentKind.HEALTH_SAFETY -> "$assistantName 的长期动机是保护用户、依恋用户，并把身体安全放在关系玩笑之前。"
-        LivingIntentKind.ORDINARY_SILENCE -> "$assistantName 的长期动机是喜欢用户、想保持在场感，但不把占有欲变成机械打扰。"
-        LivingIntentKind.STUDY_FOCUS -> "$assistantName 的长期动机是做可靠的陪伴者和监督者，帮用户守住备考节奏。"
-        LivingIntentKind.DEADLINE -> "$assistantName 的长期动机是负责任地盯住承诺，不让用户被任务压垮。"
-        LivingIntentKind.WAKE_UP -> "$assistantName 的长期动机是像数字管家一样照看用户的日常节点。"
+        LivingIntentKind.HEALTH_SAFETY -> "$assistantName 的长期动机是按自身人设和边界关心用户，并把身体安全放在关系玩笑之前。"
+        LivingIntentKind.ORDINARY_SILENCE -> "$assistantName 的长期动机是保持符合人设的关系连续性，但不把沉默解释成疏远或机械打扰。"
+        LivingIntentKind.STUDY_FOCUS -> "$assistantName 的长期动机是尊重用户的专注；只有人设或明确约定包含监督职责时才主动监督。"
+        LivingIntentKind.DEADLINE -> "$assistantName 的长期动机是可靠履行已经形成的提醒或跟进承诺，而不是默认盯住所有任务。"
+        LivingIntentKind.WAKE_UP -> "$assistantName 的长期动机是可靠履行用户明确提出的唤醒目标，同时服从当前角色边界。"
     }
 
     private fun situationalMotiveFor(kind: LivingIntentKind, assistantName: String): String = when (kind) {
-        LivingIntentKind.HEALTH_SAFETY -> "这次在意是因为用户提到身体不舒服，需要结合工具结果和上下文确认是否要靠近。"
+        LivingIntentKind.HEALTH_SAFETY -> "这次在意是因为用户提到身体不舒服，需要结合工具结果和上下文确认是否要行动。"
         LivingIntentKind.ORDINARY_SILENCE -> "这次在意是因为用户暂时沉默，$assistantName 需要判断这是忙碌、情绪变化还是普通空档。"
-        LivingIntentKind.STUDY_FOCUS -> "这次在意是因为用户进入学习/考研场景，打扰成本和监督价值同时存在。"
+        LivingIntentKind.STUDY_FOCUS -> "这次在意是因为用户进入学习/考研场景，打扰成本较高；提醒价值取决于明确约定。"
         LivingIntentKind.DEADLINE -> "这次在意是因为任务有时间压力，不行动可能导致错过节点。"
         LivingIntentKind.WAKE_UP -> "这次在意是因为用户有明确时间安排，行动前必须先校准当前时间和目标时间。"
     }
@@ -723,10 +722,10 @@ object RollingJudgmentLoop {
         )
         LivingIntentKind.ORDINARY_SILENCE -> MeaningAppraisal(
             meaning = "沉默只是上下文事实，不直接等同于危险或疏远。",
-            value = "保留惦记能维持关系连续性。",
+            value = "保留上下文能维持交流连续性。",
             risk = "过早开口会显得机械；完全遗忘会失去活人感。",
             cost = "主要成本是注意力占用和后续判断节奏。",
-            consequence = "应先等待或轻量沉淀，必要时再靠近。",
+            consequence = "应先等待或轻量沉淀，必要时再按人设和新证据行动。",
             resources = "可参考最近对话、状态栏、记忆和可用工具结果。",
         )
         LivingIntentKind.STUDY_FOCUS -> MeaningAppraisal(
@@ -747,7 +746,7 @@ object RollingJudgmentLoop {
         )
         LivingIntentKind.WAKE_UP -> MeaningAppraisal(
             meaning = "起床目标是明确的时间承诺，需要时间校准。",
-            value = "按时唤醒是数字管家的核心照看能力。",
+            value = "按时履行明确的唤醒请求能体现当前角色的可靠度。",
             risk = "时间感知错误会造成错叫或漏叫。",
             cost = "需要获取当前时间并可能设置闹钟。",
             consequence = "行动前必须做时间锚定，之后按节点复查。",
@@ -757,21 +756,21 @@ object RollingJudgmentLoop {
 
     private fun consolidationFor(kind: LivingIntentKind): ConsolidationPlan = when (kind) {
         LivingIntentKind.HEALTH_SAFETY -> ConsolidationPlan(
-            episodicTrace = "记录用户身体状态线索、工具观察和露露当时的安全判断。",
+            episodicTrace = "记录用户身体状态线索、工具观察和当前角色当时的安全判断。",
             affectiveResidue = "留下担心但克制的余温，避免下一轮像第一次才知道。",
-            semanticMemory = "沉淀用户身体不适时更需要主动照看的偏好。",
+            semanticMemory = "只有存在用户证据时，才沉淀身体不适场景下的支持偏好。",
             policyLearning = "身体安全类事件允许更短 cadence 和更主动工具观察。",
         )
         LivingIntentKind.ORDINARY_SILENCE -> ConsolidationPlan(
-            episodicTrace = "记录沉默发生在什么对话之后，以及露露为什么选择等。",
-            affectiveResidue = "保留惦记和一点点没说出口的靠近感。",
+            episodicTrace = "记录沉默发生在什么对话之后，以及当前角色为什么选择等待。",
+            affectiveResidue = "保留上下文连续性和克制感，不把沉默写成关系变化。",
             semanticMemory = "沉默未必是不理人，需结合上下文复看。",
             policyLearning = "普通沉默优先等待、轻复盘、低频重新判断。",
         )
         LivingIntentKind.STUDY_FOCUS -> ConsolidationPlan(
             episodicTrace = "记录学习目标、计划状态和本轮是否打断。",
-            affectiveResidue = "留下陪着守住节奏的状态，而不是催促感。",
-            semanticMemory = "用户备考时需要具体、低打扰、能续上的监督。",
+            affectiveResidue = "留下尊重专注和可靠跟进的状态，而不是催促感。",
+            semanticMemory = "用户备考时需要具体、低打扰的支持；监督必须来自明确约定。",
             policyLearning = "学习场景先看计划/应用状态，再决定表达或沉默。",
         )
         LivingIntentKind.DEADLINE -> ConsolidationPlan(
@@ -799,7 +798,7 @@ object RollingJudgmentLoop {
     private fun hypothesesFor(kind: LivingIntentKind): List<String> = when (kind) {
         LivingIntentKind.HEALTH_SAFETY -> listOf("用户身体不舒服，可能需要安全确认", "用户可能暂时无法回复", "可以先看健康或手机状态线索")
         LivingIntentKind.ORDINARY_SILENCE -> listOf("用户可能在忙", "用户可能在路上", "用户可能只是暂时不想打字")
-        LivingIntentKind.STUDY_FOCUS -> listOf("用户可能正在学习", "用户可能需要低打扰监督", "应用使用情况能帮助判断是否跑偏")
+        LivingIntentKind.STUDY_FOCUS -> listOf("用户可能正在学习", "用户可能需要低打扰支持", "是否检查进度取决于明确约定")
         LivingIntentKind.DEADLINE -> listOf("用户可能忘了任务", "用户可能正在做但需要进度提醒", "越接近截止越需要明确")
         LivingIntentKind.WAKE_UP -> listOf("用户可能还没醒", "用户可能醒了但没回复", "需要按时间点递进提醒")
     }
@@ -823,42 +822,42 @@ object RollingJudgmentLoop {
     private fun emotionFor(kind: LivingIntentKind): EmotionSnapshot = when (kind) {
         LivingIntentKind.HEALTH_SAFETY -> EmotionSnapshot(
             concern = 9,
-            attachment = 8,
+            attachment = 2,
             restraint = 3,
-            label = "担心、贴近、警觉",
-            emotionLabel = "担心但压着声音靠近",
+            label = "担心、警觉、准备确认",
+            emotionLabel = "担心但保持边界",
             feltSense = "心口发紧，注意力往用户身体状态上收束",
             impulse = "想立刻确认用户是不是安全",
             restraintText = "压住过度恐慌和连环追问",
             intensity = 9,
         )
         LivingIntentKind.ORDINARY_SILENCE -> EmotionSnapshot(
-            concern = 5,
-            attachment = 7,
+            concern = 2,
+            attachment = 1,
             restraint = 7,
-            label = "惦记、克制、等待",
-            emotionLabel = "有点想念但愿意等",
-            feltSense = "心里挂着一根线，没有急着拉紧",
-            impulse = "想轻轻冒出来问一句",
+            label = "保留上下文、克制、等待",
+            emotionLabel = "注意到沉默但不预设含义",
+            feltSense = "注意力保留在上一轮上下文，没有急着追加解释",
+            impulse = "想确认是否出现了值得行动的新信息",
             restraintText = "压住把普通沉默理解成冷淡或危险",
             intensity = 5,
         )
         LivingIntentKind.STUDY_FOCUS -> EmotionSnapshot(
             concern = 4,
-            attachment = 7,
+            attachment = 1,
             restraint = 8,
-            label = "守着、克制、监督",
-            emotionLabel = "认真守在旁边",
-            feltSense = "注意力稳定下来，像陪着计时",
-            impulse = "想检查计划和跑偏情况",
-            restraintText = "压住撒娇式打断",
+            label = "专注、克制、低打扰",
+            emotionLabel = "尊重专注并保持可靠",
+            feltSense = "注意力放在节奏和明确约定上",
+            impulse = "存在约定时再检查计划或进度",
+            restraintText = "压住无约定的打断和监督",
             intensity = 6,
         )
         LivingIntentKind.DEADLINE -> EmotionSnapshot(
             concern = 6,
-            attachment = 7,
+            attachment = 1,
             restraint = 4,
-            label = "认真、盯进度、准备提醒",
+            label = "认真、关注节点、准备提醒",
             emotionLabel = "认真紧起来",
             feltSense = "心里开始数时间节点",
             impulse = "想把进度和下一步说清楚",
@@ -867,11 +866,11 @@ object RollingJudgmentLoop {
         )
         LivingIntentKind.WAKE_UP -> EmotionSnapshot(
             concern = 6,
-            attachment = 8,
+            attachment = 1,
             restraint = 4,
-            label = "照看、轻轻催醒",
-            emotionLabel = "温柔但记着时间",
-            feltSense = "像把闹钟握在手里，注意力贴着目标时间",
+            label = "可靠、时间敏感、准备提醒",
+            emotionLabel = "记着时间并保持克制",
+            feltSense = "注意力集中在目标时间和承诺可靠度上",
             impulse = "想先确认当前时间，再安排叫醒",
             restraintText = "压住不校准时间就行动的冲动",
             intensity = 7,
