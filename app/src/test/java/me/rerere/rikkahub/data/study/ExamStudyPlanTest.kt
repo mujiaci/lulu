@@ -251,19 +251,43 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun julyNineBacklogIsRebalancedAcrossThreeDaysAndNextWeek() {
+    fun julyNineBacklogIsRebalancedWithoutSkippingLegalTheoryChapters() {
         val july10 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 10))!!.tasks.joinToString("\n") { it.title }
         val july11 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 11))!!.tasks.joinToString("\n") { it.title }
         val july12 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 12))!!.tasks.joinToString("\n") { it.title }
         val july13 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))!!.tasks.joinToString("\n") { it.title }
 
-        assertTrue(july10.contains("法理第 1-3 章欠账"))
+        assertTrue(july10.contains("法理第 1 章"))
         assertTrue(july10.contains("刑法第 1 章框架图欠账"))
-        assertTrue(july11.contains("法理第 1-3 章欠账"))
+        assertFalse(july10.contains("法理学第 5 章"))
+        assertTrue(july11.contains("法理第 2 章"))
         assertTrue(july11.contains("合成完整一张"))
-        assertTrue(july12.contains("欠账验收"))
+        assertTrue(july12.contains("法理第 3 章"))
+        assertTrue(july12.contains("第 1-3 章连续验收"))
         assertTrue(july12.contains("下周回收清单"))
-        assertTrue(july13.contains("残留点"))
+        assertTrue(july13.contains("法理第 4 章"))
+        assertFalse(july13.contains("法理第 8 章"))
+    }
+
+    @Test
+    fun julyLegalTheoryReviewAdvancesInChapterOrder() {
+        val expectedChapters = mapOf(
+            15 to "法理学第 5 章",
+            16 to "法理学第 6 章",
+            17 to "法理学第 7 章",
+            19 to "法理第 8 章",
+            22 to "法理学第 9 章",
+            23 to "法理第 10 章",
+            24 to "法理学第 11 章",
+            26 to "法理学第 12 章",
+            27 to "法理学第 13 章",
+        )
+
+        expectedChapters.forEach { (day, chapterText) ->
+            val tasks = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, day))!!.tasks
+                .joinToString("\n") { it.title }
+            assertTrue("July $day should contain $chapterText", tasks.contains(chapterText))
+        }
     }
 
     @Test
@@ -323,6 +347,7 @@ class ExamStudyPlanTest {
         assertTrue(prompt.contains("9点起床，23点睡觉"))
         assertTrue(prompt.contains("这一章没有结束前不要单独安排题目"))
         assertTrue(prompt.contains("单纯看框架不算"))
+        assertTrue(prompt.contains("法理章节必须按顺序连续推进"))
     }
 
     @Test

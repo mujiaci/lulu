@@ -31,7 +31,7 @@ class CihaiStore(
         .map { prefs ->
             prefs[stateKey]?.let { raw ->
                 runCatching { json.decodeFromString<CihaiState>(raw) }.getOrDefault(CihaiState())
-            } ?: CihaiState()
+            }?.normalizedCihaiState() ?: CihaiState()
         }
         .catch { emit(CihaiState()) }
         .stateIn(scope, SharingStarted.Eagerly, CihaiState())
@@ -40,14 +40,14 @@ class CihaiStore(
         context.cihaiDataStore.edit { prefs ->
             val current = prefs[stateKey]?.let { raw ->
                 runCatching { json.decodeFromString<CihaiState>(raw) }.getOrDefault(CihaiState())
-            } ?: CihaiState()
+            }?.normalizedCihaiState() ?: CihaiState()
             prefs[stateKey] = json.encodeToString(transform(current).normalizedCihaiState())
         }
     }
 
     suspend fun snapshot(): CihaiState = context.cihaiDataStore.data.first()[stateKey]?.let { raw ->
         runCatching { json.decodeFromString<CihaiState>(raw) }.getOrDefault(CihaiState())
-    } ?: CihaiState()
+    }?.normalizedCihaiState() ?: CihaiState()
 
     suspend fun selectAssistant(assistantId: String) {
         update { it.copy(selectedAssistantId = assistantId) }
@@ -115,7 +115,11 @@ class CihaiStore(
 
 internal fun CihaiState.normalizedCihaiState(): CihaiState {
     val normalizedEntries = entries
-        .filter { it.assistantId.isNotBlank() && it.content.isNotBlank() }
+        .filter {
+            it.assistantId.isNotBlank() &&
+                it.content.isNotBlank() &&
+                it.kind != CihaiEntryKind.REFLECTION
+        }
         .distinctBy { it.id }
         .take(CIHAI_ENTRY_LIMIT)
     val normalizedEntriesById = normalizedEntries.associateBy { it.id }

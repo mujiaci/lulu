@@ -8,19 +8,19 @@ import org.junit.Test
 
 class CihaiPageEntryKindsTest {
     @Test
-    fun `cihai page exposes concern diary and memory sections without internal tabs`() {
+    fun `cihai page exposes concern and diary without legacy reflection tab`() {
         val sections = visibleCihaiSections()
 
         assertEquals(
-            listOf("挂心", "日记", "沉淀"),
+            listOf("挂心", "日记"),
             sections.map { it.label },
         )
         assertEquals(null, CihaiSection.CONCERNS.entryKind)
         assertEquals(CihaiEntryKind.DIARY, CihaiSection.DIARY.entryKind)
-        assertEquals(CihaiEntryKind.REFLECTION, CihaiSection.REFLECTION.entryKind)
         assertFalse(sections.any { it.entryKind == CihaiEntryKind.INNER_JOURNAL })
         assertFalse(sections.any { it.entryKind == CihaiEntryKind.ACTION_LOG })
         assertFalse(sections.any { it.entryKind == CihaiEntryKind.READING_NOTE })
+        assertFalse(sections.any { it.entryKind == CihaiEntryKind.REFLECTION })
     }
 
     @Test
@@ -37,10 +37,6 @@ class CihaiPageEntryKindsTest {
         assertEquals(
             listOf("diary"),
             entriesForCihaiSection(entries, "lulu", CihaiSection.DIARY).map { it.id },
-        )
-        assertEquals(
-            listOf("reflection"),
-            entriesForCihaiSection(entries, "lulu", CihaiSection.REFLECTION).map { it.id },
         )
         assertEquals(
             emptyList<String>(),

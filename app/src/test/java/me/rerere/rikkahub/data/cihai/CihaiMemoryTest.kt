@@ -123,6 +123,28 @@ class CihaiMemoryTest {
     }
 
     @Test
+    fun `normalization removes legacy reflection entries and their queue items`() {
+        val reflection = memoryEntry(id = "legacy-reflection").copy(
+            kind = CihaiEntryKind.REFLECTION,
+            title = "露露的下一轮判断沉淀",
+            content = "本轮感知世界包、意义评估、动态判断和状态生成的结果。",
+        )
+        val diary = memoryEntry(id = "diary").copy(kind = CihaiEntryKind.DIARY)
+        val state = CihaiState(
+            entries = listOf(reflection, diary),
+            memoryQueue = listOf(
+                queueItem(entryId = reflection.id),
+                queueItem(entryId = diary.id),
+            ),
+        )
+
+        val normalized = state.normalizedCihaiState()
+
+        assertEquals(listOf("diary"), normalized.entries.map { it.id })
+        assertEquals(listOf("diary"), normalized.memoryQueue.map { it.entryId })
+    }
+
+    @Test
     fun `legacy memory flags resolve without enqueueing old entries`() {
         val state = Json.decodeFromString(
             CihaiState.serializer(),

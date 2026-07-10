@@ -112,7 +112,7 @@ fun CihaiPage(onBack: () -> Unit) {
                 )
             }
             Text(
-                text = "这里放挂心任务、角色第一人称日记和记忆沉淀；记忆会按轮次自动整理，阅读保留独立入口。",
+                text = "这里放挂心任务和角色主动写下的第一人称日记；长期记忆会从真实事件中自动整理。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -224,18 +224,11 @@ internal enum class CihaiSection(
         emptyTitle = "还没有日记",
         emptyBody = "这里放角色按自己口吻写下的第一人称日记，主要记录真实感受和没说出口的想法。",
     ),
-    REFLECTION(
-        label = "沉淀",
-        entryKind = CihaiEntryKind.REFLECTION,
-        emptyTitle = "还没有记忆沉淀",
-        emptyBody = "这里只放多轮判断之后整理出的经验，供之后相似情境复用。",
-    ),
 }
 
 internal fun visibleCihaiSections(): List<CihaiSection> = listOf(
     CihaiSection.CONCERNS,
     CihaiSection.DIARY,
-    CihaiSection.REFLECTION,
 )
 
 internal fun entriesForCihaiSection(
