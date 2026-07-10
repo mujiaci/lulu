@@ -162,6 +162,11 @@ object CompanionIntentModelPlanner {
         appendLine(input.perception.persona)
         appendLine("</persona>")
         appendLine(input.perception.toPromptContext())
+        if (input.perception.memoryContext.isNotBlank()) {
+            appendLine("<memory_context>")
+            appendLine(input.perception.memoryContext)
+            appendLine("</memory_context>")
+        }
         appendLine("<recent_conversation>")
         input.perception.recentTurns.takeLast(8).forEach { turn ->
             appendLine("${turn.role.name}: ${turn.content.take(500)}")

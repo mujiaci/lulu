@@ -114,6 +114,7 @@ class LuluExpressionOutputTransformerTest {
             body_state: 没有可确认的身体状态
             mind_state: 专注倾听
             activity_mode: conversation
+            user_state: awake
             </lulu_presence>
             """.trimIndent()
         )
@@ -131,6 +132,8 @@ class LuluExpressionOutputTransformerTest {
         assertEquals("没有可确认的身体状态", annotation.data["body_state"]?.jsonPrimitive?.content)
         assertEquals("专注倾听", annotation.data["mind_state"]?.jsonPrimitive?.content)
         assertEquals("conversation", annotation.data["activity_mode"]?.jsonPrimitive?.content)
+        assertEquals("awake", annotation.data["user_state"]?.jsonPrimitive?.content)
+        assertEquals("awake", result.companionModelPresence()?.userState)
     }
 
     @Test

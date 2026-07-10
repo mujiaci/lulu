@@ -42,7 +42,6 @@ data class CompanionState(
 @Serializable
 data class CompanionRelationshipState(
     val roleLabel: String = "",
-    val familiarity: Float = 0f,
     val trust: Float = 0.5f,
     val closeness: Float = 0f,
     val reliability: Float = 0.5f,
@@ -58,7 +57,6 @@ data class CompanionRelationshipEvent(
     val assistantId: String,
     val sourceId: String,
     val kind: CompanionRelationshipEventKind,
-    val familiarityDelta: Float = 0f,
     val trustDelta: Float = 0f,
     val closenessDelta: Float = 0f,
     val reliabilityDelta: Float = 0f,

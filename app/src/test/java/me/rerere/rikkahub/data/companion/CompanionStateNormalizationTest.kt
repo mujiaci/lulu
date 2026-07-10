@@ -56,7 +56,6 @@ class CompanionStateNormalizationTest {
         val snapshot = CompanionSnapshot(
             assistantId = "assistant-a",
             relationship = CompanionRelationshipState(
-                familiarity = 2f,
                 trust = -1f,
                 closeness = 4f,
                 unresolvedTension = -3f,
@@ -66,7 +65,6 @@ class CompanionStateNormalizationTest {
         val relationship = CompanionPersistedState(snapshots = listOf(snapshot)).normalizedCompanionState()
             .snapshots.single().relationship
 
-        assertEquals(1f, relationship.familiarity)
         assertEquals(0f, relationship.trust)
         assertEquals(1f, relationship.closeness)
         assertEquals(0f, relationship.unresolvedTension)

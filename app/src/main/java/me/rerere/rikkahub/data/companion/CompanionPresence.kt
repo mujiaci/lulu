@@ -9,6 +9,7 @@ data class CompanionModelPresence(
     val bodyState: String? = null,
     val mindState: String? = null,
     val activityMode: String? = null,
+    val userState: String? = null,
 )
 
 fun buildCompanionStateFromTurn(

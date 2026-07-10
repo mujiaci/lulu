@@ -3,7 +3,10 @@ package me.rerere.rikkahub.data.ai.tools
 import android.content.Context
 import android.content.Intent
 import android.provider.AlarmClock
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
@@ -22,6 +25,14 @@ fun createAlarmTool(context: Context): Tool = Tool(
                     put("type", "integer")
                     put("description", "Hour in 24-hour format (0-23).")
                 }
+                putJsonObject("action") {
+                    put("type", "string")
+                    put("enum", buildJsonArray {
+                        add(JsonPrimitive("set"))
+                        add(JsonPrimitive("dismiss"))
+                    })
+                    put("description", "Set a new alarm or dismiss an alarm previously created with the same label")
+                }
                 putJsonObject("minute") {
                     put("type", "integer")
                     put("description", "Minute (0-59).")
@@ -31,14 +42,57 @@ fun createAlarmTool(context: Context): Tool = Tool(
                     put("description", "A label/name for the alarm (optional)")
                 }
             },
-            required = listOf("hour", "minute")
+            required = emptyList()
         )
     },
     execute = { args ->
         val params = args.jsonObject
+        val action = params["action"]?.jsonPrimitive?.contentOrNull ?: "set"
         val hour = params["hour"]?.jsonPrimitive?.content?.toIntOrNull()
         val minute = params["minute"]?.jsonPrimitive?.content?.toIntOrNull()
         val label = params["label"]?.jsonPrimitive?.content ?: ""
+
+        if (action == "dismiss") {
+            if (label.isBlank()) {
+                return@Tool listOf(UIMessagePart.Text(
+                    buildJsonObject {
+                        put("success", false)
+                        put("error", "label is required when dismissing an alarm")
+                    }.toString()
+                ))
+            }
+            return@Tool try {
+                val intent = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
+                    putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
+                    putExtra(AlarmClock.EXTRA_MESSAGE, label)
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                if (context.packageManager.queryIntentActivities(intent, 0).isNullOrEmpty()) {
+                    listOf(UIMessagePart.Text(
+                        buildJsonObject {
+                            put("success", false)
+                            put("error", "No clock app found that supports dismissing alarms")
+                        }.toString()
+                    ))
+                } else {
+                    context.startActivity(intent)
+                    listOf(UIMessagePart.Text(
+                        buildJsonObject {
+                            put("success", true)
+                            put("action", "dismiss")
+                            put("label", label)
+                        }.toString()
+                    ))
+                }
+            } catch (e: Exception) {
+                listOf(UIMessagePart.Text(
+                    buildJsonObject {
+                        put("success", false)
+                        put("error", e.message ?: "Failed to dismiss alarm")
+                    }.toString()
+                ))
+            }
+        }
 
         if (hour == null || minute == null) {
             return@Tool listOf(UIMessagePart.Text(

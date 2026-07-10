@@ -29,8 +29,6 @@ data class Assistant(
     val autoPlayVoice: Boolean = false,
     val ttsVoiceId: String = "",
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
-    val enableMemory: Boolean = false,
-    val useGlobalMemory: Boolean = false, // 使用全局共享记忆而非助手隔离记忆
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),
@@ -56,12 +54,6 @@ data class Assistant(
 data class QuickMessage(
     val id: Uuid = Uuid.random(),
     val title: String = "",
-    val content: String = "",
-)
-
-@Serializable
-data class AssistantMemory(
-    val id: Int,
     val content: String = "",
 )
 

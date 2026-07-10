@@ -15,6 +15,7 @@ data class CompanionFollowUpDraft(
     val preferredToolNames: List<String> = emptyList(),
     val importance: Int = 3,
     val actionType: CompanionActionType = CompanionActionType.CHECK_IN,
+    val argumentsJson: String = "{}",
 ) {
     fun toConcern(nowMillis: Long): CompanionConcern {
         val subjectKey = stableSubjectKey()
@@ -42,6 +43,7 @@ data class CompanionFollowUpDraft(
             dueAt = dueAt,
             actionPlan = CompanionActionPlan(
                 type = actionType,
+                argumentsJson = argumentsJson,
                 userFacingSummary = reason.trim(),
                 contextText = sourceText.trim(),
                 category = category.trim(),
@@ -140,6 +142,26 @@ class CompanionRuntime(
                 commitmentId = commitmentId,
                 result = result,
                 retryAt = retryAt,
+            ).also { reduction = it }.persistedState
+        }
+        reduction?.snapshot?.let(::remember)
+        return reduction?.affectedCommitment
+    }
+
+    suspend fun continueCommitment(
+        assistantId: String,
+        commitmentId: String,
+        result: CompanionActionResult,
+        nextDueAt: Long,
+    ): CompanionCommitment? {
+        var reduction: CompanionRuntimeReduction? = null
+        store.update { current ->
+            continueCompanionCommitment(
+                current = current,
+                assistantId = assistantId,
+                commitmentId = commitmentId,
+                result = result,
+                nextDueAt = nextDueAt,
             ).also { reduction = it }.persistedState
         }
         reduction?.snapshot?.let(::remember)
@@ -503,6 +525,70 @@ fun finishCompanionCommitment(
     return current.withUpdatedSnapshot(
         snapshot = updatedSnapshot.copy(relationship = relationshipReduction.relationship),
         appliedRelationshipEventIds = relationshipReduction.appliedEventIds,
+        affectedCommitmentId = commitmentId,
+    )
+}
+
+fun continueCompanionCommitment(
+    current: CompanionPersistedState,
+    assistantId: String,
+    commitmentId: String,
+    result: CompanionActionResult,
+    nextDueAt: Long,
+): CompanionRuntimeReduction {
+    val snapshot = current.snapshotOrEmpty(assistantId)
+    val existing = snapshot.commitments.firstOrNull {
+        it.assistantId == assistantId && it.id == commitmentId
+    } ?: return current.unchangedReduction(snapshot)
+    if (existing.status != CompanionCommitmentStatus.EXECUTING || nextDueAt <= result.completedAt) {
+        return current.unchangedReduction(snapshot)
+    }
+
+    val cleanResult = result.copy(
+        summary = result.summary.trim().take(500),
+        outputReference = result.outputReference?.trim()?.takeIf(String::isNotBlank),
+    )
+    val transitioned = CompanionCommitmentReducer.apply(
+        current = snapshot.commitments,
+        changes = listOf(
+            CompanionCommitmentChange.Transition(
+                assistantId = assistantId,
+                commitmentId = commitmentId,
+                status = CompanionCommitmentStatus.RETRY_SCHEDULED,
+                reason = cleanResult.summary,
+                nextDueAt = nextDueAt,
+            ),
+        ),
+        nowMillis = cleanResult.completedAt,
+    )
+    val continued = transitioned.firstOrNull { it.id == commitmentId }
+        ?.takeIf { it.status == CompanionCommitmentStatus.RETRY_SCHEDULED }
+        ?: return current.unchangedReduction(snapshot)
+    val updatedCommitment = continued.copy(
+        lastActionResult = cleanResult,
+        updatedAt = cleanResult.completedAt,
+    )
+    val concernChanges = snapshot.concerns
+        .filter { concern ->
+            concern.assistantId == assistantId &&
+                concern.subjectKey == existing.subjectKey &&
+                concern.status == CompanionConcernStatus.ACTIVE
+        }
+        .map { concern ->
+            CompanionConcernChange.Upsert(concern.copy(nextPerceptionAt = nextDueAt))
+        }
+    return current.withUpdatedSnapshot(
+        snapshot = snapshot.copy(
+            concerns = CompanionConcernReducer.apply(
+                current = snapshot.concerns,
+                changes = concernChanges,
+                nowMillis = cleanResult.completedAt,
+            ),
+            commitments = transitioned.map {
+                if (it.id == commitmentId) updatedCommitment else it
+            },
+            updatedAt = maxOf(snapshot.updatedAt, cleanResult.completedAt),
+        ),
         affectedCommitmentId = commitmentId,
     )
 }

@@ -34,8 +34,9 @@ class CompanionModelsTest {
     fun `default relationship is role neutral`() {
         val relationship = CompanionRelationshipState()
 
-        assertEquals(0f, relationship.familiarity)
         assertEquals(0f, relationship.closeness)
+        assertEquals(0.5f, relationship.trust)
+        assertEquals(0.5f, relationship.reliability)
         assertEquals(0f, relationship.unresolvedTension)
         assertTrue(relationship.roleLabel.isBlank())
     }

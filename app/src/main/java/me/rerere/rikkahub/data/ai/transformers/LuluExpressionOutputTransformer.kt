@@ -163,6 +163,7 @@ private fun String.normalizeLuluPresenceKey(): String? = when (trim().lowercase(
     "body_state", "body state", "body", "身体状态", "具身状态" -> "body_state"
     "mind_state", "mind state", "mind", "精神状态", "注意状态" -> "mind_state"
     "activity_mode", "activity mode", "mode", "行动状态", "活动状态" -> "activity_mode"
+    "user_state", "user state", "用户状态", "醒睡状态" -> "user_state"
     else -> null
 }
 
@@ -196,6 +197,7 @@ private fun kotlinx.serialization.json.JsonObject.toCompanionModelPresence(): Co
         bodyState = this["body_state"]?.jsonPrimitive?.contentOrNull,
         mindState = this["mind_state"]?.jsonPrimitive?.contentOrNull,
         activityMode = this["activity_mode"]?.jsonPrimitive?.contentOrNull,
+        userState = this["user_state"]?.jsonPrimitive?.contentOrNull,
     ).takeIf { presence ->
         presence.statusText.orEmpty().isNotBlank() ||
             presence.description.orEmpty().isNotBlank() ||
@@ -204,7 +206,8 @@ private fun kotlinx.serialization.json.JsonObject.toCompanionModelPresence(): Co
             presence.mood.orEmpty().isNotBlank() ||
             presence.bodyState.orEmpty().isNotBlank() ||
             presence.mindState.orEmpty().isNotBlank() ||
-            presence.activityMode.orEmpty().isNotBlank()
+            presence.activityMode.orEmpty().isNotBlank() ||
+            presence.userState.orEmpty().isNotBlank()
     }
 
 internal fun sanitizeLuluVisibleExpression(text: String): String {

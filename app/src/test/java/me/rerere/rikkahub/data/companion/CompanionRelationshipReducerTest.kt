@@ -9,7 +9,7 @@ class CompanionRelationshipReducerTest {
         val event = event(
             id = "event-1",
             sourceId = "message-1",
-            familiarityDelta = 0.2f,
+            closenessDelta = 0.2f,
             trustDelta = 0.1f,
         )
 
@@ -28,7 +28,7 @@ class CompanionRelationshipReducerTest {
             nowMillis = 200L,
         )
 
-        assertEquals(0.2f, second.relationship.familiarity)
+        assertEquals(0.2f, second.relationship.closeness)
         assertEquals(0.6f, second.relationship.trust)
         assertEquals(first.appliedEventIds, second.appliedEventIds)
     }
@@ -99,7 +99,6 @@ class CompanionRelationshipReducerTest {
         assistantId: String = ASSISTANT_ID,
         sourceId: String = "message-1",
         kind: CompanionRelationshipEventKind = CompanionRelationshipEventKind.MEANINGFUL_DISCLOSURE,
-        familiarityDelta: Float = 0f,
         trustDelta: Float = 0f,
         closenessDelta: Float = 0f,
         tensionDelta: Float = 0f,
@@ -108,7 +107,6 @@ class CompanionRelationshipReducerTest {
         assistantId = assistantId,
         sourceId = sourceId,
         kind = kind,
-        familiarityDelta = familiarityDelta,
         trustDelta = trustDelta,
         closenessDelta = closenessDelta,
         tensionDelta = tensionDelta,

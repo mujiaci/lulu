@@ -256,27 +256,48 @@ class MemoryBankContextTest {
 
     @Test
     fun `select memory recall items uses dynamic top k from best vector similarity`() {
-        val memories = (1..8).map { index ->
+        val vectors = listOf(
+            listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
+            listOf(0.8f, 0.6f, 0f, 0f, 0f, 0f, 0f, 0f),
+            listOf(0.75f, 0f, 0.66f, 0f, 0f, 0f, 0f, 0f),
+            listOf(0.7f, 0f, 0f, 0.714f, 0f, 0f, 0f, 0f),
+            listOf(0.65f, 0f, 0f, 0f, 0.76f, 0f, 0f, 0f),
+            listOf(0.6f, 0f, 0f, 0f, 0f, 0.8f, 0f, 0f),
+            listOf(0.55f, 0f, 0f, 0f, 0f, 0f, 0.84f, 0f),
+            listOf(0.5f, 0f, 0f, 0f, 0f, 0f, 0f, 0.866f),
+        )
+        val memories = vectors.mapIndexed { index, vector ->
             MemoryBankEntity(
-                id = index,
-                content = "memory-$index",
+                id = index + 1,
+                content = "memory-${index + 1}",
                 memoryKind = "user_preference",
-                embeddingVectorJson = when (index) {
-                    1 -> encodeMemoryVector(listOf(0.8f, 0.2f, 0f))
-                    2 -> encodeMemoryVector(listOf(0.6f, -0.8f, 0f))
-                    3 -> encodeMemoryVector(listOf(0.6f, 0f, 0.8f))
-                    else -> encodeMemoryVector(listOf(0f, index.toFloat(), 0f))
-                },
+                embeddingVectorJson = encodeMemoryVector(vector),
                 createdAt = index.toLong(),
             )
         }
 
         val selected = selectMemoryRecallItems(
             memories = memories,
-            queryVector = listOf(1f, 0f, 0f),
+            queryVector = listOf(1f, 0f, 0f, 0f, 0f, 0f, 0f, 0f),
         )
 
-        assertEquals(3, selected.size)
+        assertEquals(6, selected.size)
+    }
+
+    @Test
+    fun `select memory recall items keeps eight memories without an embedding model`() {
+        val memories = (1..12).map { index ->
+            MemoryBankEntity(
+                id = index,
+                content = "memory-$index",
+                memoryKind = "user_preference",
+                createdAt = index.toLong(),
+            )
+        }
+
+        val selected = selectMemoryRecallItems(memories = memories)
+
+        assertEquals(8, selected.size)
     }
 
     @Test
@@ -306,7 +327,7 @@ class MemoryBankContextTest {
             queryVector = listOf(1f, 0f, 0f),
         )
 
-        assertEquals(7, selected.size)
+        assertEquals(10, selected.size)
     }
 
     @Test

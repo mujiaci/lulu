@@ -83,7 +83,7 @@ class ProactiveReminderPlannerTest {
         )
 
         assertNotNull(plan)
-        assertEquals(ProactiveReminderKind.SCHEDULE, plan!!.kind)
+        assertEquals(ProactiveReminderKind.WAKE, plan!!.kind)
         assertEquals(
             LocalDateTime.of(2026, 7, 11, 7, 30),
             LocalDateTime.ofInstant(Instant.ofEpochMilli(plan.triggerAtMillis), zone),
@@ -171,5 +171,17 @@ class ProactiveReminderPlannerTest {
         assertEquals(45L, (plan.triggerAtMillis - now) / 60_000L)
         assertTrue(plan.preferredToolNames.contains("get_app_usage"))
         assertFalse(plan.actionHints.any { it.toolName == "write_lulu_journal" })
+    }
+
+    @Test
+    fun `cancelling an alarm does not create a new wake reminder`() {
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "不用叫我了，把闹钟取消吧",
+            assistantText = "好，不再继续叫你。",
+            nowMillis = now,
+            zoneId = zone,
+        )
+
+        assertEquals(null, plan)
     }
 }

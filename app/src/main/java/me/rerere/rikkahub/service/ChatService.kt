@@ -75,7 +75,6 @@ import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
 import me.rerere.rikkahub.data.ai.tools.activeModelTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
-import me.rerere.rikkahub.data.ai.tools.passivePerceptionTools
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
 import me.rerere.rikkahub.data.ai.tools.withConciseToolDescriptions
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
@@ -83,6 +82,7 @@ import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
+import me.rerere.rikkahub.data.ai.transformers.buildPromptInjectionPlannerContext
 import me.rerere.rikkahub.data.ai.transformers.CompanionPresenceContractTransformer
 import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.LuluExpressionOutputTransformer
@@ -107,6 +107,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.companion.CompanionActionType
 import me.rerere.rikkahub.data.companion.CompanionConcernChange
+import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionFollowUpDraft
@@ -118,7 +119,10 @@ import me.rerere.rikkahub.data.companion.CompanionToolExecution
 import me.rerere.rikkahub.data.companion.buildScheduledToolFollowUp
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
+import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
+import me.rerere.rikkahub.data.companion.isWakeGoal
 import me.rerere.rikkahub.data.companion.toPromptContext
+import me.rerere.rikkahub.data.companion.wakeTargetAtOrNull
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
@@ -132,6 +136,7 @@ import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
+import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidates
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -139,6 +144,7 @@ import me.rerere.rikkahub.utils.sendNotification
 import me.rerere.rikkahub.utils.cancelNotification
 import me.rerere.rikkahub.utils.JsonInstant
 import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -146,17 +152,21 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
-private const val PASSIVE_PERCEPTION_TIMEOUT_MILLIS = 3_000L
-private val ALWAYS_COLLECTED_PERCEPTION_TOOLS = setOf(
-    "get_time_info",
-    "get_battery_info",
-    "get_app_usage",
-    "get_gadgetbridge_data",
-    "get_notifications",
+private val WAKE_CANCELLATION_MARKERS = setOf(
+    "不用叫",
+    "别叫我",
+    "取消叫醒",
+    "取消闹钟",
+    "不用喊我",
+    "我自己会起",
 )
-private val WEATHER_QUERY_MARKERS = listOf("天气", "温度", "下雨", "带伞", "冷不冷", "热不热", "weather")
-private val LOCATION_QUERY_MARKERS = listOf("位置", "在哪", "到哪", "附近", "路线", "location")
-
+private val SLEEP_CONFIRMATION_MARKERS = setOf(
+    "我睡了",
+    "去睡了",
+    "现在睡",
+    "关手机睡觉",
+    "晚安我睡了",
+)
 data class ChatError(
     val id: Uuid = Uuid.random(),
     val title: String? = null,
@@ -274,7 +284,6 @@ class ChatService(
 ) {
     // 统一会话管理
     private val sessions = ConcurrentHashMap<Uuid, ConversationSession>()
-    private val chatTurnFollowUpCooldowns = ConcurrentHashMap<String, Instant>()
     private val _sessionsVersion = MutableStateFlow(0L)
 
     // 错误状态
@@ -861,6 +870,7 @@ class ChatService(
         } else {
             model.displayName
         }
+        var turnPreparation = CompanionTurnPreparation()
 
         runCatching {
 
@@ -895,7 +905,7 @@ class ChatService(
                 assistantId = assistant.id.toString(),
                 query = latestUserText,
             )
-            val proactiveContext = collectProactiveToolContext(
+            turnPreparation = collectProactiveToolContext(
                 conversationId = conversationId,
                 messages = conversation.currentMessages,
                 tools = allTools,
@@ -919,7 +929,7 @@ class ChatService(
                 }
                     .withUserProfileContext(settings)
                     .withMemoryRecallContext(memoryContext)
-                    .withProactiveToolInstruction(assistant, proactiveContext),
+                    .withProactiveToolInstruction(assistant, turnPreparation.promptContext),
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 inputTransformers = buildList {
@@ -977,52 +987,118 @@ class ChatService(
                 ?.toText()
                 .orEmpty()
             val nowMillis = System.currentTimeMillis()
-            val intentDecision = buildCompanionIntentDecision(
+            resolveExistingWakeGoalsFromUserMessage(
                 settings = settings,
                 assistant = assistant,
-                finalConversation = finalConversation,
+                conversationId = conversationId,
+                assistantId = assistant.id.toString(),
+                userText = lastUserText,
+                userMessageAt = lastUserMessage?.createdAt
+                    ?.toInstant(TimeZone.currentSystemDefault())
+                    ?.toEpochMilliseconds()
+                    ?: nowMillis,
+                nowMillis = nowMillis,
             )
-            val scheduledPlans = buildProactiveReminderPlansFromTurn(
-                plan = intentDecision,
+            val scheduledPlans = buildCompanionTurnReminderPlans(
+                plan = turnPreparation.plan,
                 userText = lastUserText,
                 assistantText = lastAssistantText,
+                nowMillis = nowMillis,
             )
-            val scheduledToolDrafts = buildScheduledToolFollowUpsFromTurn(
+            val deterministicWakeExecution = scheduledPlans
+                .firstOrNull { it.kind == ProactiveReminderKind.WAKE }
+                ?.let { wakePlan ->
+                    ensureWakeAlarmExecution(
+                        settings = settings,
+                        assistant = assistant,
+                        conversationId = conversationId,
+                        wakePlan = wakePlan,
+                        existingExecutions = turnPreparation.toolExecutions +
+                            finalConversation.currentMessages
+                                .flatMap { it.getTools() }
+                                .filter { it.isExecuted }
+                                .map { tool ->
+                                    CompanionToolExecution(
+                                        toolCallId = tool.toolCallId,
+                                        toolName = tool.toolName,
+                                        inputJson = tool.input,
+                                        outputText = tool.output
+                                            .filterIsInstance<UIMessagePart.Text>()
+                                            .joinToString("\n") { it.text },
+                                    )
+                                },
+                    )
+                }
+            val scheduledToolDrafts = (buildScheduledToolFollowUpsFromTurn(
                 finalConversation = finalConversation,
                 assistantId = assistant.id.toString(),
                 conversationId = conversationId.toString(),
                 sourceMessageId = lastUserMessage?.id?.toString(),
                 nowMillis = nowMillis,
-            )
+            ) + (turnPreparation.toolExecutions + listOfNotNull(deterministicWakeExecution)).mapNotNull { execution ->
+                buildScheduledToolFollowUp(
+                    execution = execution,
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversationId.toString(),
+                    sourceMessageId = lastUserMessage?.id?.toString(),
+                    nowMillis = nowMillis,
+                )
+            }).distinctBy { draft -> draft.reason to draft.dueAt }
             val unifiedState = buildCompanionStateFromTurn(
                 previous = companionRuntime.snapshot(assistant.id.toString()).state,
                 assistantText = lastAssistantText,
                 presence = finalConversation.currentMessages.takeLast(8).companionModelPresence(),
                 nowMillis = nowMillis,
             )
-            val effectiveScheduledPlans = if (scheduledToolDrafts.isEmpty()) {
+            val hasWakePlan = scheduledPlans.any { it.kind == ProactiveReminderKind.WAKE }
+            val effectiveScheduledToolDrafts = if (hasWakePlan) {
+                scheduledToolDrafts.filterNot { draft -> draft.category == "schedule" || draft.category == "wake" }
+            } else {
+                scheduledToolDrafts
+            }
+            val effectiveScheduledPlans = if (effectiveScheduledToolDrafts.isEmpty()) {
                 scheduledPlans
             } else {
                 scheduledPlans.filterNot { it.kind == ProactiveReminderKind.SCHEDULE }
             }
+            val wakeTargetAt = effectiveScheduledPlans
+                .firstOrNull { it.kind == ProactiveReminderKind.WAKE }
+                ?.triggerAtMillis
             val followUpDrafts = effectiveScheduledPlans.map { plan ->
+                val isSleepSupervision = plan.kind == ProactiveReminderKind.SLEEP &&
+                    wakeTargetAt != null && plan.triggerAtMillis < wakeTargetAt
                 CompanionFollowUpDraft(
                     assistantId = assistant.id.toString(),
-                    category = plan.kind.name.lowercase(Locale.ROOT),
+                    category = if (isSleepSupervision) {
+                        "sleep_supervision"
+                    } else {
+                        plan.kind.name.lowercase(Locale.ROOT)
+                    },
                     reason = plan.toTargetedReason(),
                     sourceText = plan.userText,
                     dueAt = plan.triggerAtMillis,
                     sourceConversationId = conversationId.toString(),
                     sourceMessageId = lastUserMessage?.id?.toString(),
                     preferredToolNames = plan.preferredToolNames,
-                    importance = if (plan.kind == ProactiveReminderKind.SCHEDULE) 4 else 3,
-                    actionType = if (plan.kind == ProactiveReminderKind.SCHEDULE) {
+                    importance = if (
+                        plan.kind == ProactiveReminderKind.SCHEDULE || plan.kind == ProactiveReminderKind.WAKE
+                    ) 5 else 3,
+                    actionType = if (
+                        plan.kind == ProactiveReminderKind.SCHEDULE || plan.kind == ProactiveReminderKind.WAKE
+                    ) {
                         CompanionActionType.REMINDER
                     } else {
                         CompanionActionType.CHECK_IN
                     },
+                    argumentsJson = when {
+                        plan.kind == ProactiveReminderKind.WAKE ->
+                            """{"wakeTargetAt":${plan.triggerAtMillis},"retryMinutes":5}"""
+                        isSleepSupervision ->
+                            """{"wakeTargetAt":$wakeTargetAt,"retryMinutes":15}"""
+                        else -> "{}"
+                    },
                 )
-            } + scheduledToolDrafts
+            } + effectiveScheduledToolDrafts
             runCatching {
                 companionRuntime.applyTurn(
                     CompanionTurnMutation(
@@ -1075,13 +1151,93 @@ class ChatService(
     private fun scheduleProactiveReminderFromTurn(
         settings: Settings,
     ) {
-        val nextCommitment = companionRuntime.nextCommitment() ?: return
+        val nextCommitment = companionRuntime.nextCommitment() ?: run {
+            ProactiveMessageService.clearTargetedQueue(context)
+            return
+        }
         val assistantId = runCatching { Uuid.parse(nextCommitment.assistantId) }.getOrNull() ?: return
         ProactiveMessageService.scheduleCommitment(
             context = context,
             setting = settings.getProactiveMessageSetting(assistantId),
             commitment = nextCommitment,
         )
+    }
+
+    private suspend fun resolveExistingWakeGoalsFromUserMessage(
+        settings: Settings,
+        assistant: Assistant,
+        conversationId: Uuid,
+        assistantId: String,
+        userText: String,
+        userMessageAt: Long,
+        nowMillis: Long,
+    ) {
+        val normalizedText = userText.lowercase()
+        var shouldDismissWakeAlarms = false
+        companionRuntime.snapshot(assistantId).commitments
+            .filter { commitment ->
+                commitment.status in setOf(
+                    CompanionCommitmentStatus.ACTIVE,
+                    CompanionCommitmentStatus.DUE,
+                    CompanionCommitmentStatus.RETRY_SCHEDULED,
+                ) && (commitment.isWakeGoal() || commitment.isSleepSupervisionGoal())
+            }
+            .forEach { commitment ->
+                val userCancelled = WAKE_CANCELLATION_MARKERS.any { marker -> marker in normalizedText }
+                val userConfirmedSleep = commitment.isSleepSupervisionGoal() &&
+                    SLEEP_CONFIRMATION_MARKERS.any { marker -> marker in normalizedText }
+                val userConfirmedAwake = commitment.isWakeGoal() &&
+                    commitment.wakeTargetAtOrNull()?.let { target -> userMessageAt >= target } == true
+                if (userCancelled || userConfirmedSleep || userConfirmedAwake) {
+                    shouldDismissWakeAlarms = shouldDismissWakeAlarms || userCancelled || userConfirmedAwake
+                    companionRuntime.cancelCommitment(
+                        assistantId = assistantId,
+                        commitmentId = commitment.id,
+                        reason = when {
+                            userCancelled -> "User cancelled the wake or sleep supervision goal"
+                            userConfirmedAwake -> "User sent a message after the wake target and is confirmed awake"
+                            else -> "User confirmed they are going to sleep"
+                        },
+                        nowMillis = nowMillis,
+                    )
+                }
+            }
+        if (shouldDismissWakeAlarms) {
+            dismissWakeAlarms(
+                settings = settings,
+                assistant = assistant,
+                conversationId = conversationId,
+            )
+        }
+    }
+
+    private suspend fun dismissWakeAlarms(
+        settings: Settings,
+        assistant: Assistant,
+        conversationId: Uuid,
+    ) {
+        val alarmTool = buildAvailableTools(settings, assistant, conversationId)
+            .activeModelTools()
+            .firstOrNull { it.name == "set_alarm" }
+            ?: return
+        val assistantName = assistant.name.ifBlank { "当前角色" }
+        listOf(
+            "${assistantName}叫你起床",
+            "${assistantName}继续叫你起床",
+        ).forEach { label ->
+            runCatching {
+                alarmTool.execute(
+                    JsonObject(
+                        mapOf(
+                            "action" to JsonPrimitive("dismiss"),
+                            "label" to JsonPrimitive(label),
+                        )
+                    )
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to dismiss wake alarm: $label", error)
+            }
+        }
     }
 
     private fun buildScheduledToolFollowUpsFromTurn(
@@ -1121,115 +1277,46 @@ class ChatService(
             .toList()
     }
 
-    private fun buildProactiveReminderPlansFromTurn(
-        plan: CompanionIntentDecision,
-        userText: String,
-        assistantText: String,
-    ): List<ProactiveReminderPlan> {
-        val fromFollowUps = plan.followUps.filter { followUp ->
-            shouldScheduleFollowUpForUserTurn(
-                userText = userText,
-                reason = followUp.reason,
-                delayMinutes = followUp.delayMinutes,
-            )
-        }.map { followUp ->
-            ProactiveReminderPlan(
-                triggerAtMillis = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(followUp.delayMinutes.toLong()),
-                kind = followUp.category.toProactiveReminderKind(),
-                reason = followUp.reason,
-                userText = userText.take(160),
-                preferredToolNames = plan.toolNames,
-            )
-        }
-
-        val fromIntent = plan.toProactiveReminderPlan(userText = userText)
-        val fallback = if (plan.fromModel) {
-            null
-        } else {
-            ProactiveReminderPlanner.plan(
-                userText = userText,
-                assistantText = assistantText,
-            )
-        }
-        return (fromFollowUps + listOfNotNull(fromIntent ?: fallback))
-            .distinctBy { it.triggerAtMillis to it.reason }
-            .sortedBy { it.triggerAtMillis }
-            .take(5)
-    }
-
-    private fun String?.toProactiveReminderKind(): ProactiveReminderKind = when (this?.lowercase(Locale.ROOT)) {
-        "sleep" -> ProactiveReminderKind.SLEEP
-        "schedule" -> ProactiveReminderKind.SCHEDULE
-        "meal" -> ProactiveReminderKind.MEAL
-        "study" -> ProactiveReminderKind.STUDY
-        else -> ProactiveReminderKind.GENERAL
-    }
-
-    private suspend fun buildCompanionIntentDecision(
+    private suspend fun ensureWakeAlarmExecution(
         settings: Settings,
         assistant: Assistant,
-        finalConversation: Conversation,
-    ): CompanionIntentDecision {
-        val availableToolNames = buildAvailableTools(settings, assistant, finalConversation.id)
+        conversationId: Uuid,
+        wakePlan: ProactiveReminderPlan,
+        existingExecutions: List<CompanionToolExecution>,
+    ): CompanionToolExecution? {
+        val target = Instant.ofEpochMilli(wakePlan.triggerAtMillis).atZone(ZoneId.systemDefault())
+        if (existingExecutions.any { execution -> execution.isSuccessfulAlarmFor(target.hour, target.minute) }) {
+            return null
+        }
+        val alarmTool = buildAvailableTools(settings, assistant, conversationId)
             .activeModelTools()
-            .map { it.name }
-            .toSet()
-        val nowMillis = System.currentTimeMillis()
-        val minutesSinceLastChat = finalConversation.currentMessages
-            .dropLast(1)
-            .lastOrNull()
-            ?.createdAt
-            ?.let { createdAt ->
-                val last = createdAt.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
-                ((nowMillis - last) / 60_000L).coerceAtLeast(0)
-            }
-            ?: 0L
-        val perception = companionRuntime.perception(
-            CompanionPerceptionInput(
-                assistantId = assistant.id.toString(),
-                assistantName = assistant.name,
-                persona = assistant.toLuluPlannerPersona(),
-                conversationId = finalConversation.id.toString(),
-                recentTurns = finalConversation.currentMessages.takeLast(12).map { message ->
-                    CompanionConversationTurn(
-                        role = message.role.toCompanionTurnRole(),
-                        content = message.toText(),
-                        createdAt = message.createdAt
-                            .toInstant(TimeZone.currentSystemDefault())
-                            .toEpochMilliseconds(),
-                        sourceId = message.id.toString(),
-                    )
-                },
-                contextFacts = listOf(
-                    CompanionContextFact(
-                        key = "minutes_since_previous_interaction",
-                        value = minutesSinceLastChat.toString(),
-                        observedAt = nowMillis,
-                    ),
-                ),
-                availableToolNames = availableToolNames,
-                nowMillis = nowMillis,
-            ),
+            .firstOrNull { it.name == "set_alarm" }
+            ?: return null
+        val input = JsonObject(
+            mapOf(
+                "hour" to JsonPrimitive(target.hour),
+                "minute" to JsonPrimitive(target.minute),
+                "label" to JsonPrimitive("${assistant.name.ifBlank { "当前角色" }}叫你起床"),
+            )
         )
-        val input = CompanionIntentInput(
-            perception = perception,
-            mode = CompanionDecisionMode.FOREGROUND,
-            minutesSinceLastChat = minutesSinceLastChat,
-        )
-        val modelPlan = settings.luluIntentModelId
-            ?.let { settings.findModelById(it) }
-            ?.takeIf { it.type == ModelType.CHAT }
-            ?.let { model ->
-                runCatching {
-                    CompanionIntentModelPlanner.planOrNull(
-                        input = input,
-                        settings = settings,
-                        model = model,
-                        providerManager = providerManager,
-                    )
-                }.getOrNull()
+        val output = runCatching { alarmTool.execute(input) }
+            .getOrElse { error ->
+                listOf(UIMessagePart.Text("""{"success":false,"error":${JsonPrimitive(error.message ?: "Alarm failed")}}"""))
             }
-        return modelPlan ?: CompanionIntentFallbackPlanner.plan(input)
+        return CompanionToolExecution(
+            toolCallId = "wake:${Uuid.random()}",
+            toolName = "set_alarm",
+            inputJson = input.toString(),
+            outputText = output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text },
+        )
+    }
+
+    private fun CompanionToolExecution.isSuccessfulAlarmFor(hour: Int, minute: Int): Boolean {
+        if (toolName != "set_alarm" || !outputText.contains("\"success\":true")) return false
+        val input = runCatching { JsonInstant.parseToJsonElement(inputJson).jsonObject }.getOrNull()
+            ?: return false
+        return input["hour"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() == hour &&
+            input["minute"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() == minute
     }
 
     private fun ProactiveReminderPlan.toTargetedReason(): String = buildString {
@@ -1272,7 +1359,10 @@ class ChatService(
                 val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
                     turns = plan.turns,
                     assistantName = assistant.name,
-                    assistantPersona = assistant.toLuluPlannerPersona(),
+                    assistantPersona = assistant.toLuluPlannerPersona(
+                        messages = conversation.currentMessages,
+                        settings = settings,
+                    ),
                 )
                 val chunk = providerImpl.generateText(
                     providerSetting = provider,
@@ -1299,12 +1389,29 @@ class ChatService(
                     .take(8)
                 if (candidates.isEmpty()) return@runCatching
 
-                memoryBankService.saveExtractedMemories(
+                val savedMemories = memoryBankService.saveExtractedMemories(
                     candidates = candidates,
                     assistantId = assistant.id.toString(),
                     conversationId = conversationId.toString(),
                     createdAt = System.currentTimeMillis(),
                 )
+                if (savedMemories.isNotEmpty()) {
+                    val relationshipEvents = buildRelationshipEventsFromMemoryCandidates(
+                        candidates = candidates,
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversationId.toString(),
+                        createdAt = System.currentTimeMillis(),
+                    )
+                    if (relationshipEvents.isNotEmpty()) {
+                        companionRuntime.applyTurn(
+                            CompanionTurnMutation(
+                                assistantId = assistant.id.toString(),
+                                relationshipEvents = relationshipEvents,
+                                nowMillis = System.currentTimeMillis(),
+                            )
+                        )
+                    }
+                }
                 runCatching {
                     memoryBankService.processPendingVectors()
                     memoryBankService.runAutoMaintenanceIfDue()
@@ -1458,9 +1565,9 @@ class ChatService(
         settings: Settings,
         assistant: Assistant,
         memoryContext: String,
-    ): String {
+    ): CompanionTurnPreparation {
         val latestUserText = messages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
-        if (latestUserText.isBlank()) return ""
+        if (latestUserText.isBlank()) return CompanionTurnPreparation()
         val nowMillis = System.currentTimeMillis()
         val previousInteractionAt = messages
             .dropLast(1)
@@ -1468,16 +1575,18 @@ class ChatService(
             ?.createdAt
             ?.toInstant(TimeZone.currentSystemDefault())
             ?.toEpochMilliseconds()
-        val passiveFacts = collectPassivePerceptionFacts(
+        val passiveFacts = collectCompanionPassivePerceptionFacts(
             tools = tools,
-            latestUserText = latestUserText,
             observedAt = nowMillis,
         )
         val companionPerception = companionRuntime.perception(
             CompanionPerceptionInput(
                 assistantId = assistant.id.toString(),
                 assistantName = assistant.name,
-                persona = assistant.toLuluPlannerPersona(),
+                persona = assistant.toLuluPlannerPersona(
+                    messages = messages,
+                    settings = settings,
+                ),
                 conversationId = conversationId.toString(),
                 recentTurns = messages.takeLast(12).map { message ->
                     CompanionConversationTurn(
@@ -1510,14 +1619,21 @@ class ChatService(
             perception = companionPerception,
         )
         val plan = planResult.plan
-        if (
-            plan.expressionGuidance.isNullOrBlank() &&
-            plan.expressionAffordances.isEmpty() &&
-            plan.innerThought.isNullOrBlank()
-        ) return unifiedContext
-        return buildString {
+        val toolExecutions = executeCompanionPlannedTools(
+            plan = plan,
+            tools = tools,
+        )
+        val promptContext = buildString {
             appendLine(unifiedContext)
             appendLine()
+            if (toolExecutions.isNotEmpty()) {
+                appendLine("本轮回复前已经完成的角色行动：")
+                toolExecutions.forEach { execution ->
+                    appendLine("- ${execution.toolName}: ${execution.outputText.take(800)}")
+                }
+                appendLine("成功完成的动作不要重复调用；把结果作为刚刚亲自完成或感知到的事实。")
+                appendLine()
+            }
             plan.innerThought?.takeIf { it.isNotBlank() }?.let { thought ->
                 appendLine("本轮${roleName}没说出口的心里话：$thought")
                 appendLine("这只是后台第一人称心声，不要把它当成工具结果，也不要原样复述。")
@@ -1534,56 +1650,40 @@ class ChatService(
                 appendLine()
             }
         }
+        return CompanionTurnPreparation(
+            promptContext = promptContext.trim(),
+            plan = plan,
+            toolExecutions = toolExecutions,
+        )
     }
 
-    private suspend fun collectPassivePerceptionFacts(
+    private suspend fun executeCompanionPlannedTools(
+        plan: CompanionChatTurnPlan,
         tools: List<Tool>,
-        latestUserText: String,
-        observedAt: Long,
-    ): List<CompanionContextFact> = coroutineScope {
-        val relevantNames = buildSet {
-            addAll(ALWAYS_COLLECTED_PERCEPTION_TOOLS)
-            if (WEATHER_QUERY_MARKERS.any { latestUserText.contains(it, ignoreCase = true) }) {
-                add("get_weather")
-                add("get_location")
+    ): List<CompanionToolExecution> = buildList {
+        plan.toolRequests
+            .filter { request -> request.autoExecutable && request.toolName != "ask_user" }
+            .forEach { request ->
+            val tool = tools.activeModelTools().firstOrNull { it.name == request.toolName }
+                ?: return@forEach
+            val output = runCatching {
+                val args = JsonInstant.parseToJsonElement(request.argumentsJson.ifBlank { "{}" })
+                tool.execute(args)
+            }.getOrElse { error ->
+                listOf(UIMessagePart.Text("""{"success":false,"error":${JsonPrimitive(error.message ?: "Tool execution failed")}}"""))
             }
-            if (LOCATION_QUERY_MARKERS.any { latestUserText.contains(it, ignoreCase = true) }) {
-                add("get_location")
-            }
+            add(
+                CompanionToolExecution(
+                    toolCallId = "planner:${Uuid.random()}",
+                    toolName = request.toolName,
+                    inputJson = request.argumentsJson,
+                    outputText = output
+                        .filterIsInstance<UIMessagePart.Text>()
+                        .joinToString("\n") { it.text }
+                        .trim(),
+                )
+            )
         }
-        tools.passivePerceptionTools()
-            .filter { it.name in relevantNames }
-            .map { tool ->
-                async(Dispatchers.IO) {
-                    val output = withTimeoutOrNull(PASSIVE_PERCEPTION_TIMEOUT_MILLIS) {
-                        runCatching {
-                            val args = JsonInstant.parseToJsonElement(passivePerceptionArguments(tool.name))
-                            tool.execute(args)
-                                .filterIsInstance<UIMessagePart.Text>()
-                                .joinToString("\n") { it.text }
-                                .trim()
-                        }.getOrNull()
-                    } ?: return@async null
-                    output.takeIf(String::isNotBlank)?.let { value ->
-                        CompanionContextFact(
-                            key = "perception.${tool.name}",
-                            value = value,
-                            observedAt = observedAt,
-                        )
-                    }
-                }
-            }
-            .awaitAll()
-            .filterNotNull()
-    }
-
-    private fun passivePerceptionArguments(toolName: String): String = when (toolName) {
-        "get_notifications" -> """{"limit":5}"""
-        "get_app_usage" -> """{"limit":8}"""
-        "get_gadgetbridge_data" -> """{"data_type":"daily_summary"}"""
-        "get_location" -> """{"include_address":false,"force_refresh":false}"""
-        "get_weather" -> """{"force_refresh_location":false}"""
-        else -> "{}"
     }
 
     private fun MessageRole.toCompanionTurnRole(): CompanionTurnRole = when (this) {
@@ -1618,36 +1718,10 @@ class ChatService(
         }
     }
 
-    private fun scheduleChatTurnFollowUp(
-        settings: Settings,
-        assistant: Assistant,
-        latestUserText: String,
-        plan: CompanionChatTurnPlan,
-    ) {
-        val delayMinutes = plan.followUpDelayMinutes ?: return
-        if (!plan.shouldScheduleFollowUpForUserTurn(latestUserText)) {
-            return
-        }
-        val cooldownKey = "${latestUserText.take(48)}:$delayMinutes"
-        val now = Instant.now()
-        val lastScheduled = chatTurnFollowUpCooldowns[cooldownKey]
-        if (lastScheduled != null && java.time.Duration.between(lastScheduled, now).toMillis() < 60_000L) {
-            return
-        }
-        chatTurnFollowUpCooldowns[cooldownKey] = now
-        val reason = plan.followUpReason?.takeIf { it.isNotBlank() }
-            ?: "${assistant.name.ifBlank { "当前角色" }}在本轮聊天里决定稍后根据新状态再判断是否需要联系用户。"
-        ProactiveMessageService.scheduleTargeted(
-            context = context,
-            setting = settings.getProactiveMessageSetting(assistant.id),
-            triggerAtMillis = System.currentTimeMillis() + delayMinutes * 60_000L,
-            reason = reason,
-            userText = latestUserText.take(160),
-            kind = ProactiveReminderKind.GENERAL.name.lowercase(Locale.ROOT),
-        )
-    }
-
-    private fun Assistant.toLuluPlannerPersona(): String = buildString {
+    private fun Assistant.toLuluPlannerPersona(
+        messages: List<UIMessage> = emptyList(),
+        settings: Settings? = null,
+    ): String = buildString {
         appendLine("角色名：${name.ifBlank { "当前角色" }}")
         if (systemPrompt.isNotBlank()) {
             appendLine("系统人设：")
@@ -1661,10 +1735,27 @@ class ChatService(
             appendLine("语言/消息模板：")
             appendLine(messageTemplate.take(400))
         }
+        settings?.let { currentSettings ->
+            buildPromptInjectionPlannerContext(
+                messages = messages,
+                assistant = this@toLuluPlannerPersona,
+                modeInjections = currentSettings.modeInjections,
+                lorebooks = currentSettings.lorebooks,
+            ).takeIf(String::isNotBlank)?.let { injectionContext ->
+                appendLine("模式与世界书：")
+                appendLine(injectionContext.take(1600))
+            }
+        }
     }.trim()
 
     private data class ChatTurnPlanResult(
         val plan: CompanionChatTurnPlan,
+    )
+
+    private data class CompanionTurnPreparation(
+        val promptContext: String = "",
+        val plan: CompanionChatTurnPlan = CompanionChatTurnPlan(),
+        val toolExecutions: List<CompanionToolExecution> = emptyList(),
     )
 
     private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant, proactiveContext: String): List<UIMessage> {

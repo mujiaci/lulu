@@ -42,6 +42,7 @@ internal fun buildCompanionPresenceContract(assistantName: String): String = bui
     appendLine("body_state: 可确认的身体、能量或具身状态；数字角色或没有依据时留空")
     appendLine("mind_state: 此刻的注意、思考或精神状态；使用简短自然短语")
     appendLine("activity_mode: 此刻正在进行的活动类型，例如 conversation、planning、waiting；没有依据时留空")
+    appendLine("user_state: 只在运行时存在催睡或叫醒目标时填写 awake、asleep 或 uncertain；必须依据用户新消息和当前感知，不能猜测")
     appendLine("</lulu_presence>")
     appendLine("如果可用 set_lulu_expression_state 工具，可以同步记录相同内容；隐藏状态块仍然必须输出且只能输出一次。")
     append("</companion_presence_contract>")

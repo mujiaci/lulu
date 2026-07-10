@@ -6,17 +6,12 @@ import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.repository.FilesRepository
 import me.rerere.rikkahub.data.repository.GenMediaRepository
-import me.rerere.rikkahub.data.repository.MemoryRepository
 import me.rerere.rikkahub.data.voicecall.VoiceCallRepository
 import org.koin.dsl.module
 
 val repositoryModule = module {
     single {
         ConversationRepository(get(), get(), get(), get(), get(), get())
-    }
-
-    single {
-        MemoryRepository(get())
     }
 
     single {

@@ -96,6 +96,22 @@ internal fun collectInjections(
     return injections
 }
 
+internal fun buildPromptInjectionPlannerContext(
+    messages: List<UIMessage>,
+    assistant: Assistant,
+    modeInjections: List<PromptInjection.ModeInjection>,
+    lorebooks: List<Lorebook>,
+): String = collectInjections(
+    messages = messages,
+    assistant = assistant,
+    modeInjections = modeInjections,
+    lorebooks = lorebooks,
+)
+    .sortedByDescending { it.priority }
+    .distinctBy { it.id }
+    .joinToString("\n") { it.content.trim() }
+    .trim()
+
 /**
  * 应用注入到消息列表
  */

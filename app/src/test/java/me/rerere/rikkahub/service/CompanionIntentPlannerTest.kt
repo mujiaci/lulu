@@ -98,7 +98,10 @@ class CompanionIntentPlannerTest {
     fun `model prompt contains persona and unified runtime truth`() {
         val prompt = CompanionIntentModelPlanner.buildPrompt(
             CompanionIntentInput(
-                perception = perception(persona = "A restrained housekeeper persona"),
+                perception = perception(
+                    persona = "A restrained housekeeper persona",
+                    memoryContext = "用户曾明确说过早晨很难醒。",
+                ),
                 mode = CompanionDecisionMode.BACKGROUND,
                 minutesSinceLastChat = 45L,
             ),
@@ -107,6 +110,7 @@ class CompanionIntentPlannerTest {
         assertTrue(prompt.contains("A restrained housekeeper persona"))
         assertTrue(prompt.contains("<companion_runtime"))
         assertTrue(prompt.contains("FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, WAIT"))
+        assertTrue(prompt.contains("用户曾明确说过早晨很难醒。"))
         assertFalse(prompt.contains("study-supervisor"))
     }
 
@@ -160,12 +164,14 @@ class CompanionIntentPlannerTest {
     private fun perception(
         persona: String = "Any role persona",
         availableTools: Set<String> = emptySet(),
+        memoryContext: String = "",
     ) = CompanionPerceptionAssembler.assemble(
         input = CompanionPerceptionInput(
             assistantId = "assistant-a",
             assistantName = "Role A",
             persona = persona,
             availableToolNames = availableTools,
+            memoryContext = memoryContext,
             nowMillis = 1_000L,
         ),
         snapshot = CompanionSnapshot.empty("assistant-a"),

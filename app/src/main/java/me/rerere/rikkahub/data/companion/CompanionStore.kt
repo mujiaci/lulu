@@ -133,7 +133,6 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
     ),
     relationship = relationship.copy(
         roleLabel = relationship.roleLabel.trim().take(MAX_STATE_TEXT_LENGTH),
-        familiarity = relationship.familiarity.normalizedDimension(),
         trust = relationship.trust.normalizedDimension(),
         closeness = relationship.closeness.normalizedDimension(),
         reliability = relationship.reliability.normalizedDimension(),

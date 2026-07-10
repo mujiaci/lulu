@@ -215,6 +215,33 @@ class CompanionRuntimeReducerTest {
     }
 
     @Test
+    fun `continuing wake execution reschedules without relationship penalty`() {
+        val executing = commitment(status = CompanionCommitmentStatus.EXECUTING, attemptCount = 1)
+        val concern = concernFor(executing)
+        val result = CompanionActionResult(
+            success = true,
+            summary = "wake message sent but user is not confirmed awake",
+            completedAt = 300L,
+        )
+
+        val reduced = continueCompanionCommitment(
+            current = persisted(snapshot(commitments = listOf(executing)).copy(concerns = listOf(concern))),
+            assistantId = ASSISTANT_A,
+            commitmentId = executing.id,
+            result = result,
+            nextDueAt = 600L,
+        )
+
+        val continued = reduced.snapshot.commitments.single()
+        assertEquals(CompanionCommitmentStatus.RETRY_SCHEDULED, continued.status)
+        assertEquals(600L, continued.dueAt)
+        assertEquals(0.5f, reduced.snapshot.relationship.reliability)
+        assertEquals(0.5f, reduced.snapshot.relationship.trust)
+        assertEquals(CompanionConcernStatus.ACTIVE, reduced.snapshot.concerns.single().status)
+        assertEquals(600L, reduced.snapshot.concerns.single().nextPerceptionAt)
+    }
+
+    @Test
     fun `final execution failure cancels the matching concern`() {
         val executing = commitment(status = CompanionCommitmentStatus.EXECUTING, attemptCount = 3)
         val concern = concernFor(executing)

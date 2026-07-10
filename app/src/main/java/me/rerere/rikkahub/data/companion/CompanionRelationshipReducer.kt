@@ -30,7 +30,6 @@ object CompanionRelationshipReducer {
                 if (key in appliedKeys) return@forEach
 
                 relationship = relationship.copy(
-                    familiarity = (relationship.familiarity + event.familiarityDelta).normalizedDimension(),
                     trust = (relationship.trust + event.trustDelta).normalizedDimension(),
                     closeness = (relationship.closeness + event.closenessDelta).normalizedDimension(),
                     reliability = (relationship.reliability + event.reliabilityDelta).normalizedDimension(),

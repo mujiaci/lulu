@@ -160,8 +160,7 @@ fun CompanionPerceptionPacket.toPromptContext(): String = buildString {
         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss XXX", Locale.ROOT))
     appendLine("current_time=$absoluteTime timezone=${zoneId.id} epoch_ms=$nowMillis")
     appendLine(
-        "relationship familiarity=${snapshot.relationship.familiarity} " +
-            "trust=${snapshot.relationship.trust} closeness=${snapshot.relationship.closeness} " +
+        "relationship trust=${snapshot.relationship.trust} closeness=${snapshot.relationship.closeness} " +
             "reliability=${snapshot.relationship.reliability} tension=${snapshot.relationship.unresolvedTension}",
     )
     if (snapshot.state.statusText.isNotBlank() || snapshot.state.innerThought.isNotBlank()) {
@@ -190,7 +189,8 @@ fun CompanionPerceptionPacket.toPromptContext(): String = buildString {
         actionableCommitments.take(8).forEach { commitment ->
             appendLine(
                 "- id=${commitment.id} due=${commitment.dueAt} status=${commitment.status.name} " +
-                    "overdue=${commitment.dueAt <= nowMillis} promise=${commitment.promise.take(180)}",
+                    "overdue=${commitment.dueAt <= nowMillis} promise=${commitment.promise.take(180)} " +
+                    "last_result=${commitment.lastActionResult?.summary?.take(300).orEmpty()}",
             )
         }
     }

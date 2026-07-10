@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
+import android.os.PowerManager
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,8 @@ import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
+import me.rerere.rikkahub.data.ai.transformers.buildPromptInjectionPlannerContext
+import me.rerere.rikkahub.data.ai.transformers.CompanionPresenceContractTransformer
 import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
 import me.rerere.rikkahub.data.ai.transformers.LuluExpressionOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
@@ -59,7 +62,6 @@ import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
-import me.rerere.rikkahub.data.repository.MemoryRepository
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -83,7 +85,11 @@ import me.rerere.rikkahub.data.companion.CompanionState
 import me.rerere.rikkahub.data.companion.CompanionTurnMutation
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
+import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
+import me.rerere.rikkahub.data.companion.isWakeGoal
+import me.rerere.rikkahub.data.companion.retryMinutesOrDefault
 import me.rerere.rikkahub.data.companion.toPromptContext
+import me.rerere.rikkahub.data.companion.wakeTargetAtOrNull
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
@@ -106,10 +112,12 @@ import me.rerere.rikkahub.service.CompanionIntentDecision
 import me.rerere.rikkahub.service.CompanionIntentFallbackPlanner
 import me.rerere.rikkahub.service.CompanionIntentInput
 import me.rerere.rikkahub.service.CompanionIntentModelPlanner
+import me.rerere.rikkahub.service.collectCompanionPassivePerceptionFacts
 import me.rerere.rikkahub.service.ProactiveReminderPlan
 import me.rerere.rikkahub.service.toProactiveReminderPlan
 import me.rerere.rikkahub.utils.sendNotification
 import java.time.Instant
+import java.time.ZoneId
 import kotlin.uuid.Uuid
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
@@ -755,7 +763,7 @@ class ProactiveMessageReceiver : BroadcastReceiver() {
 class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val settingsStore: SettingsStore by inject()
     private val conversationRepository: ConversationRepository by inject()
-    private val memoryRepository: MemoryRepository by inject()
+    private val memoryBankService: MemoryBankService by inject()
     private val providerManager: ProviderManager by inject()
     private val templateTransformer: TemplateTransformer by inject()
     private val localTools: LocalTools by inject()
@@ -780,6 +788,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         listOf(
             TimeReminderTransformer,
             PromptInjectionTransformer,
+            CompanionPresenceContractTransformer,
             PlaceholderTransformer,
             DocumentAsPromptTransformer,
             OcrTransformer,
@@ -971,15 +980,47 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     ?.toInstant(TimeZone.currentSystemDefault())
                     ?.toEpochMilliseconds()
                     ?.let { ((System.currentTimeMillis() - it) / 60_000L).coerceAtLeast(0L) }
+                val latestUserMessageAt = historyMessages
+                    .lastOrNull { it.role == MessageRole.USER }
+                    ?.createdAt
+                    ?.toInstant(TimeZone.currentSystemDefault())
+                    ?.toEpochMilliseconds()
 
-                // 构建工具列表（与 ChatService 保持一致）
-                val tools = buildTools(settings, assistant, model, historyMessages)
+                val allTools = buildAllTools(settings, assistant)
+                    .deduplicateByToolName()
+                    .selectRelevantToolsForPrompt(historyMessages)
+                val tools = allTools
+                    .activeModelTools()
+                    .withConciseToolDescriptions()
+                    .withHumanLikeToolPrompts()
                 val nowMillis = System.currentTimeMillis()
+                val screenInteractive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+                val passiveFacts = collectCompanionPassivePerceptionFacts(
+                    tools = allTools,
+                    observedAt = nowMillis,
+                ) + CompanionContextFact(
+                    key = "perception.screen_interactive",
+                    value = screenInteractive.toString(),
+                    observedAt = nowMillis,
+                )
+                val memoryQuery = listOfNotNull(
+                    targetedReason,
+                    targetedUserText,
+                    executingCommitment?.promise,
+                    historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText(),
+                ).filter(String::isNotBlank).joinToString("\n")
+                val memoryContext = memoryBankService.buildRecallContext(
+                    assistantId = assistantUuid.toString(),
+                    query = memoryQuery,
+                )
                 val companionContext = companionRuntime.perception(
                     CompanionPerceptionInput(
                         assistantId = assistantUuid.toString(),
                         assistantName = assistant.name,
-                        persona = assistant.toLuluPlannerPersona(),
+                        persona = assistant.toLuluPlannerPersona(
+                            messages = historyMessages,
+                            settings = settings,
+                        ),
                         conversationId = conversationId.toString(),
                         recentTurns = historyMessages.takeLast(12).map { message ->
                             CompanionConversationTurn(
@@ -1004,11 +1045,51 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                     observedAt = nowMillis,
                                 )
                             },
-                        ),
+                        ) + passiveFacts,
                         availableToolNames = tools.map { it.name }.toSet(),
+                        memoryContext = memoryContext,
                         nowMillis = nowMillis,
                     ),
                 ).toPromptContext()
+                executingCommitment?.let { commitment ->
+                    val wakeTargetAt = commitment.wakeTargetAtOrNull()
+                    val completedBeforeMessage = when {
+                        commitment.isWakeGoal() && wakeTargetAt != null -> shouldCompleteWakeGoal(
+                            wakeTargetAt = wakeTargetAt,
+                            latestUserMessageAt = latestUserMessageAt,
+                            perceivedUserState = null,
+                        )
+                        commitment.isSleepSupervisionGoal() && wakeTargetAt != null ->
+                            shouldCompleteSleepSupervision(
+                                wakeTargetAt = wakeTargetAt,
+                                nowMillis = nowMillis,
+                                observationDueAt = commitment.dueAt,
+                                latestUserMessageAt = latestUserMessageAt,
+                                screenInteractive = screenInteractive,
+                                perceivedUserState = null,
+                            )
+                        else -> false
+                    }
+                    if (completedBeforeMessage) {
+                        companionRuntime.finishCommitment(
+                            assistantId = commitment.assistantId,
+                            commitmentId = commitment.id,
+                            result = CompanionActionResult(
+                                success = true,
+                                summary = if (commitment.isWakeGoal()) {
+                                    "User activity confirmed after the wake target"
+                                } else {
+                                    "User appears to have stopped using the phone and started resting"
+                                },
+                                completedAt = nowMillis,
+                            ),
+                        )
+                        executingCommitment = null
+                        scheduleNextDurableCommitment()
+                        stopSelf()
+                        return@launch
+                    }
+                }
                 val autonomousPlan = if (isTargetedTrigger) {
                     null
                 } else {
@@ -1017,6 +1098,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         assistant = assistant,
                         historyMessages = historyMessages,
                         availableToolNames = tools.map { it.name }.toSet(),
+                        passiveFacts = passiveFacts,
+                        memoryContext = memoryContext,
                     )
                 }
                 if (!isTargetedTrigger && autonomousPlan?.intent == CompanionIntent.WAIT) {
@@ -1093,6 +1176,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 构建上下文
                 val contextStr = buildString {
                     appendLine(companionContext)
+                    if (memoryContext.isNotBlank()) {
+                        appendLine()
+                        appendLine(memoryContext)
+                    }
                     appendLine()
                     append(
                         proactiveMessageService.buildProactiveContext(
@@ -1108,7 +1195,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 // 构建系统提示词（包含记忆）
-                val systemPrompt = buildSystemPrompt(assistant, settings)
+                val systemPrompt = buildSystemPrompt(assistant)
 
                 // 构建用户上下文消息
                 val userMessage = UIMessage(
@@ -1118,16 +1205,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     ))
                 )
 
-                // 应用输入转换器
-                val processedUserMessage = listOf(userMessage).transforms(
-                    transformers = inputTransformers + templateTransformer,
-                    context = this@ProactiveMessageTriggerService,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings
-                ).first()
-
-                // Bug 2 修复：合并相邻 assistant 消息，避免相邻 assistant 导致 API 400 错误
+                // 合并相邻 assistant 消息，避免部分 API 拒绝连续 assistant 角色。
                 val fixedHistoryMessages = historyMessages.fold(emptyList<UIMessage>()) { acc, msg ->
                     if (acc.isNotEmpty() && acc.last().role == MessageRole.ASSISTANT && msg.role == MessageRole.ASSISTANT) {
                         acc.dropLast(1) + acc.last().copy(parts = acc.last().parts + msg.parts)
@@ -1136,15 +1214,17 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     }
                 }
 
-                // 组合完整消息列表：System + History + User Context
-                val messages = buildList {
-                    add(UIMessage(
-                        role = MessageRole.SYSTEM,
-                        parts = listOf(UIMessagePart.Text(systemPrompt))
-                    ))
-                    addAll(fixedHistoryMessages)
-                    add(processedUserMessage)
-                }
+                val messages = composeProactiveGenerationMessages(
+                    systemPrompt = systemPrompt,
+                    historyMessages = fixedHistoryMessages,
+                    currentContext = userMessage,
+                ).transforms(
+                    transformers = inputTransformers + templateTransformer,
+                    context = this@ProactiveMessageTriggerService,
+                    model = model,
+                    assistant = assistant,
+                    settings = settings,
+                )
 
                 // 直接调用 AI API 生成消息
                 val providerSetting = model.findProvider(settings.providers)
@@ -1218,6 +1298,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 
                 val replyText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>()
                     .joinToString("\n") { it.text }.trim()
+                val finalPresence = finalMessages.companionModelPresence()
 
                 Log.d(TAG, "Proactive message generated: '${replyText.take(100)}...' (${replyText.length} chars), hasToolCalls=$hasToolCalls")
 
@@ -1241,7 +1322,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         persistProactiveCompanionState(
                             assistant = assistant,
                             assistantText = replyText,
-                            presence = finalMessages.companionModelPresence(),
+                            presence = finalPresence,
                             nowMillis = System.currentTimeMillis(),
                         )
                     }.onFailure { error ->
@@ -1251,6 +1332,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 executingCommitment?.let { commitment ->
+                    val completedAt = System.currentTimeMillis()
                     val actionResult = CompanionActionResult(
                         success = true,
                         summary = if (replyText.isBlank() || replyText.contains("[PASS]")) {
@@ -1258,15 +1340,60 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         } else {
                             "Proactive message delivered"
                         },
-                        completedAt = System.currentTimeMillis(),
+                        completedAt = completedAt,
                         outputReference = conversationId.toString(),
                     )
                     completedCommitmentResult = actionResult
-                    companionRuntime.finishCommitment(
-                        assistantId = commitment.assistantId,
-                        commitmentId = commitment.id,
-                        result = actionResult,
-                    )
+                    val wakeTargetAt = commitment.wakeTargetAtOrNull()
+                    val perceivedUserState = finalPresence?.userState
+                    val shouldContinue = when {
+                        commitment.isWakeGoal() && wakeTargetAt != null -> !shouldCompleteWakeGoal(
+                            wakeTargetAt = wakeTargetAt,
+                            latestUserMessageAt = latestUserMessageAt,
+                            perceivedUserState = perceivedUserState,
+                        )
+                        commitment.isSleepSupervisionGoal() && wakeTargetAt != null ->
+                            !shouldCompleteSleepSupervision(
+                                wakeTargetAt = wakeTargetAt,
+                                nowMillis = completedAt,
+                                observationDueAt = commitment.dueAt,
+                                latestUserMessageAt = latestUserMessageAt,
+                                screenInteractive = screenInteractive,
+                                perceivedUserState = perceivedUserState,
+                            )
+                        else -> false
+                    }
+                    if (shouldContinue) {
+                        val retryMinutes = commitment.retryMinutesOrDefault()
+                        val nextDueAt = completedAt + TimeUnit.MINUTES.toMillis(retryMinutes.toLong())
+                        if (commitment.isWakeGoal()) {
+                            scheduleWakeContinuationAlarm(
+                                tools = tools,
+                                triggerAtMillis = nextDueAt,
+                                assistantName = assistant.name,
+                            )
+                        }
+                        companionRuntime.continueCommitment(
+                            assistantId = commitment.assistantId,
+                            commitmentId = commitment.id,
+                            result = actionResult.copy(
+                                summary = if (commitment.isWakeGoal()) {
+                                    "Wake attempt completed; user is not yet confirmed awake. " +
+                                        buildContinuationObservationSummary(passiveFacts, screenInteractive)
+                                } else {
+                                    "Sleep supervision checked; user still appears active. " +
+                                        buildContinuationObservationSummary(passiveFacts, screenInteractive)
+                                },
+                            ),
+                            nextDueAt = nextDueAt,
+                        )
+                    } else {
+                        companionRuntime.finishCommitment(
+                            assistantId = commitment.assistantId,
+                            commitmentId = commitment.id,
+                            result = actionResult,
+                        )
+                    }
                     executingCommitment = null
                     completedCommitmentResult = null
                 }
@@ -1334,6 +1461,22 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         summary: String,
     ) {
         val completedAt = System.currentTimeMillis()
+        if (commitment.isWakeGoal() || commitment.isSleepSupervisionGoal()) {
+            companionRuntime.continueCommitment(
+                assistantId = commitment.assistantId,
+                commitmentId = commitment.id,
+                result = CompanionActionResult(
+                    success = false,
+                    summary = summary,
+                    completedAt = completedAt,
+                ),
+                nextDueAt = completedAt + TimeUnit.MINUTES.toMillis(
+                    commitment.retryMinutesOrDefault().toLong(),
+                ),
+            )
+            scheduleNextDurableCommitment()
+            return
+        }
         val retryAt = if (commitment.attemptCount < MAX_COMMITMENT_ATTEMPTS) {
             completedAt + TimeUnit.MINUTES.toMillis(
                 (COMMITMENT_RETRY_MINUTES * commitment.attemptCount.coerceAtLeast(1)).coerceAtMost(60L),
@@ -1352,6 +1495,28 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             retryAt = retryAt,
         )
         scheduleNextDurableCommitment()
+    }
+
+    private suspend fun scheduleWakeContinuationAlarm(
+        tools: List<Tool>,
+        triggerAtMillis: Long,
+        assistantName: String,
+    ) {
+        val alarmTool = tools.firstOrNull { it.name == "set_alarm" } ?: return
+        val target = Instant.ofEpochMilli(triggerAtMillis).atZone(ZoneId.systemDefault())
+        runCatching {
+            alarmTool.execute(
+                JsonObject(
+                    mapOf(
+                        "hour" to JsonPrimitive(target.hour),
+                        "minute" to JsonPrimitive(target.minute),
+                        "label" to JsonPrimitive("${assistantName.ifBlank { "当前角色" }}继续叫你起床"),
+                    )
+                )
+            )
+        }.onFailure { error ->
+            Log.w(TAG, "Failed to schedule continued wake alarm", error)
+        }
     }
 
     private suspend fun persistProactiveCompanionState(
@@ -1447,39 +1612,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 .apply()
     }
 
-    /**
-     * 构建系统提示词，包含记忆等内容
-     */
-    private suspend fun buildSystemPrompt(assistant: Assistant, settings: Settings): String {
-        return buildString {
-            // 基础系统提示词
-            val effectiveSystemPrompt = if (assistant.allowConversationSystemPrompt) {
-                assistant.systemPrompt
-            } else {
-                assistant.systemPrompt
-            }
-            if (effectiveSystemPrompt.isNotBlank()) {
-                append(effectiveSystemPrompt)
-            }
-
-            // 记忆
-            if (false && assistant.enableMemory) {
-                val memories = if (assistant.useGlobalMemory) {
-                    memoryRepository.getGlobalMemories()
-                } else {
-                    memoryRepository.getMemoriesOfAssistant(assistant.id.toString())
-                }
-                if (memories.isNotEmpty()) {
-                    appendLine()
-                    appendLine()
-                    appendLine("## 记忆")
-                    memories.forEach { memory ->
-                        appendLine("- ${memory.content}")
-                    }
-                }
-            }
-        }
-    }
+    private fun buildSystemPrompt(assistant: Assistant): String = assistant.systemPrompt
 
     /**
      * 保存主动消息到对话历史
@@ -1541,22 +1674,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
     }
 
-    /**
-     * 构建工具列表（与 ChatService 保持一致）
-     */
-    private fun buildTools(
-        settings: Settings,
-        assistant: Assistant,
-        model: Model,
-        messages: List<UIMessage>,
-    ): List<Tool> =
-        buildAllTools(settings, assistant)
-            .deduplicateByToolName()
-            .selectRelevantToolsForPrompt(messages)
-            .activeModelTools()
-            .withConciseToolDescriptions()
-            .withHumanLikeToolPrompts()
-
     private fun buildAllTools(
         settings: Settings,
         assistant: Assistant,
@@ -1616,6 +1733,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         assistant: Assistant,
         historyMessages: List<UIMessage>,
         availableToolNames: Set<String>,
+        passiveFacts: List<CompanionContextFact>,
+        memoryContext: String,
     ): CompanionIntentDecision {
         val nowMillis = System.currentTimeMillis()
         val minutesSinceLastChat = historyMessages.lastOrNull()
@@ -1628,7 +1747,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             CompanionPerceptionInput(
                 assistantId = assistant.id.toString(),
                 assistantName = assistant.name,
-                persona = assistant.toLuluPlannerPersona(),
+                persona = assistant.toLuluPlannerPersona(
+                    messages = historyMessages,
+                    settings = settings,
+                ),
                 recentTurns = historyMessages.takeLast(12).map { message ->
                     CompanionConversationTurn(
                         role = when (message.role) {
@@ -1650,8 +1772,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         value = minutesSinceLastChat.toString(),
                         observedAt = nowMillis,
                     ),
-                ),
+                ) + passiveFacts,
                 availableToolNames = availableToolNames,
+                memoryContext = memoryContext,
                 nowMillis = nowMillis,
             ),
         )
@@ -1676,7 +1799,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         return modelPlan ?: CompanionIntentFallbackPlanner.plan(input)
     }
 
-    private fun Assistant.toLuluPlannerPersona(): String = buildString {
+    private fun Assistant.toLuluPlannerPersona(
+        messages: List<UIMessage>,
+        settings: Settings,
+    ): String = buildString {
         appendLine("角色名：${name.ifBlank { "当前角色" }}")
         if (systemPrompt.isNotBlank()) {
             appendLine("系统人设：")
@@ -1689,6 +1815,15 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
             appendLine("语言/消息模板：")
             appendLine(messageTemplate.take(400))
+        }
+        buildPromptInjectionPlannerContext(
+            messages = messages,
+            assistant = this@toLuluPlannerPersona,
+            modeInjections = settings.modeInjections,
+            lorebooks = settings.lorebooks,
+        ).takeIf(String::isNotBlank)?.let { injectionContext ->
+            appendLine("模式与世界书：")
+            appendLine(injectionContext.take(1600))
         }
     }.trim()
 
@@ -1954,13 +2089,70 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.REACH_OUT -> "想主动联系"
         },
         innerThought = innerVoice,
-        mindState = if (plan.fromModel) "副 API 判断：${plan.reason}" else "本地规划兜底：${plan.reason}",
+        mindState = when (plan.intent) {
+            CompanionIntent.WAIT -> "安静留意着现在的变化"
+            CompanionIntent.STAY_AVAILABLE -> "把注意留在这里"
+            CompanionIntent.REACH_OUT -> "想着怎样自然开口"
+            CompanionIntent.OBSERVE -> "重新确认现在的情况"
+            CompanionIntent.FOLLOW_UP -> "记着接下来要照看的事"
+        },
         activityMode = if (plan.intent == CompanionIntent.OBSERVE) "observing" else "waiting",
         updatedAt = nowMillis,
         sinceAt = nowMillis,
         selfScene = "$name 刚刚做了一次后台判断，还没开口，但状态栏留下了那句没说出口的话。",
     )
 }
+
+internal fun composeProactiveGenerationMessages(
+    systemPrompt: String,
+    historyMessages: List<UIMessage>,
+    currentContext: UIMessage,
+): List<UIMessage> = buildList {
+    if (systemPrompt.isNotBlank()) add(UIMessage.system(systemPrompt))
+    addAll(historyMessages)
+    add(currentContext)
+}
+
+internal fun shouldCompleteWakeGoal(
+    wakeTargetAt: Long,
+    latestUserMessageAt: Long?,
+    perceivedUserState: String?,
+): Boolean = latestUserMessageAt?.let { it >= wakeTargetAt } == true ||
+    perceivedUserState.equals("awake", ignoreCase = true)
+
+internal fun shouldCompleteSleepSupervision(
+    wakeTargetAt: Long,
+    nowMillis: Long,
+    observationDueAt: Long,
+    latestUserMessageAt: Long?,
+    screenInteractive: Boolean,
+    perceivedUserState: String?,
+): Boolean {
+    if (nowMillis >= wakeTargetAt) return true
+    if (perceivedUserState.equals("asleep", ignoreCase = true)) return true
+    val userActiveAfterObservation = latestUserMessageAt?.let { it >= observationDueAt } == true
+    return !screenInteractive && !userActiveAfterObservation
+}
+
+private fun buildContinuationObservationSummary(
+    passiveFacts: List<CompanionContextFact>,
+    screenInteractive: Boolean,
+): String = buildString {
+    append("screen_interactive=$screenInteractive")
+    passiveFacts
+        .filter { fact ->
+            fact.key in setOf(
+                "perception.get_location",
+                "perception.get_app_usage",
+                "perception.get_gadgetbridge_data",
+                "perception.get_weather",
+            )
+        }
+        .forEach { fact ->
+            append("; ${fact.key.removePrefix("perception.")}=${fact.value.take(100)}")
+        }
+}.take(420)
+
 
 private fun String.cleanSilentInnerVoice(): String? {
     val compact = trim()
@@ -1998,7 +2190,12 @@ internal fun buildTargetedProactiveSensingInstruction(
 ): String = buildString {
     val reason = targetedReason.orEmpty()
     when (targetedKind) {
-        "sleep" -> {
+        "wake" -> {
+            appendLine("本次目标是持续叫醒用户：先看目标时间后用户是否发过消息，再看屏幕/应用使用、健康活动、位置移动、天气和电量。")
+            appendLine("把承诺中的 last_result 当作上一次观察，与本轮位置和应用状态比较；明显移动、目标时间后新消息或持续主动使用手机可以支持 awake，仍在原地且缺少活动只能判断 asleep/uncertain。")
+            appendLine("没有足够证据确认用户已经醒来时，继续叫醒并补下一个短间隔闹钟；不能因为已经发过一次消息就把目标视为完成。")
+        }
+        "sleep", "sleep_supervision" -> {
             appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量；如果用户还在刷手机或电量很低，语气可以更像催睡和照看。")
             appendLine("如果按人设需要确认环境，也可以主动看摄像头画面；最终表达保持自然。")
         }

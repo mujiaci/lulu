@@ -14,6 +14,23 @@ import kotlin.uuid.Uuid
 
 class PromptInjectionTransformerTest {
 
+    @Test
+    fun `planner context sees the same mounted lorebook content`() {
+        val lorebookId = Uuid.random()
+        val entry = createRegexInjection(
+            content = "这个世界把直率表达视为正常礼节。",
+            constantActive = true,
+        )
+        val context = buildPromptInjectionPlannerContext(
+            messages = listOf(UIMessage.user("你好")),
+            assistant = createAssistant(lorebookIds = setOf(lorebookId)),
+            modeInjections = emptyList(),
+            lorebooks = listOf(createLorebook(id = lorebookId, entries = listOf(entry))),
+        )
+
+        assertEquals("这个世界把直率表达视为正常礼节。", context)
+    }
+
     // region Helper functions
     private fun createAssistant(
         modeInjectionIds: Set<Uuid> = emptySet(),

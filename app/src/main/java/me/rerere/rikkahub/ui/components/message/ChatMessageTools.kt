@@ -103,7 +103,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.event.AppEvent
 import me.rerere.rikkahub.data.event.AppEventBus
 import me.rerere.rikkahub.data.ai.tools.WriteFilesCache
-import me.rerere.rikkahub.data.repository.MemoryRepository
+import me.rerere.rikkahub.data.db.dao.MemoryDAO
 import me.rerere.rikkahub.ui.components.richtext.HighlightCodeBlock
 import me.rerere.rikkahub.ui.components.richtext.MarkdownBlock
 import me.rerere.rikkahub.ui.components.richtext.ZoomableAsyncImage
@@ -534,7 +534,7 @@ private fun ToolCallPreviewSheet(
     output: List<UIMessagePart>,
     onDismissRequest: () -> Unit = {}
 ) {
-    val memoryRepo: MemoryRepository = koinInject()
+    val legacyMemoryDao: MemoryDAO = koinInject()
     val scope = rememberCoroutineScope()
 
     val memoryAction = arguments.getStringContent("action")
@@ -553,7 +553,7 @@ private fun ToolCallPreviewSheet(
                     output = emptyList(),
                     isMemoryOperation = false,
                     memoryId = null,
-                    memoryRepo = memoryRepo,
+                    legacyMemoryDao = legacyMemoryDao,
                     scope = scope,
                     onDismissRequest = onDismissRequest
                 )
@@ -570,7 +570,7 @@ private fun ToolCallPreviewSheet(
                     output = output,
                     isMemoryOperation = isMemoryOperation,
                     memoryId = memoryId,
-                    memoryRepo = memoryRepo,
+                    legacyMemoryDao = legacyMemoryDao,
                     scope = scope,
                     onDismissRequest = onDismissRequest
                 )
@@ -721,7 +721,7 @@ private fun GenericToolPreview(
     output: List<UIMessagePart>,
     isMemoryOperation: Boolean,
     memoryId: Int?,
-    memoryRepo: MemoryRepository,
+    legacyMemoryDao: MemoryDAO,
     scope: kotlinx.coroutines.CoroutineScope,
     onDismissRequest: () -> Unit
 ) {
@@ -747,7 +747,7 @@ private fun GenericToolPreview(
                 IconButton(
                     onClick = {
                         scope.launch {
-                            memoryRepo.deleteMemory(memoryId)
+                            legacyMemoryDao.deleteMemory(memoryId)
                             onDismissRequest()
                         }
                     }

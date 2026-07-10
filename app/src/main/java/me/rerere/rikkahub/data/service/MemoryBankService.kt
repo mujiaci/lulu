@@ -688,14 +688,14 @@ private fun MemoryBankEntity.rerankDocumentText(): String =
     ).joinToString("\n").take(1600)
 
 private fun List<MemoryBankEntity>.dynamicRecallLimit(queryVector: List<Float>): Int {
-    if (queryVector.isEmpty()) return 6
+    if (queryVector.isEmpty()) return 8
     val bestSimilarity = maxOfOrNull { memory ->
         cosineSimilarity(queryVector, decodeMemoryVector(memory.embeddingVectorJson))
     } ?: 0.0
     return when {
-        bestSimilarity >= 0.70 -> 3
-        bestSimilarity >= 0.50 -> 5
-        else -> 7
+        bestSimilarity >= 0.70 -> 6
+        bestSimilarity >= 0.50 -> 8
+        else -> 10
     }
 }
 

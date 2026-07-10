@@ -12,6 +12,19 @@ import org.junit.Test
 
 class ProactiveMessageContextTest {
     @Test
+    fun `wake targeted context keeps sensing until the user is awake`() {
+        val context = buildTargetedProactiveSensingInstruction(
+            targetedKind = "wake",
+            targetedReason = "用户要求被叫醒。",
+        )
+
+        assertTrue(context.contains("位置"))
+        assertTrue(context.contains("天气"))
+        assertTrue(context.contains("应用使用"))
+        assertTrue(context.contains("继续叫醒"))
+    }
+
+    @Test
     fun `sleep targeted context asks for sleep sensing first`() {
         val context = buildTargetedProactiveSensingInstruction(
             targetedKind = "sleep",
@@ -105,7 +118,7 @@ class ProactiveMessageContextTest {
         assertEquals("安静判断中", state.statusText)
         assertEquals("我先不把想靠近说出口，等你自己的节奏回来。", state.innerThought)
         assertEquals("waiting", state.activityMode)
-        assertTrue(state.mindState.contains("副 API"))
+        assertEquals("安静留意着现在的变化", state.mindState)
     }
 
     private companion object {

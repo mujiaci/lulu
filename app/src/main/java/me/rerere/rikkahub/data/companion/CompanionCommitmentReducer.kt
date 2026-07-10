@@ -137,6 +137,7 @@ object CompanionCommitmentReducer {
         CompanionCommitmentStatus.EXECUTING -> setOf(
             CompanionCommitmentStatus.FULFILLED,
             CompanionCommitmentStatus.FAILED,
+            CompanionCommitmentStatus.RETRY_SCHEDULED,
         )
         CompanionCommitmentStatus.FAILED -> setOf(
             CompanionCommitmentStatus.RETRY_SCHEDULED,

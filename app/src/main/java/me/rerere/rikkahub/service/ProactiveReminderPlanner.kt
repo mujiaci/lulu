@@ -43,8 +43,9 @@ fun CompanionIntentDecision.toProactiveReminderPlan(
 }
 
 private fun String?.toProactiveReminderKind(reason: String): ProactiveReminderKind = when (this?.lowercase()) {
+    "wake" -> ProactiveReminderKind.WAKE
     "sleep" -> ProactiveReminderKind.SLEEP
-    "schedule", "deadline", "wake" -> ProactiveReminderKind.SCHEDULE
+    "schedule", "deadline" -> ProactiveReminderKind.SCHEDULE
     "meal" -> ProactiveReminderKind.MEAL
     "study" -> ProactiveReminderKind.STUDY
     else -> when {
@@ -63,11 +64,107 @@ data class ProactiveActionHint(
 )
 
 enum class ProactiveReminderKind {
+    WAKE,
     SLEEP,
     SCHEDULE,
     MEAL,
     STUDY,
     GENERAL,
+}
+
+internal fun buildCompanionTurnReminderPlans(
+    plan: CompanionChatTurnPlan,
+    userText: String,
+    assistantText: String,
+    nowMillis: Long = System.currentTimeMillis(),
+    zoneId: ZoneId = ZoneId.systemDefault(),
+): List<ProactiveReminderPlan> {
+    val preferredToolNames = plan.toolRequests.map { it.toolName }.distinct()
+    val fromFollowUps = plan.followUps
+        .filter { followUp ->
+            shouldScheduleFollowUpForUserTurn(
+                userText = userText,
+                reason = followUp.reason,
+                delayMinutes = followUp.delayMinutes,
+            )
+        }
+        .map { followUp ->
+            ProactiveReminderPlan(
+                triggerAtMillis = nowMillis + followUp.delayMinutes * 60_000L,
+                kind = followUp.kind.toCompanionReminderKind(followUp.reason),
+                reason = followUp.reason,
+                userText = userText.take(160),
+                preferredToolNames = preferredToolNames,
+            )
+        }
+    val fromSingularFollowUp = plan.followUpDelayMinutes
+        ?.takeIf { delay ->
+            shouldScheduleFollowUpForUserTurn(
+                userText = userText,
+                reason = plan.followUpReason,
+                delayMinutes = delay,
+            )
+        }
+        ?.let { delay ->
+            val reason = plan.followUpReason
+                ?.takeIf(String::isNotBlank)
+                ?: "当前角色决定稍后根据新状态重新判断是否需要行动。"
+            ProactiveReminderPlan(
+                triggerAtMillis = nowMillis + delay * 60_000L,
+                kind = null.toCompanionReminderKind(reason),
+                reason = reason,
+                userText = userText.take(160),
+                preferredToolNames = preferredToolNames,
+            )
+        }
+    val deterministic = ProactiveReminderPlanner.plan(
+        userText = userText,
+        assistantText = assistantText,
+        nowMillis = nowMillis,
+        zoneId = zoneId,
+    )
+    val initialPlans = fromFollowUps + listOfNotNull(fromSingularFollowUp, deterministic)
+    val wakePlan = initialPlans.firstOrNull { it.kind == ProactiveReminderKind.WAKE }
+    val localHour = Instant.ofEpochMilli(nowMillis).atZone(zoneId).hour
+    val sleepSupervision = wakePlan
+        ?.takeIf { wake ->
+            initialPlans.none { it.kind == ProactiveReminderKind.SLEEP } &&
+                wake.triggerAtMillis - nowMillis in MIN_SLEEP_SUPERVISION_LEAD_MILLIS..MAX_SLEEP_SUPERVISION_LEAD_MILLIS &&
+                (localHour >= 22 || localHour < 5)
+        }
+        ?.let { wake ->
+            ProactiveReminderPlan(
+                triggerAtMillis = nowMillis + SLEEP_SUPERVISION_INTERVAL_MINUTES * 60_000L,
+                kind = ProactiveReminderKind.SLEEP,
+                reason = "用户要求在 ${wake.triggerAtMillis} 被叫醒；先确认用户是否已经停止使用手机并开始睡觉。",
+                userText = userText.take(160),
+                preferredToolNames = listOf(
+                    "get_app_usage",
+                    "get_gadgetbridge_data",
+                    "get_location",
+                    "get_weather",
+                ),
+            )
+        }
+    return (initialPlans + listOfNotNull(sleepSupervision))
+        .distinctBy { reminder -> reminder.kind to (reminder.triggerAtMillis / 60_000L) }
+        .sortedBy { it.triggerAtMillis }
+        .take(MAX_COMPANION_TURN_REMINDERS)
+}
+
+private fun String?.toCompanionReminderKind(reason: String): ProactiveReminderKind = when (this?.lowercase()) {
+    "wake" -> ProactiveReminderKind.WAKE
+    "sleep" -> ProactiveReminderKind.SLEEP
+    "schedule", "deadline" -> ProactiveReminderKind.SCHEDULE
+    "meal" -> ProactiveReminderKind.MEAL
+    "study" -> ProactiveReminderKind.STUDY
+    else -> when {
+        COMPANION_WAKE_WORDS.any { it in reason.lowercase() } -> ProactiveReminderKind.WAKE
+        COMPANION_SLEEP_WORDS.any { it in reason.lowercase() } -> ProactiveReminderKind.SLEEP
+        COMPANION_MEAL_WORDS.any { it in reason.lowercase() } -> ProactiveReminderKind.MEAL
+        COMPANION_STUDY_WORDS.any { it in reason.lowercase() } -> ProactiveReminderKind.STUDY
+        else -> ProactiveReminderKind.GENERAL
+    }
 }
 
 object ProactiveReminderPlanner {
@@ -83,8 +180,9 @@ object ProactiveReminderPlanner {
         zoneId: ZoneId = ZoneId.systemDefault(),
     ): ProactiveReminderPlan? {
         val combined = "$userText\n$assistantText".lowercase()
+        if (userText.lowercase().containsAny(CANCELLATION_WORDS)) return null
         val kind = when {
-            combined.containsAny(WAKE_WORDS) -> ProactiveReminderKind.SCHEDULE
+            combined.containsAny(WAKE_REQUEST_WORDS) -> ProactiveReminderKind.WAKE
             combined.containsAny(SLEEP_WORDS) -> ProactiveReminderKind.SLEEP
             combined.containsAny(SCHEDULE_WORDS) -> ProactiveReminderKind.SCHEDULE
             combined.containsAny(MEAL_WORDS) -> ProactiveReminderKind.MEAL
@@ -99,6 +197,7 @@ object ProactiveReminderPlanner {
                 ProactiveReminderKind.SLEEP -> nowMillis + DEFAULT_SLEEP_DELAY_MINUTES * 60_000L
                 ProactiveReminderKind.MEAL -> nowMillis + DEFAULT_MEAL_DELAY_MINUTES * 60_000L
                 ProactiveReminderKind.STUDY -> nowMillis + DEFAULT_STUDY_DELAY_MINUTES * 60_000L
+                ProactiveReminderKind.WAKE,
                 ProactiveReminderKind.SCHEDULE -> null
                 ProactiveReminderKind.GENERAL -> null
             }
@@ -110,6 +209,7 @@ object ProactiveReminderPlanner {
             kind = kind,
             reason = when (kind) {
                 ProactiveReminderKind.SLEEP -> "刚才聊到了睡觉或休息，当前角色决定到点重新确认。"
+                ProactiveReminderKind.WAKE -> "用户明确要求被叫醒，当前角色会持续确认，直到用户已经醒来或主动取消。"
                 ProactiveReminderKind.SCHEDULE -> if (combined.containsAny(WAKE_WORDS)) {
                     "刚才明确提到了起床或叫醒目标，当前角色会把这个时间点放在心上。"
                 } else {
@@ -126,8 +226,8 @@ object ProactiveReminderPlanner {
     }
 
     private fun buildPreferredToolNames(kind: ProactiveReminderKind, text: String): List<String> = when {
-        kind == ProactiveReminderKind.SCHEDULE && text.containsAny(WAKE_WORDS) ->
-            listOf("get_gadgetbridge_data", "get_app_usage", "get_battery_info")
+        kind == ProactiveReminderKind.WAKE ->
+            listOf("get_gadgetbridge_data", "get_app_usage", "get_location", "get_weather", "get_battery_info")
         kind == ProactiveReminderKind.SLEEP -> listOf("get_gadgetbridge_data", "get_app_usage", "get_battery_info")
         kind == ProactiveReminderKind.SCHEDULE -> listOf("get_location", "get_app_usage", "calendar_tool")
         kind == ProactiveReminderKind.MEAL -> listOf("get_app_usage", "get_battery_info", "get_location")
@@ -141,6 +241,12 @@ object ProactiveReminderPlanner {
         userText: String,
     ): List<ProactiveActionHint> = buildList {
         when (kind) {
+            ProactiveReminderKind.WAKE -> add(
+                ProactiveActionHint(
+                    toolName = "set_alarm",
+                    reason = "用户明确要求被叫醒，先设置目标时间闹钟；到点仍未确认醒来时继续补下一次闹钟。",
+                )
+            )
             ProactiveReminderKind.SLEEP -> Unit
             ProactiveReminderKind.SCHEDULE -> {
                 if (!text.containsAny(WAKE_WORDS)) {
@@ -314,9 +420,37 @@ object ProactiveReminderPlanner {
         "起床", "叫醒", "闹钟", "几点叫", "记得叫"
     )
 
+    private val WAKE_REQUEST_WORDS = setOf(
+        "叫醒",
+        "叫我",
+        "记得叫",
+        "闹钟",
+        "一定要起床",
+        "必须起床",
+        "务必起床",
+    )
+
+    private val CANCELLATION_WORDS = setOf(
+        "不用叫",
+        "别叫我",
+        "取消叫醒",
+        "取消闹钟",
+        "不用喊我",
+        "不再提醒",
+    )
+
     private val EVENING_PERIODS = setOf("下午", "傍晚", "晚上")
 
     private val JOURNAL_WORDS = setOf(
         "日志", "日记", "记录下来", "记下来", "写下来", "记进日志", "存一下", "留档"
     )
 }
+
+private const val MAX_COMPANION_TURN_REMINDERS = 6
+private const val SLEEP_SUPERVISION_INTERVAL_MINUTES = 15L
+private const val MIN_SLEEP_SUPERVISION_LEAD_MILLIS = 30L * 60L * 1_000L
+private const val MAX_SLEEP_SUPERVISION_LEAD_MILLIS = 12L * 60L * 60L * 1_000L
+private val COMPANION_WAKE_WORDS = setOf("起床", "叫醒", "闹钟", "叫我起来")
+private val COMPANION_SLEEP_WORDS = setOf("睡觉", "睡了", "晚安", "催睡", "休息")
+private val COMPANION_MEAL_WORDS = setOf("吃饭", "早饭", "午饭", "晚饭", "外卖")
+private val COMPANION_STUDY_WORDS = setOf("学习", "作业", "复习", "背书", "刷题", "考研")
