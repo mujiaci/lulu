@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.data.service
 
-import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionConcernStatus
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
@@ -27,9 +26,8 @@ object CompanionAutonomousPulsePlanner {
             .takeIf { it > input.nowMillis }
             ?.let { ((it - input.nowMillis) / 60_000L).toInt().coerceAtLeast(1) }
         if (targetedDelay != null) {
-            val delay = (targetedDelay + minMinutes).coerceIn(minMinutes, maxMinutes)
             return CompanionAutonomousPulsePlan(
-                delayMinutes = delay,
+                delayMinutes = targetedDelay + minMinutes,
                 reason = "targeted_active",
             )
         }
@@ -69,16 +67,6 @@ object CompanionAutonomousPulsePlanner {
     private fun CompanionSnapshot.activeWorkCount(nowMillis: Long): Int =
         concerns.count { concern ->
             concern.status == CompanionConcernStatus.ACTIVE &&
-                (concern.nextPerceptionAt == null || concern.nextPerceptionAt <= nowMillis)
-        } +
-            commitments.count { commitment ->
-                commitment.dueAt <= nowMillis && commitment.status in ACTIONABLE_COMMITMENT_STATUSES
-            }
-
-    private val ACTIONABLE_COMMITMENT_STATUSES = setOf(
-        CompanionCommitmentStatus.ACTIVE,
-        CompanionCommitmentStatus.DUE,
-        CompanionCommitmentStatus.EXECUTING,
-        CompanionCommitmentStatus.RETRY_SCHEDULED,
-    )
+                concern.nextPerceptionAt?.let { it <= nowMillis } == true
+        }
 }

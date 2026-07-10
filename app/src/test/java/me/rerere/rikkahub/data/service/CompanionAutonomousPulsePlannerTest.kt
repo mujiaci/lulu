@@ -27,6 +27,7 @@ class CompanionAutonomousPulsePlannerTest {
                             subjectKey = "health:headache",
                             event = "用户说头疼",
                             goal = "稍后重新确认状态",
+                            nextPerceptionAt = 1_699_999_900_000L,
                         ),
                     ),
                 ),
@@ -36,6 +37,31 @@ class CompanionAutonomousPulsePlannerTest {
 
         assertEquals(18, plan.delayMinutes)
         assertTrue(plan.reason.contains("active_work"))
+    }
+
+    @Test
+    fun `concern without a perception time does not cause repeated polling`() {
+        val plan = CompanionAutonomousPulsePlanner.planNext(
+            input = CompanionAutonomousPulseInput(
+                setting = setting,
+                snapshot = CompanionSnapshot.empty("assistant-a").copy(
+                    concerns = listOf(
+                        CompanionConcern(
+                            assistantId = "assistant-a",
+                            subjectKey = "relationship:general",
+                            event = "记得用户最近压力很大",
+                            goal = "保持关心但不机械轮询",
+                            nextPerceptionAt = null,
+                        ),
+                    ),
+                ),
+                minutesSinceLastChat = 30,
+                nowMillis = 1_700_000_000_000L,
+            ),
+        )
+
+        assertEquals(60, plan.delayMinutes)
+        assertTrue(plan.reason.contains("active=0"))
     }
 
     @Test
@@ -107,6 +133,23 @@ class CompanionAutonomousPulsePlannerTest {
         )
 
         assertEquals(84, plan.delayMinutes)
+        assertTrue(plan.reason.contains("targeted_active"))
+    }
+
+    @Test
+    fun `far targeted trigger is not truncated by normal maximum interval`() {
+        val nowMillis = 1_700_000_000_000L
+        val plan = CompanionAutonomousPulsePlanner.planNext(
+            input = CompanionAutonomousPulseInput(
+                setting = setting,
+                snapshot = CompanionSnapshot.empty("assistant-a"),
+                minutesSinceLastChat = 40,
+                activeTargetedTriggerMillis = nowMillis + 6 * 60 * 60_000L,
+                nowMillis = nowMillis,
+            ),
+        )
+
+        assertEquals(390, plan.delayMinutes)
         assertTrue(plan.reason.contains("targeted_active"))
     }
 }
