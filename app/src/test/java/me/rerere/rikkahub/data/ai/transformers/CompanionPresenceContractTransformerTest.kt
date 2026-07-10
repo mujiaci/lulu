@@ -32,6 +32,10 @@ class CompanionPresenceContractTransformerTest {
         assertTrue(injected.contains("<lulu_presence>"))
         assertTrue(injected.contains("inner_voice:"))
         assertTrue(injected.contains("thought:"))
+        assertTrue(injected.contains("mood:"))
+        assertTrue(injected.contains("body_state:"))
+        assertTrue(injected.contains("mind_state:"))
+        assertTrue(injected.contains("activity_mode:"))
     }
 
     @Test

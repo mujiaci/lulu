@@ -110,6 +110,10 @@ class LuluExpressionOutputTransformerTest {
             description: 我把手机握近了一点，认真等你说完。
             inner_voice: 我有点担心，但不想把你逼得更累。
             thought: 我想记得他现在需要被温柔接住。
+            mood: 关切但克制
+            body_state: 没有可确认的身体状态
+            mind_state: 专注倾听
+            activity_mode: conversation
             </lulu_presence>
             """.trimIndent()
         )
@@ -123,6 +127,10 @@ class LuluExpressionOutputTransformerTest {
         assertEquals(LULU_PRESENCE_METADATA_TYPE, annotation.type)
         assertEquals("在靠近你", annotation.data["status"]?.jsonPrimitive?.content)
         assertEquals("我有点担心，但不想把你逼得更累。", annotation.data["inner_voice"]?.jsonPrimitive?.content)
+        assertEquals("关切但克制", annotation.data["mood"]?.jsonPrimitive?.content)
+        assertEquals("没有可确认的身体状态", annotation.data["body_state"]?.jsonPrimitive?.content)
+        assertEquals("专注倾听", annotation.data["mind_state"]?.jsonPrimitive?.content)
+        assertEquals("conversation", annotation.data["activity_mode"]?.jsonPrimitive?.content)
     }
 
     @Test

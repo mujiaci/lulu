@@ -43,6 +43,7 @@ import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
 import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
 import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
+import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
 import me.rerere.rikkahub.data.ai.transformers.LuluExpressionOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
 import me.rerere.rikkahub.data.ai.transformers.transforms
@@ -77,11 +78,13 @@ import me.rerere.rikkahub.data.companion.CompanionCommitment
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
+import me.rerere.rikkahub.data.companion.CompanionModelPresence
 import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
 import me.rerere.rikkahub.data.companion.CompanionRuntime
+import me.rerere.rikkahub.data.companion.CompanionState
 import me.rerere.rikkahub.data.companion.CompanionTurnMutation
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
-import me.rerere.rikkahub.data.companion.toCompanionState
+import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
 import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -95,13 +98,6 @@ import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Conversation
-import me.rerere.rikkahub.data.model.LuluMode
-import me.rerere.rikkahub.data.model.LuluMood
-import me.rerere.rikkahub.data.model.LuluState
-import me.rerere.rikkahub.data.model.LuluThoughtCategory
-import me.rerere.rikkahub.data.model.appendLuluState
-import me.rerere.rikkahub.data.model.currentProjectedLuluState
-import me.rerere.rikkahub.data.model.luluStateHistory
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.study.ExamStudyPlan
@@ -127,7 +123,7 @@ import me.rerere.rikkahub.service.LivingPresenceConsolidationHint
 import me.rerere.rikkahub.service.RollingJudgmentDecision
 import me.rerere.rikkahub.service.RollingJudgmentLoop
 import me.rerere.rikkahub.service.ProactiveReminderPlan
-import me.rerere.rikkahub.service.recordLuluPresenceTurn
+import me.rerere.rikkahub.service.projectCompanionStateForLegacyUi
 import me.rerere.rikkahub.service.toProactiveReminderPlan
 import me.rerere.rikkahub.utils.sendNotification
 import java.time.Instant
@@ -1077,19 +1073,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
                 if (livingPresenceDecision?.shouldResolveSilently() == true) {
                     Log.d(TAG, "LivingPresence decision resolved silently: ${livingPresenceDecision.thought}")
-                    settingsStore.update { currentSettings ->
-                        val previous = currentSettings.luluStates.currentProjectedLuluState(assistantUuid, nowMillis)
-                        currentSettings.copy(
-                            luluStates = currentSettings.luluStates.appendLuluState(
-                                buildSilentLivingPresenceState(
-                                    assistantId = assistantUuid,
-                                    previous = previous,
-                                    assistantName = assistant.name,
-                                    decision = livingPresenceDecision,
-                                    nowMillis = nowMillis,
-                                )
-                            )
+                    runCatching {
+                        persistCompanionStateProjection(
+                            assistant = assistant,
+                            state = buildSilentLivingPresenceState(
+                                previous = companionRuntime.snapshot(assistant.id.toString()).state,
+                                assistantName = assistant.name,
+                                decision = livingPresenceDecision,
+                                nowMillis = nowMillis,
+                            ),
+                            nowMillis = nowMillis,
                         )
+                    }.onFailure { error ->
+                        Log.w(TAG, "Failed to persist silent companion state", error)
                     }
                     runCatching {
                         cihaiService.recordSilentPresenceAction(
@@ -1136,19 +1132,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
                 if (!isTargetedTrigger && autonomousPlan?.intent == CompanionIntent.WAIT) {
                     Log.d(TAG, "Companion intent planner chose not to disturb")
-                    settingsStore.update { currentSettings ->
-                        val previous = currentSettings.luluStates.currentProjectedLuluState(assistantUuid, nowMillis)
-                        currentSettings.copy(
-                            luluStates = currentSettings.luluStates.appendLuluState(
-                                buildAutonomousPlanPresenceState(
-                                    assistantId = assistantUuid,
-                                    previous = previous,
-                                    assistantName = assistant.name,
-                                    plan = autonomousPlan,
-                                    nowMillis = nowMillis,
-                                )
-                            )
+                    runCatching {
+                        persistCompanionStateProjection(
+                            assistant = assistant,
+                            state = buildAutonomousPlanPresenceState(
+                                previous = companionRuntime.snapshot(assistant.id.toString()).state,
+                                assistantName = assistant.name,
+                                plan = autonomousPlan,
+                                nowMillis = nowMillis,
+                            ),
+                            nowMillis = nowMillis,
                         )
+                    }.onFailure { error ->
+                        Log.w(TAG, "Failed to persist waiting companion state", error)
                     }
                     runCatching {
                         cihaiService.recordSilentPresenceAction(
@@ -1178,19 +1174,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 if (deferredPlan != null && deferredPlan.triggerAtMillis > System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(1)) {
                     Log.d(TAG, "Lulu intent planner deferred proactive message: ${deferredPlan.reason}")
                     autonomousPlan?.let { plan ->
-                        settingsStore.update { currentSettings ->
-                            val previous = currentSettings.luluStates.currentProjectedLuluState(assistantUuid, nowMillis)
-                            currentSettings.copy(
-                                luluStates = currentSettings.luluStates.appendLuluState(
-                                    buildAutonomousPlanPresenceState(
-                                        assistantId = assistantUuid,
-                                        previous = previous,
-                                        assistantName = assistant.name,
-                                        plan = plan,
-                                        nowMillis = nowMillis,
-                                    )
-                                )
+                        runCatching {
+                            persistCompanionStateProjection(
+                                assistant = assistant,
+                                state = buildAutonomousPlanPresenceState(
+                                    previous = companionRuntime.snapshot(assistant.id.toString()).state,
+                                    assistantName = assistant.name,
+                                    plan = plan,
+                                    nowMillis = nowMillis,
+                                ),
+                                nowMillis = nowMillis,
                             )
+                        }.onFailure { error ->
+                            Log.w(TAG, "Failed to persist deferred companion state", error)
                         }
                     }
                     ProactiveMessageService.scheduleTargeted(
@@ -1378,10 +1374,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     runCatching {
                         persistProactiveCompanionState(
                             assistant = assistant,
-                            userText = targetedUserText
-                                ?: executingCommitment?.actionPlan?.contextText
-                                ?: historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty(),
                             assistantText = replyText,
+                            presence = finalMessages.companionModelPresence(),
                             nowMillis = System.currentTimeMillis(),
                         )
                     }.onFailure { error ->
@@ -1392,14 +1386,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             intentId = decision.updatedIntent.id,
                             nowMillis = System.currentTimeMillis(),
                         )
-                    }
-                    if (isTargetedTrigger) {
-                        settingsStore.update { currentSettings ->
-                            currentSettings.markTargetedProactiveThoughtExpressed(
-                                assistantId = assistant.id,
-                                targetedKind = targetedKind,
-                            )
-                        }
                     }
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                 }
@@ -1515,32 +1501,37 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
     private suspend fun persistProactiveCompanionState(
         assistant: Assistant,
-        userText: String,
         assistantText: String,
+        presence: CompanionModelPresence?,
         nowMillis: Long,
     ) {
-        var unifiedState = companionRuntime.snapshot(assistant.id.toString()).state
-        settingsStore.update { currentSettings ->
-            currentSettings.recordLuluPresenceTurn(
-                assistantId = assistant.id,
-                userText = userText,
-                assistantText = assistantText,
-                nowMillis = nowMillis,
-            ).also { updatedSettings ->
-                unifiedState = updatedSettings.luluStates
-                    .luluStateHistory(assistant.id)
-                    .firstOrNull()
-                    ?.toCompanionState()
-                    ?: unifiedState
-            }
-        }
-        companionRuntime.applyTurn(
+        val unifiedState = buildCompanionStateFromTurn(
+            previous = companionRuntime.snapshot(assistant.id.toString()).state,
+            assistantText = assistantText,
+            presence = presence,
+            nowMillis = nowMillis,
+        )
+        persistCompanionStateProjection(assistant, unifiedState, nowMillis)
+    }
+
+    private suspend fun persistCompanionStateProjection(
+        assistant: Assistant,
+        state: CompanionState,
+        nowMillis: Long,
+    ) {
+        val persistedState = companionRuntime.applyTurn(
             CompanionTurnMutation(
                 assistantId = assistant.id.toString(),
-                state = unifiedState,
+                state = state,
                 nowMillis = nowMillis,
             ),
-        )
+        ).state
+        settingsStore.update { currentSettings ->
+            currentSettings.projectCompanionStateForLegacyUi(
+                assistantId = assistant.id,
+                state = persistedState,
+            )
+        }
     }
 
     private suspend fun scheduleNextDurableCommitment(): Boolean {
@@ -2272,47 +2263,17 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     override fun onBind(intent: Intent?): android.os.IBinder? = null
 }
 
-internal fun Settings.markTargetedProactiveThoughtExpressed(
-    assistantId: Uuid,
-    targetedKind: String?,
-    nowMillis: Long = System.currentTimeMillis(),
-): Settings {
-    val marker = when (targetedKind) {
-        "sleep" -> "睡"
-        "schedule" -> "课程"
-        "meal" -> "吃饭"
-        "study" -> "学习"
-        "general" -> "提醒"
-        else -> return this
-    }
-    return copy(
-        luluThoughts = luluThoughts.map { thought ->
-            if (
-                thought.assistantId == assistantId &&
-                thought.category == LuluThoughtCategory.PENDING_ACTION &&
-                !thought.expressed &&
-                marker in thought.content
-            ) {
-                thought.copy(expressed = true, expiresAt = nowMillis)
-            } else {
-                thought
-            }
-        }
-    )
-}
-
 internal fun resolveLivingPresenceTriggerAt(
     nextPerceptionAt: Long,
     nowMillis: Long = System.currentTimeMillis(),
 ): Long = maxOf(nextPerceptionAt, nowMillis + TimeUnit.SECONDS.toMillis(10))
 
 internal fun buildSilentLivingPresenceState(
-    assistantId: Uuid,
-    previous: LuluState,
+    previous: CompanionState,
     assistantName: String,
     decision: RollingJudgmentDecision,
     nowMillis: Long = System.currentTimeMillis(),
-): LuluState {
+): CompanionState {
     val innerVoice = decision.judgmentTrace
         ?.thought
         ?.cleanSilentInnerVoice()
@@ -2321,33 +2282,25 @@ internal fun buildSilentLivingPresenceState(
     val decisionText = decision.judgmentTrace?.decision?.takeIf { it.isNotBlank() }
         ?: decision.updatedIntent.lastJudgmentTrace?.decision?.takeIf { it.isNotBlank() }
         ?: "这一轮选择暂时不发消息。"
-    val observation = decision.observation?.summary.orEmpty()
     val name = assistantName.ifBlank { "当前角色" }
     return previous.copy(
         statusText = "克制着没开口",
-        innerVoice = innerVoice,
-        mood = if (decision.updatedIntent.kind == LivingIntentKind.HEALTH_SAFETY) LuluMood.WORRIED else previous.mood,
-        moodIntensity = if (decision.updatedIntent.kind == LivingIntentKind.HEALTH_SAFETY) {
-            previous.moodIntensity.coerceAtLeast(0.62f)
-        } else {
-            previous.moodIntensity
-        },
-        mode = LuluMode.THINKING,
+        innerThought = innerVoice,
+        mood = if (decision.updatedIntent.kind == LivingIntentKind.HEALTH_SAFETY) "担心" else previous.mood,
+        mindState = "静默判断：$decisionText",
+        activityMode = "waiting",
         updatedAt = nowMillis,
         sinceAt = nowMillis,
         selfScene = "$name 刚刚重新判断了一次，没有发消息，只把那句没说出口的话放进状态栏里。",
-        perceptionSummary = observation,
-        reason = "静默判断：$decisionText",
     )
 }
 
 internal fun buildAutonomousPlanPresenceState(
-    assistantId: Uuid,
-    previous: LuluState,
+    previous: CompanionState,
     assistantName: String,
     plan: CompanionIntentDecision,
     nowMillis: Long = System.currentTimeMillis(),
-): LuluState {
+): CompanionState {
     val innerVoice = plan.innerThought.cleanSilentInnerVoice()
         ?: when (plan.intent) {
             CompanionIntent.FOLLOW_UP -> "我把这件明确的后续记着，到点会重新看真实情况。"
@@ -2364,17 +2317,12 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.FOLLOW_UP -> "记着后续"
             CompanionIntent.REACH_OUT -> "想主动联系"
         },
-        innerVoice = innerVoice,
-        mode = LuluMode.THINKING,
+        innerThought = innerVoice,
+        mindState = if (plan.fromModel) "副 API 判断：${plan.reason}" else "本地规划兜底：${plan.reason}",
+        activityMode = if (plan.intent == CompanionIntent.OBSERVE) "observing" else "waiting",
         updatedAt = nowMillis,
         sinceAt = nowMillis,
         selfScene = "$name 刚刚做了一次后台判断，还没开口，但状态栏留下了那句没说出口的话。",
-        perceptionSummary = plan.reason,
-        reason = if (plan.fromModel) {
-            "副 API 判断：${plan.reason}"
-        } else {
-            "本地规划兜底：${plan.reason}"
-        },
     )
 }
 

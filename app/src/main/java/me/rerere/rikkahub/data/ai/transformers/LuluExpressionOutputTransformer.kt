@@ -5,7 +5,12 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessageAnnotation
 import me.rerere.ai.ui.UIMessagePart
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import me.rerere.rikkahub.data.companion.CompanionModelPresence
+import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.uuid.Uuid
 
 const val LULU_PRESENCE_METADATA_TYPE = "lulu_presence"
@@ -154,8 +159,53 @@ private fun String.normalizeLuluPresenceKey(): String? = when (trim().lowercase(
     "description", "scene", "self_scene", "状态描写", "状态描述", "场景", "动作", "姿态" -> "description"
     "inner", "inner_voice", "inner voice", "心声", "内心", "没说出口", "未说出口", "未说出口的想法" -> "inner_voice"
     "thought", "memory_thought", "想法", "记住", "记忆", "短期想法" -> "thought"
+    "mood", "emotion", "心情", "情绪" -> "mood"
+    "body_state", "body state", "body", "身体状态", "具身状态" -> "body_state"
+    "mind_state", "mind state", "mind", "精神状态", "注意状态" -> "mind_state"
+    "activity_mode", "activity mode", "mode", "行动状态", "活动状态" -> "activity_mode"
     else -> null
 }
+
+fun List<UIMessage>.companionModelPresence(): CompanionModelPresence? =
+    asReversed()
+        .asSequence()
+        .mapNotNull { message -> message.luluPresenceMetadata() }
+        .firstOrNull()
+        ?.data
+        ?.toCompanionModelPresence()
+        ?: asReversed()
+            .asSequence()
+            .flatMap { message -> message.parts.asReversed().asSequence() }
+            .filterIsInstance<UIMessagePart.Tool>()
+            .firstOrNull { it.toolName == "set_lulu_expression_state" }
+            ?.input
+            ?.let { input ->
+                runCatching {
+                    JsonInstant.parseToJsonElement(input).jsonObject.toCompanionModelPresence()
+                }.getOrNull()
+            }
+
+private fun kotlinx.serialization.json.JsonObject.toCompanionModelPresence(): CompanionModelPresence? =
+    CompanionModelPresence(
+        statusText = this["status"]?.jsonPrimitive?.contentOrNull
+            ?: this["status_text"]?.jsonPrimitive?.contentOrNull,
+        description = this["description"]?.jsonPrimitive?.contentOrNull,
+        innerThought = this["inner_voice"]?.jsonPrimitive?.contentOrNull,
+        memoryThought = this["thought"]?.jsonPrimitive?.contentOrNull,
+        mood = this["mood"]?.jsonPrimitive?.contentOrNull,
+        bodyState = this["body_state"]?.jsonPrimitive?.contentOrNull,
+        mindState = this["mind_state"]?.jsonPrimitive?.contentOrNull,
+        activityMode = this["activity_mode"]?.jsonPrimitive?.contentOrNull,
+    ).takeIf { presence ->
+        presence.statusText.orEmpty().isNotBlank() ||
+            presence.description.orEmpty().isNotBlank() ||
+            presence.innerThought.orEmpty().isNotBlank() ||
+            presence.memoryThought.orEmpty().isNotBlank() ||
+            presence.mood.orEmpty().isNotBlank() ||
+            presence.bodyState.orEmpty().isNotBlank() ||
+            presence.mindState.orEmpty().isNotBlank() ||
+            presence.activityMode.orEmpty().isNotBlank()
+    }
 
 internal fun sanitizeLuluVisibleExpression(text: String): String {
     val withoutPresenceBlocks = text

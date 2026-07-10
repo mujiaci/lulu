@@ -2,8 +2,7 @@ package me.rerere.rikkahub.data.service
 
 import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
-import me.rerere.rikkahub.data.model.LuluMode
-import me.rerere.rikkahub.data.model.LuluState
+import me.rerere.rikkahub.data.companion.CompanionState
 import me.rerere.rikkahub.service.LivingAction
 import me.rerere.rikkahub.service.LivingIntentKind
 import me.rerere.rikkahub.service.LivingJudgmentSource
@@ -98,19 +97,17 @@ class ProactiveMessageContextTest {
         )
 
         val state = buildSilentLivingPresenceState(
-            assistantId = assistantId,
-            previous = LuluState(assistantId = assistantId, innerVoice = "旧心声"),
+            previous = CompanionState(innerThought = "旧心声"),
             assistantName = "露露",
             decision = decision,
             nowMillis = NOW + 10 * MINUTE,
         )
 
         assertEquals("克制着没开口", state.statusText)
-        assertEquals("我先不去吵你，但我会把这件事放在心里，等你回来时接住你。", state.innerVoice)
-        assertEquals(LuluMode.THINKING, state.mode)
+        assertEquals("我先不去吵你，但我会把这件事放在心里，等你回来时接住你。", state.innerThought)
+        assertEquals("waiting", state.activityMode)
         assertTrue(state.selfScene.contains("没有发消息"))
-        assertTrue(state.reason.contains("静默判断"))
-        assertTrue(state.perceptionSummary.contains("用户说要学习"))
+        assertTrue(state.mindState.contains("静默判断"))
     }
 
     @Test
@@ -158,17 +155,16 @@ class ProactiveMessageContextTest {
         )
 
         val state = buildSilentLivingPresenceState(
-            assistantId = assistantId,
-            previous = LuluState(assistantId = assistantId),
+            previous = CompanionState(),
             assistantName = "露露",
             decision = decision,
             nowMillis = NOW + 10 * MINUTE,
         )
 
-        assertTrue(state.innerVoice.startsWith("我"))
-        assertFalse(state.innerVoice.contains("Seven-layer trace"))
-        assertFalse(state.innerVoice.contains("Perception="))
-        assertFalse(state.innerVoice.contains("requested_tools="))
+        assertTrue(state.innerThought.startsWith("我"))
+        assertFalse(state.innerThought.contains("Seven-layer trace"))
+        assertFalse(state.innerThought.contains("Perception="))
+        assertFalse(state.innerThought.contains("requested_tools="))
     }
 
     @Test
@@ -186,17 +182,16 @@ class ProactiveMessageContextTest {
         )
 
         val state = buildAutonomousPlanPresenceState(
-            assistantId = assistantId,
-            previous = LuluState(assistantId = assistantId, innerVoice = "旧心声"),
+            previous = CompanionState(innerThought = "旧心声"),
             assistantName = "露露",
             plan = plan,
             nowMillis = NOW,
         )
 
         assertEquals("安静判断中", state.statusText)
-        assertEquals("我先不把想靠近说出口，等你自己的节奏回来。", state.innerVoice)
-        assertEquals(LuluMode.THINKING, state.mode)
-        assertTrue(state.reason.contains("副 API"))
+        assertEquals("我先不把想靠近说出口，等你自己的节奏回来。", state.innerThought)
+        assertEquals("waiting", state.activityMode)
+        assertTrue(state.mindState.contains("副 API"))
     }
 
     private companion object {

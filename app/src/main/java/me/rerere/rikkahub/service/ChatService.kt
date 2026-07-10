@@ -86,7 +86,7 @@ import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
 import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
 import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
 import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
-import me.rerere.rikkahub.data.ai.transformers.luluPresenceMetadata
+import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
 import me.rerere.rikkahub.data.ai.transformers.sanitizeLuluVisibleExpression
 import me.rerere.rikkahub.data.ai.transformers.StudyStateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
@@ -111,28 +111,20 @@ import me.rerere.rikkahub.data.companion.CompanionPerceptionPacket
 import me.rerere.rikkahub.data.companion.CompanionRuntime
 import me.rerere.rikkahub.data.companion.CompanionTurnMutation
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
-import me.rerere.rikkahub.data.companion.toCompanionState
+import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
+import me.rerere.rikkahub.data.companion.toLegacyLuluState
 import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.living.LivingPresenceStore
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.AssistantAffectScope
-import me.rerere.rikkahub.data.model.LuluThought
-import me.rerere.rikkahub.data.model.LuluThoughtCategory
 import me.rerere.rikkahub.data.model.appendLuluState
-import me.rerere.rikkahub.data.model.appendLuluThoughts
-import me.rerere.rikkahub.data.model.buildLuluStateFromTurn
-import me.rerere.rikkahub.data.model.buildLuluThoughtFromTurn
-import me.rerere.rikkahub.data.model.currentLuluState
-import me.rerere.rikkahub.data.model.LuluPerceptionInput
 import me.rerere.rikkahub.data.model.luluStateHistory
-import me.rerere.rikkahub.data.model.markResolvedLuluThoughts
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
-import me.rerere.rikkahub.data.service.LuluPerceptionCollector
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
@@ -214,124 +206,16 @@ internal fun Conversation.withoutVoiceCallInstructionLeaks(): Conversation {
     }
 }
 
-internal fun Settings.recordLuluPresenceTurn(
+internal fun Settings.projectCompanionStateForLegacyUi(
     assistantId: Uuid,
-    userText: String,
-    assistantText: String,
-    perceptionInput: LuluPerceptionInput? = null,
-    proactiveReminderPlan: ProactiveReminderPlan? = null,
-    modelPresence: LuluModelPresence? = null,
-    nowMillis: Long = System.currentTimeMillis(),
-    hourOfDay: Int = java.time.LocalDateTime.now().hour,
+    state: me.rerere.rikkahub.data.companion.CompanionState,
 ): Settings {
-    val cleanUserText = userText.trim()
-    val cleanAssistantText = assistantText.trim()
-    if (cleanAssistantText.isBlank()) return this
     if (assistants.none { it.id == assistantId }) return this
-    val assistant = assistants.firstOrNull { it.id == assistantId }
-
     val previousState = luluStates.luluStateHistory(assistantId).firstOrNull()
-    val input = perceptionInput?.copy(userText = cleanUserText)
-        ?: LuluPerceptionInput(userText = cleanUserText, hourOfDay = hourOfDay)
-    val generatedState = buildLuluStateFromTurn(
-        assistantId = assistantId,
-        previous = previousState,
-        perceptionInput = input,
-        assistantText = cleanAssistantText,
-        assistantName = assistant?.name.orEmpty(),
-        assistantPersona = assistant?.toLuluStatePersona().orEmpty(),
-        preferredInnerVoice = modelPresence?.innerVoice,
-        nowMillis = nowMillis,
-    )
-    val nextState = generatedState.copy(
-        statusText = modelPresence?.statusText.cleanLuluPresenceField(maxLength = 32) ?: generatedState.statusText,
-        selfScene = modelPresence?.description.cleanLuluPresenceField(maxLength = 220) ?: generatedState.selfScene,
-    )
-    val nextThought = buildLuluThoughtFromTurn(
-        assistantId = assistantId,
-        userText = cleanUserText,
-        state = nextState,
-        preferredThought = modelPresence?.thought,
-        nowMillis = nowMillis,
-    )
-    val proactiveThought = proactiveReminderPlan?.toLuluPendingThought(
-        assistantId = assistantId,
-        nowMillis = nowMillis,
-    )
-
-    val validAssistantIds = assistants.map { it.id }.toSet()
-    val resolvedThoughts = luluThoughts.markResolvedLuluThoughts(
-        assistantId = assistantId,
-        userText = cleanUserText,
-        nowMillis = nowMillis,
-    )
     return copy(
-        luluStates = luluStates.appendLuluState(nextState),
-        luluThoughts = resolvedThoughts.appendLuluThoughts(
-            thoughts = listOfNotNull(nextThought, proactiveThought),
-            validAssistantIds = validAssistantIds,
-            nowMillis = nowMillis,
-        ),
+        luluStates = luluStates.appendLuluState(state.toLegacyLuluState(assistantId, previousState)),
     )
 }
-
-internal data class LuluModelPresence(
-    val statusText: String? = null,
-    val description: String? = null,
-    val innerVoice: String? = null,
-    val thought: String? = null,
-)
-
-private fun String?.cleanLuluPresenceField(maxLength: Int): String? =
-    this
-        ?.trim()
-        ?.replace(Regex("\\s+"), " ")
-        ?.take(maxLength)
-        ?.takeIf { it.isNotBlank() }
-
-private fun Assistant.toLuluStatePersona(): String = buildString {
-    appendLine("角色名：${name.ifBlank { "当前角色" }}")
-    if (systemPrompt.isNotBlank()) {
-        appendLine("系统人设：")
-        appendLine(systemPrompt.take(1600))
-    }
-    if (appearancePrompt.isNotBlank()) {
-        appendLine("外貌设定：")
-        appendLine(appearancePrompt.take(500))
-    }
-    if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
-        appendLine("语言/消息模板：")
-        appendLine(messageTemplate.take(400))
-    }
-}.trim()
-
-private fun ProactiveReminderPlan.toLuluPendingThought(
-    assistantId: Uuid,
-    nowMillis: Long,
-): LuluThought {
-    val content = when (kind) {
-        ProactiveReminderKind.SLEEP -> "我刚才答应了要提醒他睡觉：${userText.take(40)}"
-        ProactiveReminderKind.SCHEDULE -> "我刚才决定到点确认他的课程/日程状态：${userText.take(40)}"
-        ProactiveReminderKind.MEAL -> "我刚才决定稍后来确认他有没有好好吃饭：${userText.take(40)}"
-        ProactiveReminderKind.STUDY -> "我刚才决定晚点确认他的学习/写作业状态：${userText.take(40)}"
-        ProactiveReminderKind.GENERAL -> "我刚才答应了稍后提醒他：${userText.take(40)}"
-    }
-    return LuluThought(
-        assistantId = assistantId,
-        content = content,
-        category = LuluThoughtCategory.PENDING_ACTION,
-        importance = 4,
-        createdAt = nowMillis,
-        expiresAt = triggerAtMillis + 60L * 60L * 1000L,
-    )
-}
-
-private suspend fun LuluPerceptionCollector.collectSafely(
-    userText: String,
-    settings: Settings,
-): LuluPerceptionInput? = runCatching {
-    collect(userText = userText, settings = settings)
-}.getOrNull()
 
 private fun String.isVoiceCallInternalInstruction(): Boolean {
     val text = trim()
@@ -382,7 +266,6 @@ class ChatService(
     private val skillManager: SkillManager,
     private val pluginToolProvider: PluginToolProvider,
     private val pluginLoader: PluginLoader,
-    private val luluPerceptionCollector: LuluPerceptionCollector,
     private val livingPresenceStore: LivingPresenceStore,
     private val companionRuntime: CompanionRuntime,
 ) {
@@ -716,39 +599,31 @@ class ChatService(
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.getAssistantById(cleanedConversation.assistantId)
             ?: settings.getCurrentAssistant()
-        val perceptionInput = luluPerceptionCollector.collectSafely(
-            userText = visibleUserText.orEmpty(),
-            settings = settings,
-        )
         val nowMillis = System.currentTimeMillis()
-        var unifiedState = companionRuntime.snapshot(assistant.id.toString()).state
-        settingsStore.update { currentSettings ->
-            currentSettings.recordLuluPresenceTurn(
-                assistantId = assistant.id,
-                userText = visibleUserText.orEmpty(),
-                assistantText = reply,
-                perceptionInput = perceptionInput,
-                modelPresence = listOf(replyMessage).extractLuluModelPresence(),
-                nowMillis = nowMillis,
-            )
-                .also { updatedSettings ->
-                    unifiedState = updatedSettings.luluStates
-                        .luluStateHistory(assistant.id)
-                        .firstOrNull()
-                        ?.toCompanionState()
-                        ?: unifiedState
-                }
-        }
-        runCatching {
+        val unifiedState = buildCompanionStateFromTurn(
+            previous = companionRuntime.snapshot(assistant.id.toString()).state,
+            assistantText = reply,
+            presence = listOf(replyMessage).companionModelPresence(),
+            nowMillis = nowMillis,
+        )
+        val persistedState = runCatching {
             companionRuntime.applyTurn(
                 CompanionTurnMutation(
                     assistantId = assistant.id.toString(),
                     state = unifiedState,
                     nowMillis = nowMillis,
                 ),
-            )
+            ).state
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist companion voice turn", error)
+        }.getOrNull()
+        persistedState?.let { state ->
+            settingsStore.update { currentSettings ->
+                currentSettings.projectCompanionStateForLegacyUi(
+                    assistantId = assistant.id,
+                    state = state,
+                )
+            }
         }
 
         return reply
@@ -828,50 +703,6 @@ class ChatService(
                 }.getOrNull()
             }
             .orEmpty()
-
-    private fun List<UIMessage>.extractLuluModelPresence(): LuluModelPresence? =
-        extractLuluPresenceMetadata()
-            ?: asReversed()
-            .asSequence()
-            .flatMap { message -> message.parts.asReversed().asSequence() }
-            .filterIsInstance<UIMessagePart.Tool>()
-            .firstOrNull { it.toolName == "set_lulu_expression_state" }
-            ?.input
-            ?.let { input ->
-                runCatching {
-                    val json = JsonInstant.parseToJsonElement(input).jsonObject
-                    LuluModelPresence(
-                        statusText = json["status"]?.jsonPrimitive?.contentOrNull
-                            ?: json["status_text"]?.jsonPrimitive?.contentOrNull,
-                        description = json["description"]?.jsonPrimitive?.contentOrNull,
-                        innerVoice = json["inner_voice"]?.jsonPrimitive?.contentOrNull,
-                        thought = json["thought"]?.jsonPrimitive?.contentOrNull,
-                    )
-                }.getOrNull()
-            }
-            ?.takeIf { it.hasContent() }
-
-    private fun List<UIMessage>.extractLuluPresenceMetadata(): LuluModelPresence? =
-        asReversed()
-            .asSequence()
-            .mapNotNull { message -> message.luluPresenceMetadata() }
-            .firstOrNull()
-            ?.data
-            ?.let { json ->
-                LuluModelPresence(
-                    statusText = json["status"]?.jsonPrimitive?.contentOrNull,
-                    description = json["description"]?.jsonPrimitive?.contentOrNull,
-                    innerVoice = json["inner_voice"]?.jsonPrimitive?.contentOrNull,
-                    thought = json["thought"]?.jsonPrimitive?.contentOrNull,
-                )
-            }
-            ?.takeIf { it.hasContent() }
-
-    private fun LuluModelPresence.hasContent(): Boolean =
-        !statusText.isNullOrBlank() ||
-            !description.isNullOrBlank() ||
-            !innerVoice.isNullOrBlank() ||
-            !thought.isNullOrBlank()
 
     fun addProactiveMessage(conversationId: Uuid, aiMessage: UIMessage) {
         launchWithConversationReference(conversationId) {
@@ -1145,10 +976,6 @@ class ChatService(
                 ?.toText()
                 .orEmpty()
             val nowMillis = System.currentTimeMillis()
-            val perceptionInput = luluPerceptionCollector.collectSafely(
-                userText = lastUserText,
-                settings = settings,
-            )
             val intentDecision = buildCompanionIntentDecision(
                 settings = settings,
                 assistant = assistant,
@@ -1174,27 +1001,12 @@ class ChatService(
                     nowMillis = nowMillis,
                 )
             )
-            val scheduledPlan = scheduledPlans.firstOrNull()
-            var unifiedState = companionRuntime.snapshot(assistant.id.toString()).state
-            // ChatService owns turn-state persistence; UI observers must not write a second snapshot.
-            settingsStore.update { currentSettings ->
-                currentSettings.recordLuluPresenceTurn(
-                    assistantId = assistant.id,
-                    userText = lastUserText,
-                    assistantText = lastAssistantText,
-                    perceptionInput = perceptionInput,
-                    proactiveReminderPlan = scheduledPlan,
-                    modelPresence = finalConversation.currentMessages.takeLast(8).extractLuluModelPresence(),
-                    nowMillis = nowMillis,
-                )
-                    .also { updatedSettings ->
-                        unifiedState = updatedSettings.luluStates
-                            .luluStateHistory(assistant.id)
-                            .firstOrNull()
-                            ?.toCompanionState()
-                            ?: unifiedState
-                    }
-            }
+            val unifiedState = buildCompanionStateFromTurn(
+                previous = companionRuntime.snapshot(assistant.id.toString()).state,
+                assistantText = lastAssistantText,
+                presence = finalConversation.currentMessages.takeLast(8).companionModelPresence(),
+                nowMillis = nowMillis,
+            )
             val followUpDrafts = scheduledPlans.map { plan ->
                 CompanionFollowUpDraft(
                     assistantId = assistant.id.toString(),
@@ -1213,7 +1025,7 @@ class ChatService(
                     },
                 )
             }
-            runCatching {
+            val persistedState = runCatching {
                 companionRuntime.applyTurn(
                     CompanionTurnMutation(
                         assistantId = assistant.id.toString(),
@@ -1224,9 +1036,18 @@ class ChatService(
                         acceptedCommitments = followUpDrafts.map { draft -> draft.toCommitment(nowMillis) },
                         nowMillis = nowMillis,
                     ),
-                )
+                ).state
             }.onFailure { error ->
                 Log.w(TAG, "Failed to persist unified companion turn", error)
+            }.getOrNull()
+            persistedState?.let { state ->
+                // Legacy settings are a one-way UI projection; CompanionRuntime remains business truth.
+                settingsStore.update { currentSettings ->
+                    currentSettings.projectCompanionStateForLegacyUi(
+                        assistantId = assistant.id,
+                        state = state,
+                    )
+                }
             }
             scheduleProactiveReminderFromTurn(
                 settings = settings,
@@ -1435,7 +1256,7 @@ class ChatService(
                 val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
                     turns = plan.turns,
                     assistantName = assistant.name,
-                    assistantPersona = assistant.toLuluStatePersona(),
+                    assistantPersona = assistant.toLuluPlannerPersona(),
                 )
                 val chunk = providerImpl.generateText(
                     providerSetting = provider,

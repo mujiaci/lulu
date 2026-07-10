@@ -17,6 +17,22 @@ fun LuluState.toCompanionState(): CompanionState = CompanionState(
     sinceAt = sinceAt,
 )
 
+fun CompanionState.toLegacyLuluState(
+    assistantId: kotlin.uuid.Uuid,
+    previous: LuluState? = null,
+): LuluState {
+    val base = previous ?: LuluState(assistantId = assistantId)
+    return base.copy(
+        assistantId = assistantId,
+        statusText = statusText.ifBlank { base.statusText },
+        innerVoice = innerThought.ifBlank { base.innerVoice },
+        selfScene = selfScene.ifBlank { base.selfScene },
+        updatedAt = updatedAt,
+        sinceAt = sinceAt.takeIf { it > 0L } ?: updatedAt,
+        reason = "CompanionRuntime UI compatibility projection",
+    )
+}
+
 fun LuluState.toCompanionRelationshipState(): CompanionRelationshipState = CompanionRelationshipState(
     roleLabel = relationship.label,
     familiarity = relationshipIntensity.coerceIn(0f, 1f),
