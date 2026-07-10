@@ -77,7 +77,7 @@ internal fun collectInjections(
 
     // 2. 获取关联的 Lorebook 中被触发的 RegexInjection
     val enabledLorebooks = lorebooks.filter {
-        it.enabled && assistant.lorebookIds.contains(it.id)
+        it.enabled && (it.globalApply || assistant.lorebookIds.contains(it.id))
     }
     if (enabledLorebooks.isNotEmpty()) {
         // 提取上下文用于匹配（只取非 SYSTEM 消息）

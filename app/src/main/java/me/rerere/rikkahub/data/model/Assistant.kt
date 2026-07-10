@@ -194,6 +194,7 @@ data class Lorebook(
     val name: String = "",
     val description: String = "",
     val enabled: Boolean = true,
+    val globalApply: Boolean = false,
     val entries: List<PromptInjection.RegexInjection> = emptyList(),
 )
 

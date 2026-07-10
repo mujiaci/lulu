@@ -135,6 +135,7 @@ import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.voicecall.VoiceCallHistoryPage
 import me.rerere.rikkahub.ui.pages.voicecall.VoiceCallPage
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
+import me.rerere.rikkahub.ui.pages.worldbook.WorldbookPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
 import me.rerere.rikkahub.ui.theme.RikkahubTheme
 import me.rerere.rikkahub.utils.CrashHandler
@@ -394,6 +395,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.CihaiReading> {
                                 CihaiReadingPage(onBack = { backStack.removeLastOrNull() })
+                            }
+
+                            entry<Screen.WorldBooks> {
+                                WorldbookPage(onBack = { backStack.removeLastOrNull() })
                             }
 
                             entry<Screen.Chat>(
@@ -743,6 +748,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object CihaiReading : Screen
+
+    @Serializable
+    data object WorldBooks : Screen
 
     @Serializable
     data class Chat(

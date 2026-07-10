@@ -941,6 +941,29 @@ class PromptInjectionTransformerTest {
 
     // region collectInjections tests
     @Test
+    fun `global lorebook applies without assistant mount`() {
+        val entry = PromptInjection.RegexInjection(
+            name = "世界常识",
+            content = "这个世界以架空历法纪年。",
+            constantActive = true,
+        )
+        val result = collectInjections(
+            messages = listOf(UIMessage.user("今天是什么日子")),
+            assistant = createAssistant(lorebookIds = emptySet()),
+            modeInjections = emptyList(),
+            lorebooks = listOf(
+                Lorebook(
+                    name = "全局世界",
+                    globalApply = true,
+                    entries = listOf(entry),
+                )
+            ),
+        )
+
+        assertEquals(listOf(entry.id), result.map { it.id })
+    }
+
+    @Test
     fun `collectInjections should return empty for no matching conditions`() {
         val result = collectInjections(
             messages = listOf(UIMessage.user("Hello")),
