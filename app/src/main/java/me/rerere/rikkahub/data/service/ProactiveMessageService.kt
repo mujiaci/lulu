@@ -479,7 +479,7 @@ class ProactiveMessageService : KoinComponent {
             sb.appendLine("这次不是随机主动消息，而是${assistantName}刚才自己决定稍后回来确认的一次目标消息。")
             sb.appendLine("目标类型: ${targetedKind.orEmpty()}")
             sb.appendLine("触发原因: $targetedReason")
-            sb.appendLine("生成回复前，如果触发原因里列出了感知工具或后续动作，请优先按那些线索主动查看状态，再自然地开口。")
+            sb.appendLine("生成回复前，先结合本上下文已经提供的感知事实；如果列出了后续动作，再判断是否需要执行后自然开口。")
             sb.appendLine("如果用户之前已经把提醒、记录、闹钟或日程意图说得很明确，可以主动完成对应工具动作；不要机械等用户再次确认。")
             sb.append(buildTargetedProactiveSensingInstruction(targetedKind, targetedReason))
             if (!targetedUserText.isNullOrBlank()) {
@@ -671,10 +671,10 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 不要说\"根据xxx\"、\"我注意到xxx数据\"之类暴露信息来源的话")
         sb.appendLine("- 直接以朋友聊天的语气开口，就像你突然想到了什么想跟对方说")
         sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，最终消息只输出纯文本")
-        sb.appendLine("- 可以为了判断用户状态主动调用工具，例如时间、位置、应用使用、电量、健康、通知、短信、当前音乐、闹钟或日历。正式日记只在确有新内容时调用 write_lulu_journal。")
-        sb.appendLine("- 工具调用要符合角色当下目的：比如催睡就优先看时间、电量、应用使用；确认上课就优先看时间、位置、应用使用。")
+        sb.appendLine("- 时间、电量、健康、位置和应用使用等被动感知已经直接写在上下文里，不要为了重复读取这些信息而调用工具。")
+        sb.appendLine("- 工具只用于角色决定主动做出的动作，例如设闹钟、写日历、看摄像头、控制音乐、收藏消息或写正式日记。正式日记只在确有新内容时调用 write_lulu_journal。")
         sb.appendLine("- 涉及时间时必须以“当前本地时间”的 24 小时制为准，00:00-04:59 是凌晨，不能说成下午或中午。")
-        sb.appendLine("- 如果工具能帮你更像真人一样判断用户状态，就大胆用；最终说出口的话仍然要自然，不要暴露工具细节。")
+        sb.appendLine("- 先基于已有感知判断，再按角色当下目的选择必要动作；最终说出口的话仍然要自然，不要暴露技术细节。")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
         sb.appendLine("- 表达可以有适量的节奏和动作感，但必须服从角色人设与关系边界；没有明确依据时不要虚构身体接触、空间距离或亲密动作。")
         sb.appendLine("- 开心且精力高时可以更亮一点；担心、夜晚、学习、休息场景要轻声一点，不要突然抢走用户注意力。")
@@ -1702,14 +1702,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         appendLine("触发原因: $reason")
         appendLine("语气: $tone")
         if (toolNames.isNotEmpty()) {
-            appendLine("生成回复前优先主动查看这些感知工具：${toolNames.joinToString("、")}。")
+            appendLine("生成回复前优先结合这些感知项或行动能力：${toolNames.joinToString("、")}。被动感知无需重复调用。")
         }
     }.trim()
 
     private fun ProactiveReminderPlan.toTargetedReason(): String = buildString {
         appendLine(reason)
         if (preferredToolNames.isNotEmpty()) {
-            appendLine("到点前优先主动查看这些感知工具：${preferredToolNames.joinToString("、")}。")
+            appendLine("到点时优先结合这些感知项或行动能力：${preferredToolNames.joinToString("、")}。被动感知无需重复调用。")
         }
         if (actionHints.isNotEmpty()) {
             appendLine("如果当前上下文和用户意图足够明确，可以主动跟进这些动作：")

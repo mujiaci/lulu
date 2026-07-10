@@ -69,6 +69,7 @@ import me.rerere.rikkahub.data.ai.ApiUsageSource
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
+import me.rerere.rikkahub.data.ai.tools.SystemToolOption
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
@@ -1234,7 +1235,7 @@ class ChatService(
     private fun ProactiveReminderPlan.toTargetedReason(): String = buildString {
         appendLine(reason)
         if (preferredToolNames.isNotEmpty()) {
-            appendLine("到点前优先主动查看这些感知工具：${preferredToolNames.joinToString("、")}。")
+            appendLine("到点时优先结合这些感知项或行动能力：${preferredToolNames.joinToString("、")}。被动感知无需重复调用。")
         }
         if (actionHints.isNotEmpty()) {
             appendLine("如果当前上下文和用户意图足够明确，可以主动跟进这些动作：")
@@ -1395,7 +1396,7 @@ class ChatService(
         }
         addAll(localTools.getTools(assistant.localTools))
 
-        val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
+        val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions() + SystemToolOption.Battery
         if (systemToolsOptions.isNotEmpty()) {
             val systemTools = SystemTools(context, settings)
             addAll(systemTools.getTools(systemToolsOptions))
