@@ -38,13 +38,9 @@ import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.InjectionPosition
 import me.rerere.rikkahub.data.model.Lorebook
-import me.rerere.rikkahub.data.model.LuluState
-import me.rerere.rikkahub.data.model.LuluThought
 import me.rerere.rikkahub.data.model.PromptInjection
 import me.rerere.rikkahub.data.model.QuickMessage
 import me.rerere.rikkahub.data.model.Tag
-import me.rerere.rikkahub.data.model.normalizedLuluThoughts
-import me.rerere.rikkahub.data.model.normalizedLuluStates
 import me.rerere.rikkahub.data.sync.s3.S3Config
 import me.rerere.rikkahub.data.datastore.SystemToolsSetting
 import me.rerere.rikkahub.ui.theme.PresetThemes
@@ -164,9 +160,6 @@ class SettingsStore(
 
         val MEMORY_EMBEDDING_CONFIG = stringPreferencesKey("memory_embedding_config")
 
-        val LULU_STATES = stringPreferencesKey("lulu_states")
-        val LULU_THOUGHTS = stringPreferencesKey("lulu_thoughts")
-
     }
 
     private val dataStore = context.settingsStore
@@ -268,12 +261,6 @@ class SettingsStore(
                 memoryEmbeddingConfig = preferences[MEMORY_EMBEDDING_CONFIG]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: MemoryEmbeddingConfig(),
-                luluStates = preferences[LULU_STATES]?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: emptyList(),
-                luluThoughts = preferences[LULU_THOUGHTS]?.let {
-                    JsonInstant.decodeFromString(it)
-                } ?: emptyList(),
             )
         }
         .map {
@@ -360,12 +347,6 @@ class SettingsStore(
                 modeInjections = settings.modeInjections.distinctBy { it.id },
                 lorebooks = settings.lorebooks.distinctBy { it.id },
                 quickMessages = settings.quickMessages.distinctBy { it.id },
-                luluStates = settings.luluStates.normalizedLuluStates(
-                    validAssistantIds = settings.assistants.map { assistant -> assistant.id }.toSet()
-                ),
-                luluThoughts = settings.luluThoughts.normalizedLuluThoughts(
-                    validAssistantIds = settings.assistants.map { assistant -> assistant.id }.toSet()
-                ),
             )
         }
         .onEach {
@@ -446,8 +427,6 @@ class SettingsStore(
             preferences[SYSTEM_TOOLS_SETTING] = JsonInstant.encodeToString(settings.systemToolsSetting)
             preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
             preferences[MEMORY_EMBEDDING_CONFIG] = JsonInstant.encodeToString(settings.memoryEmbeddingConfig)
-            preferences[LULU_STATES] = JsonInstant.encodeToString(settings.luluStates)
-            preferences[LULU_THOUGHTS] = JsonInstant.encodeToString(settings.luluThoughts)
         }
     }
 
@@ -581,8 +560,6 @@ data class Settings(
     val systemToolsSetting: SystemToolsSetting = SystemToolsSetting(),
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
     val memoryEmbeddingConfig: MemoryEmbeddingConfig = MemoryEmbeddingConfig(),
-    val luluStates: List<LuluState> = emptyList(),
-    val luluThoughts: List<LuluThought> = emptyList(),
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

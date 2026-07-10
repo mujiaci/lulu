@@ -108,7 +108,6 @@ val appModule = module {
             cihaiStore = get(),
             companionRuntime = get(),
             livingPresenceStore = get(),
-            settingsStore = get(),
         )
     }
 
