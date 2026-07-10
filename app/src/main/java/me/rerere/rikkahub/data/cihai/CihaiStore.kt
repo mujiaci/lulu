@@ -57,15 +57,6 @@ class CihaiStore(
         update { state -> state.addEntryToMemoryQueue(entry) }
     }
 
-    suspend fun markEntryMemorySaved(entryId: String) {
-        update { state ->
-            state.completeMemorySettlement(
-                reviewedEntryIds = setOf(entryId),
-                savedEvidenceEntryIds = setOf(entryId),
-            )
-        }
-    }
-
     suspend fun completeMemorySettlement(
         reviewedEntryIds: Set<String>,
         savedEvidenceEntryIds: Set<String>,

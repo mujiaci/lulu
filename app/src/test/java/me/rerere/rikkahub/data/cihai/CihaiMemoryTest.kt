@@ -440,71 +440,6 @@ class CihaiMemoryTest {
     }
 
     @Test
-    fun `cihai inner entry becomes pending vector memory candidate without diary kind`() {
-        val entry = CihaiEntry(
-            assistantId = "lulu",
-            kind = CihaiEntryKind.INNER_JOURNAL,
-            title = "她很久没回我",
-            content = "我想再问一句，但她可能正在忙，我先写下来，晚点再判断。",
-            emotion = "担心但克制",
-            createdAt = 1_700_000_000_000L,
-        )
-
-        val memory = entry.toMemoryCandidate().toEntity(
-            assistantId = "lulu",
-            conversationId = null,
-            createdAt = entry.createdAt,
-        )
-        val candidate = entry.toMemoryCandidate()
-
-        assertEquals("cihai_inner", memory.memoryKind)
-        assertEquals("pending", memory.vectorStatus)
-        assertTrue(memory.embeddingText!!.contains("担心但克制"))
-        assertTrue(memory.tagsJson!!.contains("辞海"))
-        assertTrue(candidate.relationshipEffect!!.startsWith("我在用户沉默时"))
-        assertTrue(candidate.embeddingText!!.contains("我应该参考这次判断"))
-        assertTrue(!candidate.relationshipEffect!!.contains("角色在用户"))
-    }
-
-    @Test
-    fun `cihai diary entry uses diary memory kind and first person relationship effect`() {
-        val entry = CihaiEntry(
-            assistantId = "lulu",
-            kind = CihaiEntryKind.DIARY,
-            title = "露露的日记",
-            content = "我其实还是有点惦记她，看到她回消息以后，心里松了一下，但还是想晚点再确认她没有睡回去。",
-            emotion = "松一口气、继续惦记",
-            createdAt = 1_700_000_000_000L,
-        )
-
-        val candidate = entry.toMemoryCandidate()
-
-        assertEquals("cihai_diary", candidate.type)
-        assertTrue(candidate.relationshipEffect!!.startsWith("我用日记"))
-        assertEquals(entry.content, candidate.unspokenThought)
-        assertTrue(candidate.tags.contains("日记"))
-    }
-
-    @Test
-    fun `reading note keeps source book and reflection in memory text`() {
-        val entry = CihaiEntry(
-            assistantId = "lulu",
-            kind = CihaiEntryKind.READING_NOTE,
-            title = "读《亲密关系》第三章",
-            content = "看到压力下的人会先冻结，我更明白她卡住时不该只催。",
-            sourceTitle = "亲密关系",
-            createdAt = 1_700_000_000_000L,
-        )
-
-        val candidate = entry.toMemoryCandidate()
-
-        assertEquals("cihai_reading", candidate.type)
-        assertTrue(candidate.content.contains("亲密关系"))
-        assertTrue(candidate.embeddingText!!.contains("不该只催"))
-        assertTrue(candidate.tags.contains("阅读"))
-    }
-
-    @Test
     fun `silent judgement creates cihai inner entry without writing diary content`() {
         val entry = CihaiEntry.fromSilentJudgment(
             assistantId = "lulu",
@@ -523,7 +458,7 @@ class CihaiMemoryTest {
         assertTrue(entry.content.contains("评估"))
         assertTrue(entry.content.contains("判断"))
         assertTrue(entry.content.contains("考试"))
-        assertTrue(entry.toMemoryCandidate().embeddingText!!.contains("明早"))
+        assertTrue(entry.content.contains("明早"))
     }
 
     @Test
@@ -572,7 +507,7 @@ class CihaiMemoryTest {
         assertTrue(result.entries.none { it.kind == CihaiEntryKind.DIARY })
         assertTrue(result.entries[1].sourceTitle!!.contains("陪伴方法"))
         assertTrue(result.updatedBook!!.progressPercent > book.progressPercent)
-        assertTrue(result.entries.all { it.toMemoryCandidate().type.startsWith("cihai_") })
+        assertTrue(result.entries.all { it.assistantId == "lulu" })
     }
 
     @Test
@@ -638,7 +573,7 @@ class CihaiMemoryTest {
             result.entries.map { it.kind },
         )
         assertTrue(result.entries.last().content.contains("下一轮判断"))
-        assertTrue(result.entries.last().toMemoryCandidate().type == "cihai_reflection")
+        assertEquals(CihaiEntryKind.REFLECTION, result.entries.last().kind)
     }
 
     private fun memoryEntry(

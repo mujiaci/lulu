@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
+import me.rerere.rikkahub.data.cihai.CihaiMemoryDisposition
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.living.LivingPresenceStore
@@ -342,6 +343,21 @@ private fun AssistantSelector(
 @Composable
 private fun EntryCard(entry: CihaiEntry, onDelete: () -> Unit) {
     val displayBody = remember(entry.content, entry.kind) { entry.displayBody() }
+    val memoryStatus = when (entry.resolvedMemoryDisposition) {
+        CihaiMemoryDisposition.PENDING -> "待沉淀"
+        CihaiMemoryDisposition.SAVED -> "已沉淀"
+        CihaiMemoryDisposition.CIHAI_ONLY -> "仅保留在辞海"
+    }
+    val memoryStatusContainerColor = when (entry.resolvedMemoryDisposition) {
+        CihaiMemoryDisposition.PENDING -> MaterialTheme.colorScheme.secondaryContainer
+        CihaiMemoryDisposition.SAVED -> MaterialTheme.colorScheme.primaryContainer
+        CihaiMemoryDisposition.CIHAI_ONLY -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val memoryStatusContentColor = when (entry.resolvedMemoryDisposition) {
+        CihaiMemoryDisposition.PENDING -> MaterialTheme.colorScheme.onSecondaryContainer
+        CihaiMemoryDisposition.SAVED -> MaterialTheme.colorScheme.onPrimaryContainer
+        CihaiMemoryDisposition.CIHAI_ONLY -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
     Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -354,12 +370,12 @@ private fun EntryCard(entry: CihaiEntry, onDelete: () -> Unit) {
                 }
                 Surface(
                     shape = RoundedCornerShape(999.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer,
+                    color = memoryStatusContainerColor,
                 ) {
                     Text(
-                        text = if (entry.memorySaved) "已入记忆" else "待记忆",
+                        text = memoryStatus,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        color = memoryStatusContentColor,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
                 }

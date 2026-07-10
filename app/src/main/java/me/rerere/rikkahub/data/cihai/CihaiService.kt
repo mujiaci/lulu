@@ -129,19 +129,18 @@ class CihaiService(
             return
         }
 
-        val alreadyProcessed = memoryBankService.getProcessedCihaiEntryIds(assistantId)
-        val alreadySavedIds = entries.mapNotNullTo(linkedSetOf()) { entry ->
-            entry.id.takeIf { it in alreadyProcessed }
-        }
-        if (alreadySavedIds.isNotEmpty()) {
-            store.completeMemorySettlement(alreadySavedIds, alreadySavedIds)
-        }
-
-        val pendingEntries = entries.filterNot { it.id in alreadySavedIds }
-        if (pendingEntries.isEmpty()) return
-        val pendingEntryIds = pendingEntries.mapTo(linkedSetOf()) { it.id }
-
         runCatching {
+            val alreadyProcessed = memoryBankService.getProcessedCihaiEntryIds(assistantId)
+            val alreadySavedIds = entries.mapNotNullTo(linkedSetOf()) { entry ->
+                entry.id.takeIf { it in alreadyProcessed }
+            }
+            if (alreadySavedIds.isNotEmpty()) {
+                store.completeMemorySettlement(alreadySavedIds, alreadySavedIds)
+            }
+
+            val pendingEntries = entries.filterNot { it.id in alreadySavedIds }
+            if (pendingEntries.isEmpty()) return@runCatching
+            val pendingEntryIds = pendingEntries.mapTo(linkedSetOf()) { it.id }
             val candidates = generateSettlementCandidates(assistantId, pendingEntries)
             val savedEvidenceIds = if (candidates.isEmpty()) {
                 emptySet()
@@ -164,7 +163,7 @@ class CihaiService(
         }.onFailure { error ->
             if (error is CancellationException) throw error
             store.retryMemorySettlement(
-                entryIds = pendingEntryIds,
+                entryIds = batchEntryIds,
                 failedAt = nowMillis,
                 error = error.message ?: error::class.simpleName.orEmpty(),
             )

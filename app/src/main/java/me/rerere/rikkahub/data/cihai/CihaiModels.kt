@@ -2,7 +2,6 @@ package me.rerere.rikkahub.data.cihai
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import me.rerere.rikkahub.data.service.AffectiveMemoryCandidate
 import kotlin.uuid.Uuid
 
 @Serializable
@@ -265,57 +264,3 @@ private const val CIHAI_ACTION_WRITE_DIARY = "WRITE_DIARY"
 private const val CIHAI_ACTION_WRITE_JOURNAL = "WRITE_JOURNAL"
 private const val CIHAI_ACTION_READ_BOOK = "READ_BOOK"
 private const val CIHAI_ACTION_MEMORY_REFLECT = "MEMORY_REFLECT"
-
-fun CihaiEntry.toMemoryCandidate(): AffectiveMemoryCandidate {
-    val kindName = when (kind) {
-        CihaiEntryKind.DIARY -> "cihai_diary"
-        CihaiEntryKind.INNER_JOURNAL -> "cihai_inner"
-        CihaiEntryKind.ACTION_LOG -> "cihai_action"
-        CihaiEntryKind.READING_NOTE -> "cihai_reading"
-        CihaiEntryKind.REFLECTION -> "cihai_reflection"
-    }
-    val source = sourceTitle?.takeIf { it.isNotBlank() }?.let { "来源：《$it》\n" }.orEmpty()
-    val feeling = emotion.takeIf { it.isNotBlank() }
-    val fullContent = buildString {
-        append(source)
-        append(content.trim())
-        if (!feeling.isNullOrBlank()) {
-            append("\n当时情绪：")
-            append(feeling)
-        }
-    }.trim()
-    return AffectiveMemoryCandidate(
-        type = kindName,
-        title = title.ifBlank { kind.label },
-        content = fullContent,
-        roleFeeling = feeling,
-        unspokenThought = if (kind == CihaiEntryKind.INNER_JOURNAL || kind == CihaiEntryKind.DIARY) {
-            content.trim()
-        } else {
-            null
-        },
-        relationshipEffect = when (kind) {
-            CihaiEntryKind.DIARY -> "我用日记记下了自己的真实感受、没说出口的想法和之后陪伴用户时应该记得的细节。"
-            CihaiEntryKind.INNER_JOURNAL -> "我在用户沉默时产生了内心判断，并把没说出口的想法沉淀下来。"
-            CihaiEntryKind.ACTION_LOG -> "我记录了自己等待、克制、观察或照看的行动选择。"
-            CihaiEntryKind.READING_NOTE -> "我通过阅读形成了新的理解，可能改变之后陪伴用户的方式。"
-            CihaiEntryKind.REFLECTION -> "我把多次判断后的经验整理成后续可复用的长期记忆。"
-        },
-        importance = when (kind) {
-            CihaiEntryKind.REFLECTION -> 5
-            CihaiEntryKind.READING_NOTE -> 4
-            CihaiEntryKind.DIARY -> 4
-            else -> 3
-        },
-        confidence = 1.0,
-        tags = listOf("辞海", kind.label) + sourceTitle?.takeIf { it.isNotBlank() }.let { listOfNotNull(it) },
-        embeddingText = buildString {
-            append(title)
-            append("\n")
-            append(fullContent)
-            append("\n记忆用途：之后遇到相似沉默、学习、身体状态或关系情境时，我应该参考这次判断。")
-        },
-        people = listOf("用户", "角色"),
-        topics = listOf("活人感", "辞海", kind.label),
-    )
-}
