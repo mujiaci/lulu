@@ -22,7 +22,7 @@ object CompanionChatTurnModelPlanner {
         settings: Settings,
         model: Model,
         providerManager: ProviderManager,
-    ): LuluChatTurnPlan? {
+    ): CompanionChatTurnPlan? {
         val provider = model.findProvider(settings.providers) ?: return null
         val providerImpl = providerManager.getProviderByType(provider)
         val chunk = providerImpl.generateText(
@@ -47,14 +47,14 @@ object CompanionChatTurnModelPlanner {
     fun buildChatTurnPrompt(input: CompanionChatTurnPlanInput): String = buildString {
         val perception = input.perception
         appendLine("你是${perception.assistantName.ifBlank { "当前角色" }}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
-        appendLine("你可以像角色本人一样判断：当前角色现在想先知道什么、要不要主动看手机状态/位置/摄像头/日历/短信/音乐、要不要顺手安排后续主动消息。")
-        appendLine("活人感系统采用：感知世界包-意义评估-动态判断-行动实现-状态生成-辞海记忆架构。")
-        appendLine("情境感知包括当前时间、上下文、考研 App 计划、工具结果、工具状态、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；工具结果包括电量、位置、穿戴、摄像头等所有本地能力。")
+        appendLine("你可以像角色本人一样判断：先读取已经注入的手机状态、位置等被动感知，再决定是否要看摄像头/日历/短信、控制音乐或顺手安排后续主动消息。")
+        appendLine("统一陪伴系统采用：感知世界包-意义评估-动态判断-行动实现-状态生成-正式日记架构。")
+        appendLine("情境感知包括当前时间、上下文、考研 App 计划、被动感知事实、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；不要为重复读取已提供事实而调用工具。")
         appendLine("意义评估只评估重要性、威胁、机会、身体/精神安全、时间压力、成本、收益、不行动后果和资源；它不直接选择行动。")
         appendLine("动态判断负责决定 intention、工具需求、是否行动、行动池选择和下一次感知时间；工具结果如果能同步得到，就补回本轮再决定行动。")
         appendLine("状态生成放在行动后，只生成心情、身体状况、精神状况、关系状态和第一人称没说出口；belief/motive/intention 不作为状态栏字段。")
         appendLine("如果用户不回消息，角色的选项池不是只有发消息：还可以等待、先看感知工具、更新状态、安排下一次判断。静默不产生辞海记录；正式日记只在主动调用 write_lulu_journal 且能写出新内容时保存。")
-        appendLine("工具是角色的本地感知和行动能力；只要角色形成明确意图，就可以主动选择工具、必要时调用正式日记工具、设闹钟、查短信/日历/位置/摄像头等。仍然要贴合人设和上下文，不要为了调用工具而调用。")
+        appendLine("工具是角色的主动行动能力；形成明确意图后可以写正式日记、设闹钟、查短信/日历、看摄像头或控制音乐。仍然要贴合人设和上下文，不要为了调用工具而调用。")
         appendLine("必须读取并服从 <persona>：包括角色语言风格、性格、职责和边界。不要把动作写进聊天正文括号里；如果需要动作/状态方向，放进 expressionGuidance，让 UI 状态栏承接。")
         appendLine("无论是否需要工具，都必须输出 innerThought：第一人称、角色本人本轮没说出口的心里话。不要写分析提纲、工具 JSON、字段名或 Seven-layer trace。")
         appendLine("Expression 只负责表达已决定的行动，不决定政策；expressionAffordances 可从 TEXT, KAOMOJI, STICKER, VOICE, STATUS_BAR, LIGHT_REMINDER, LONG_EXPLANATION, SILENT_RECORD 中选择。")
@@ -65,7 +65,7 @@ object CompanionChatTurnModelPlanner {
         appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 仅为兼容字段，角色形成意图的工具请求都会在回复前尝试执行。")
         appendLine("followUpDelayMinutes 可以是 null；如果当前角色决定稍后主动找用户，填 1 到 1440 的分钟数。")
         appendLine("不要给普通回来、普通闲聊、无风险沉默安排固定 5 分钟 follow-up；只有身体不适、明确提醒/DDL/起床、学习承诺、吃饭睡觉照看这类语义才安排后续主动消息。")
-        appendLine("Living Presence contract: perception packet gathers persona/context/tools/memory/cihai/concerns/status -> appraisal understands meaningToUser and meaningToRole -> judgment decides intention, tool needs, actions, and nextPerceptionAt -> action executes message/tool/schedule/wait; formal diary is written only by write_lulu_journal -> status generates mood/body/mind/relationship/innerThought -> Cihai keeps concern cards and formal tool-written diary entries.")
+        appendLine("Unified companion contract: perception packet gathers persona/context/actions/memory/diary/concerns/status -> appraisal understands meaningToUser and meaningToRole -> judgment decides intention, action needs, and nextPerceptionAt -> action executes message/tool/schedule/wait; formal diary is written only by write_lulu_journal -> status generates mood/body/mind/relationship/innerThought -> Cihai keeps concern cards and formal tool-written diary entries.")
         appendLine("<persona>")
         appendLine(perception.persona.take(2000))
         appendLine("</persona>")
@@ -90,11 +90,11 @@ object CompanionChatTurnModelPlanner {
         appendLine("</conversation>")
     }
 
-    fun parseChatTurnPlan(rawText: String, availableToolNames: Set<String>): LuluChatTurnPlan {
+    fun parseChatTurnPlan(rawText: String, availableToolNames: Set<String>): CompanionChatTurnPlan {
         val jsonText = rawText.extractJsonPayload()
         val obj = runCatching {
             JsonInstant.parseToJsonElement(jsonText) as? JsonObject
-        }.getOrNull() ?: return LuluChatTurnPlan()
+        }.getOrNull() ?: return CompanionChatTurnPlan()
         val requests = (obj["toolRequests"] as? JsonArray)
             ?.mapNotNull { item ->
                 val request = item as? JsonObject ?: return@mapNotNull null
@@ -113,7 +113,7 @@ object CompanionChatTurnModelPlanner {
             ?.distinctBy { it.toolName }
             ?.take(5)
             ?: emptyList()
-        return LuluChatTurnPlan(
+        return CompanionChatTurnPlan(
             toolRequests = requests,
             followUpDelayMinutes = obj["followUpDelayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60),
             followUpReason = obj.string("followUpReason")?.sanitizePlanReason()?.take(180)?.ifBlank { null },
@@ -126,19 +126,19 @@ object CompanionChatTurnModelPlanner {
         )
     }
 
-    private fun parseExpressionAffordances(obj: JsonObject): List<LuluExpressionAffordance> =
+    private fun parseExpressionAffordances(obj: JsonObject): List<CompanionExpressionAffordance> =
         (obj["expressionAffordances"] as? JsonArray)
             ?.mapNotNull { item ->
                 item.jsonPrimitive.contentOrNull
                     ?.trim()
                     ?.uppercase()
-                    ?.let { runCatching { LuluExpressionAffordance.valueOf(it) }.getOrNull() }
+                    ?.let { runCatching { CompanionExpressionAffordance.valueOf(it) }.getOrNull() }
             }
             ?.distinct()
             ?.take(8)
             ?: emptyList()
 
-    private fun parseFollowUps(obj: JsonObject): List<LuluFollowUpPlan> =
+    private fun parseFollowUps(obj: JsonObject): List<CompanionChatFollowUpPlan> =
         (obj["followUps"] as? JsonArray)
             ?.mapNotNull { item ->
                 val plan = item as? JsonObject ?: return@mapNotNull null
@@ -149,7 +149,7 @@ object CompanionChatTurnModelPlanner {
                     ?.take(180)
                     ?.ifBlank { null }
                     ?: return@mapNotNull null
-                LuluFollowUpPlan(
+                CompanionChatFollowUpPlan(
                     delayMinutes = delay,
                     reason = reason,
                     kind = plan.string("kind")?.take(40)?.ifBlank { null },
@@ -183,17 +183,17 @@ data class CompanionChatTurnPlanInput(
     val perception: CompanionPerceptionPacket,
 )
 
-data class LuluChatTurnPlan(
+data class CompanionChatTurnPlan(
     val toolRequests: List<ProactiveToolRequest> = emptyList(),
     val followUpDelayMinutes: Int? = null,
     val followUpReason: String? = null,
-    val followUps: List<LuluFollowUpPlan> = emptyList(),
+    val followUps: List<CompanionChatFollowUpPlan> = emptyList(),
     val expressionGuidance: String? = null,
-    val expressionAffordances: List<LuluExpressionAffordance> = emptyList(),
+    val expressionAffordances: List<CompanionExpressionAffordance> = emptyList(),
     val innerThought: String? = null,
 )
 
-enum class LuluExpressionAffordance {
+enum class CompanionExpressionAffordance {
     TEXT,
     KAOMOJI,
     STICKER,
@@ -204,7 +204,7 @@ enum class LuluExpressionAffordance {
     SILENT_RECORD,
 }
 
-fun LuluChatTurnPlan.shouldScheduleFollowUpForUserTurn(userText: String): Boolean =
+fun CompanionChatTurnPlan.shouldScheduleFollowUpForUserTurn(userText: String): Boolean =
     shouldScheduleFollowUpForUserTurn(
         userText = userText,
         reason = followUpReason,
@@ -229,7 +229,7 @@ fun shouldScheduleFollowUpForUserTurn(
         userText.lowercase().hasAny(FOLLOW_UP_TIME_WORDS)
 }
 
-data class LuluFollowUpPlan(
+data class CompanionChatFollowUpPlan(
     val delayMinutes: Int,
     val reason: String,
     val kind: String? = null,

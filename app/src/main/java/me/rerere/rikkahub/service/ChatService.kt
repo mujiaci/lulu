@@ -1614,7 +1614,7 @@ class ChatService(
         return if (modelPlan != null) {
             ChatTurnPlanResult(plan = modelPlan)
         } else {
-            ChatTurnPlanResult(plan = LuluChatTurnPlan())
+            ChatTurnPlanResult(plan = CompanionChatTurnPlan())
         }
     }
 
@@ -1622,7 +1622,7 @@ class ChatService(
         settings: Settings,
         assistant: Assistant,
         latestUserText: String,
-        plan: LuluChatTurnPlan,
+        plan: CompanionChatTurnPlan,
     ) {
         val delayMinutes = plan.followUpDelayMinutes ?: return
         if (!plan.shouldScheduleFollowUpForUserTurn(latestUserText)) {
@@ -1664,7 +1664,7 @@ class ChatService(
     }.trim()
 
     private data class ChatTurnPlanResult(
-        val plan: LuluChatTurnPlan,
+        val plan: CompanionChatTurnPlan,
     )
 
     private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant, proactiveContext: String): List<UIMessage> {
