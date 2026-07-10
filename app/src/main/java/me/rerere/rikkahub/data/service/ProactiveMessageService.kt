@@ -377,6 +377,29 @@ class ProactiveMessageService : KoinComponent {
             pendingIntent?.let { alarmManager.cancel(it) }
         }
 
+        fun resetAssistantProjection(
+            context: Context,
+            settings: Settings,
+            assistantId: Uuid,
+        ) {
+            val id = assistantId.toString()
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            if (!shouldResetProactiveProjection(prefs.getString(EXTRA_ASSISTANT_ID, null), id)) return
+
+            clearTargetedQueue(context)
+            cancel(context)
+            prefs.edit()
+                .remove(EXTRA_ASSISTANT_ID)
+                .remove("last_triggered_time")
+                .remove("next_trigger_reason")
+                .apply()
+            scheduleNext(
+                context = context,
+                settings = settings,
+                assistantId = assistantId,
+            )
+        }
+
         internal fun popCurrentTargetedAndScheduleNext(
             context: Context,
             setting: ProactiveMessageSetting,
@@ -1902,6 +1925,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
     override fun onBind(intent: Intent?): android.os.IBinder? = null
 }
+
+internal fun shouldResetProactiveProjection(
+    projectedAssistantId: String?,
+    clearedAssistantId: String,
+): Boolean = clearedAssistantId.isNotBlank() && projectedAssistantId == clearedAssistantId
 
 internal fun buildAutonomousPlanPresenceState(
     previous: CompanionState,

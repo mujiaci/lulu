@@ -97,6 +97,8 @@ val appModule = module {
 
     single {
         AssistantInteractionResetService(
+            context = get(),
+            settingsStore = get(),
             conversationRepository = get(),
             memoryRepository = get(),
             memoryBankService = get(),

@@ -138,7 +138,7 @@ internal fun AssistantBasicContent(
         },
         onDismiss = { showClearHistoryDialog = false },
         text = {
-            Text("会不可撤销地清除这个角色的聊天与电话、收藏、长期记忆、辞海记录、关系、挂心、承诺和旧状态。人设、头像、模型设置、世界书及考研计划会保留。")
+            Text("会不可撤销地清除这个角色的聊天与电话、收藏、长期记忆、辞海日记、关系、挂心、承诺和未触发的主动提醒。人设、头像、模型设置、世界书及考研计划会保留。")
         },
     )
 
