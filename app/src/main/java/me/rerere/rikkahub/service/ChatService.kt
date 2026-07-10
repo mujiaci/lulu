@@ -1177,6 +1177,7 @@ class ChatService(
             )
             val scheduledPlan = scheduledPlans.firstOrNull()
             var unifiedState = companionRuntime.snapshot(assistant.id.toString()).state
+            // ChatService owns turn-state persistence; UI observers must not write a second snapshot.
             settingsStore.update { currentSettings ->
                 currentSettings.recordLuluPresenceTurn(
                     assistantId = assistant.id,

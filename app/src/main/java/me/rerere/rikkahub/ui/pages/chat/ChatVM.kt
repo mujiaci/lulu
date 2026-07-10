@@ -34,11 +34,6 @@ import me.rerere.rikkahub.data.model.Avatar
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.MessageNode
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
-import me.rerere.rikkahub.data.model.appendLuluState
-import me.rerere.rikkahub.data.model.appendLuluThoughts
-import me.rerere.rikkahub.data.model.buildLuluStateFromTurn
-import me.rerere.rikkahub.data.model.buildLuluThoughtFromTurn
-import me.rerere.rikkahub.data.model.currentLuluState
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.service.ChatError
@@ -90,15 +85,6 @@ class ChatVM(
             chatService.initializeConversation(_conversationId)
         }
 
-        // 记住对话ID, 方便下次启动恢复
-        viewModelScope.launch {
-            selectGenerationDoneFlowForInit(chatService.generationDoneFlow).collect { conversationId ->
-                if (conversationId == _conversationId) {
-                    recordLuluStateSnapshot()
-                }
-            }
-        }
-
         context.writeStringPreference("lastConversationId", _conversationId.toString())
     }
 
@@ -134,62 +120,6 @@ class ChatVM(
 
     // MCP管理器
     val mcpManager = chatService.mcpManager
-
-    // 更新设置
-    private suspend fun recordLuluStateSnapshot() {
-        val currentConversation = conversation.value
-        val latestUserMessage = currentConversation.currentMessages
-            .lastOrNull { message -> message.role == MessageRole.USER }
-            ?: return
-        val latestAssistantMessage = currentConversation.currentMessages
-            .lastOrNull { message -> message.role == MessageRole.ASSISTANT }
-            ?: return
-        val assistantText = latestAssistantMessage.toText().trim()
-        if (assistantText.isBlank()) return
-
-        settingsStore.update { settings ->
-            val assistantId = currentConversation.assistantId
-            val assistant = settings.assistants.firstOrNull { it.id == assistantId }
-            val userText = latestUserMessage.toText().trim()
-            val state = buildLuluStateFromTurn(
-                assistantId = assistantId,
-                previous = settings.luluStates.currentLuluState(assistantId),
-                userText = userText,
-                assistantText = assistantText,
-                assistantName = assistant?.name.orEmpty(),
-                assistantPersona = assistant?.toLuluStatePersona().orEmpty(),
-            )
-            val newThought = buildLuluThoughtFromTurn(
-                assistantId = assistantId,
-                userText = userText,
-                state = state,
-            )
-            val validAssistantIds = settings.assistants.map { it.id }.toSet()
-            settings.copy(
-                luluStates = settings.luluStates.appendLuluState(state),
-                luluThoughts = settings.luluThoughts.appendLuluThoughts(
-                    thoughts = listOfNotNull(newThought),
-                    validAssistantIds = validAssistantIds,
-                ),
-            )
-        }
-    }
-
-    private fun Assistant.toLuluStatePersona(): String = buildString {
-        appendLine("角色名：${name.ifBlank { "当前角色" }}")
-        if (systemPrompt.isNotBlank()) {
-            appendLine("系统人设：")
-            appendLine(systemPrompt.take(1600))
-        }
-        if (appearancePrompt.isNotBlank()) {
-            appendLine("外貌设定：")
-            appendLine(appearancePrompt.take(500))
-        }
-        if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
-            appendLine("语言/消息模板：")
-            appendLine(messageTemplate.take(400))
-        }
-    }.trim()
 
     fun updateSettings(newSettings: Settings) {
         viewModelScope.launch {
@@ -417,5 +347,3 @@ class ChatVM(
 
 internal fun canRequestManualReply(conversation: Conversation): Boolean =
     conversation.currentMessages.lastOrNull()?.role == MessageRole.USER
-
-internal fun selectGenerationDoneFlowForInit(flow: SharedFlow<Uuid>): SharedFlow<Uuid> = flow
