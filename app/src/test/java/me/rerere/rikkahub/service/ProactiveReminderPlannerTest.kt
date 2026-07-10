@@ -69,6 +69,50 @@ class ProactiveReminderPlannerTest {
     }
 
     @Test
+    fun `tomorrow half past seven wake request creates a schedule reminder`() {
+        val requestTime = LocalDateTime.of(2026, 7, 10, 1, 0)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "今晚哄我睡觉，但我明天早上七点半一定要起床",
+            assistantText = "我记住了，先陪你睡。",
+            nowMillis = requestTime,
+            zoneId = zone,
+        )
+
+        assertNotNull(plan)
+        assertEquals(ProactiveReminderKind.SCHEDULE, plan!!.kind)
+        assertEquals(
+            LocalDateTime.of(2026, 7, 11, 7, 30),
+            LocalDateTime.ofInstant(Instant.ofEpochMilli(plan.triggerAtMillis), zone),
+        )
+        assertTrue(plan.actionHints.any { it.toolName == "set_alarm" })
+    }
+
+    @Test
+    fun `evening clock uses 24 hour time`() {
+        val requestTime = LocalDateTime.of(2026, 7, 10, 12, 0)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "今晚七点半叫我去开会",
+            assistantText = "好。",
+            nowMillis = requestTime,
+            zoneId = zone,
+        )
+
+        assertNotNull(plan)
+        assertEquals(
+            LocalDateTime.of(2026, 7, 10, 19, 30),
+            LocalDateTime.ofInstant(Instant.ofEpochMilli(plan!!.triggerAtMillis), zone),
+        )
+    }
+
+    @Test
     fun `general reminder carries journal hint without system blocking tools`() {
         val plan = ProactiveReminderPlanner.plan(
             userText = "十五分钟后提醒我把今天这件事记到日志里",

@@ -84,6 +84,7 @@ object ProactiveReminderPlanner {
     ): ProactiveReminderPlan? {
         val combined = "$userText\n$assistantText".lowercase()
         val kind = when {
+            combined.containsAny(WAKE_WORDS) -> ProactiveReminderKind.SCHEDULE
             combined.containsAny(SLEEP_WORDS) -> ProactiveReminderKind.SLEEP
             combined.containsAny(SCHEDULE_WORDS) -> ProactiveReminderKind.SCHEDULE
             combined.containsAny(MEAL_WORDS) -> ProactiveReminderKind.MEAL
@@ -109,23 +110,29 @@ object ProactiveReminderPlanner {
             kind = kind,
             reason = when (kind) {
                 ProactiveReminderKind.SLEEP -> "刚才聊到了睡觉或休息，当前角色决定到点重新确认。"
-                ProactiveReminderKind.SCHEDULE -> "刚才聊到了课程或日程，当前角色决定到点重新确认。"
+                ProactiveReminderKind.SCHEDULE -> if (combined.containsAny(WAKE_WORDS)) {
+                    "刚才明确提到了起床或叫醒目标，当前角色会把这个时间点放在心上。"
+                } else {
+                    "刚才聊到了课程或日程，当前角色决定到点重新确认。"
+                }
                 ProactiveReminderKind.MEAL -> "刚才聊到了吃饭，当前角色决定稍后重新确认。"
                 ProactiveReminderKind.STUDY -> "刚才聊到了学习或任务，当前角色决定稍后重新确认。"
                 ProactiveReminderKind.GENERAL -> "刚才明确提到了后续提醒，当前角色决定到点重新确认。"
             },
             userText = userText.take(160),
-            preferredToolNames = buildPreferredToolNames(kind),
+            preferredToolNames = buildPreferredToolNames(kind, combined),
             actionHints = buildActionHints(kind, combined, userText.lowercase()),
         )
     }
 
-    private fun buildPreferredToolNames(kind: ProactiveReminderKind): List<String> = when (kind) {
-        ProactiveReminderKind.SLEEP -> listOf("get_gadgetbridge_data", "get_app_usage", "get_battery_info")
-        ProactiveReminderKind.SCHEDULE -> listOf("get_location", "get_app_usage", "calendar_tool")
-        ProactiveReminderKind.MEAL -> listOf("get_app_usage", "get_battery_info", "get_location")
-        ProactiveReminderKind.STUDY -> listOf("get_app_usage", "control_music", "get_battery_info")
-        ProactiveReminderKind.GENERAL -> listOf("get_app_usage", "get_battery_info")
+    private fun buildPreferredToolNames(kind: ProactiveReminderKind, text: String): List<String> = when {
+        kind == ProactiveReminderKind.SCHEDULE && text.containsAny(WAKE_WORDS) ->
+            listOf("get_gadgetbridge_data", "get_app_usage", "get_battery_info")
+        kind == ProactiveReminderKind.SLEEP -> listOf("get_gadgetbridge_data", "get_app_usage", "get_battery_info")
+        kind == ProactiveReminderKind.SCHEDULE -> listOf("get_location", "get_app_usage", "calendar_tool")
+        kind == ProactiveReminderKind.MEAL -> listOf("get_app_usage", "get_battery_info", "get_location")
+        kind == ProactiveReminderKind.STUDY -> listOf("get_app_usage", "control_music", "get_battery_info")
+        else -> listOf("get_app_usage", "get_battery_info")
     }
 
     private fun buildActionHints(
@@ -136,17 +143,23 @@ object ProactiveReminderPlanner {
         when (kind) {
             ProactiveReminderKind.SLEEP -> Unit
             ProactiveReminderKind.SCHEDULE -> {
-                add(
-                    ProactiveActionHint(
-                        toolName = "calendar_tool",
-                        reason = "用户提到了课程/日程，到点前可以读取或写入日历来确认安排。",
-                        argumentsJson = """{"action":"read","limit":5}""",
+                if (!text.containsAny(WAKE_WORDS)) {
+                    add(
+                        ProactiveActionHint(
+                            toolName = "calendar_tool",
+                            reason = "用户提到了课程/日程，到点前可以读取或写入日历来确认安排。",
+                            argumentsJson = """{"action":"read","limit":5}""",
+                        )
                     )
-                )
+                }
                 add(
                     ProactiveActionHint(
                         toolName = "set_alarm",
-                        reason = "用户提到了上课/日程提醒，意图明确时可以主动设置闹钟。",
+                        reason = if (text.containsAny(WAKE_WORDS)) {
+                            "用户明确提到了起床或叫醒目标，可以根据具体时间主动设置闹钟。"
+                        } else {
+                            "用户提到了上课/日程提醒，意图明确时可以主动设置闹钟。"
+                        },
                     )
                 )
             }
@@ -184,24 +197,51 @@ object ProactiveReminderPlanner {
     }
 
     private fun findExplicitClockTime(text: String, nowMillis: Long, zoneId: ZoneId): Long? {
-        val match = Regex("""([零〇一二两三四五六七八九十\d]{1,3})\s*[点:：]\s*([零〇一二两三四五六七八九十\d]{1,3})?""")
+        val match = Regex(
+            """(?:(今天|今日|今晚|今早|明天|明日|明早|明晚|后天)\s*)?""" +
+                """(?:(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上)\s*)?""" +
+                """([零〇一二两三四五六七八九十\d]{1,3})\s*[点时:：]\s*""" +
+                """(半|[零〇一二两三四五六七八九十\d]{1,3})?\s*分?""",
+        )
             .find(text)
             ?: return null
-        val hour = parseChineseNumber(match.groupValues[1]) ?: return null
-        val minute = match.groupValues.getOrNull(2)
-            ?.takeIf { it.isNotBlank() }
-            ?.let { parseChineseNumber(it) }
-            ?: 0
+        val dateWord = match.groupValues[1]
+        val periodWord = match.groupValues[2]
+        val rawHour = parseChineseNumber(match.groupValues[3]) ?: return null
+        val minuteWord = match.groupValues[4]
+        val minute = when (minuteWord) {
+            "半" -> 30
+            "" -> 0
+            else -> parseChineseNumber(minuteWord) ?: return null
+        }
+        val effectivePeriod = periodWord.ifBlank {
+            when (dateWord) {
+                "今晚", "明晚" -> "晚上"
+                "今早", "明早" -> "早上"
+                else -> ""
+            }
+        }
+        val hour = when {
+            effectivePeriod in EVENING_PERIODS && rawHour in 1..11 -> rawHour + 12
+            effectivePeriod == "中午" && rawHour in 1..10 -> rawHour + 12
+            effectivePeriod == "凌晨" && rawHour == 12 -> 0
+            else -> rawHour
+        }
         if (hour !in 0..23 || minute !in 0..59) return null
 
         val now = LocalDateTime.ofInstant(Instant.ofEpochMilli(nowMillis), zoneId)
         val targetTime = LocalTime.of(hour, minute)
-        val targetDate = if (targetTime.isAfter(now.toLocalTime())) {
-            now.toLocalDate()
-        } else {
-            now.toLocalDate().plusDays(1)
+        val explicitDayOffset = when (dateWord) {
+            "明天", "明日", "明早", "明晚" -> 1L
+            "后天" -> 2L
+            "今天", "今日", "今晚", "今早" -> 0L
+            else -> null
         }
-        return LocalDateTime.of(targetDate, targetTime)
+        val targetDate = explicitDayOffset?.let { now.toLocalDate().plusDays(it) }
+            ?: if (targetTime.isAfter(now.toLocalTime())) now.toLocalDate() else now.toLocalDate().plusDays(1)
+        val target = LocalDateTime.of(targetDate, targetTime)
+        if (explicitDayOffset == 0L && !target.isAfter(now)) return null
+        return target
             .atZone(zoneId)
             .toInstant()
             .toEpochMilli()
@@ -251,7 +291,7 @@ object ProactiveReminderPlanner {
     )
 
     private val SCHEDULE_WORDS = setOf(
-        "上课", "有课", "课程", "下课", "会议", "开会", "自习", "补课"
+        "上课", "有课", "课程", "下课", "会议", "开会", "自习", "补课", "起床", "叫醒", "闹钟"
     )
 
     private val MEAL_WORDS = setOf(
@@ -269,6 +309,12 @@ object ProactiveReminderPlanner {
     private val ALARM_WORDS = setOf(
         "闹钟", "叫我", "提醒我", "起床", "几点叫", "记得叫"
     )
+
+    private val WAKE_WORDS = setOf(
+        "起床", "叫醒", "闹钟", "几点叫", "记得叫"
+    )
+
+    private val EVENING_PERIODS = setOf("下午", "傍晚", "晚上")
 
     private val JOURNAL_WORDS = setOf(
         "日志", "日记", "记录下来", "记下来", "写下来", "记进日志", "存一下", "留档"
