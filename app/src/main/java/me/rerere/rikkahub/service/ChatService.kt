@@ -985,7 +985,6 @@ class ChatService(
             )
             val scheduledPlans = buildProactiveReminderPlansFromTurn(
                 plan = intentDecision,
-                assistantName = assistant.name,
                 userText = lastUserText,
                 assistantText = lastAssistantText,
             )
@@ -1000,15 +999,6 @@ class ChatService(
                 assistantId = assistant.id.toString(),
                 userText = lastUserText,
                 nowMillis = nowMillis,
-            )
-            livingPresenceStore.mergeEvent(
-                LivingPresenceEventExtractor.extract(
-                    assistantId = assistant.id.toString(),
-                    assistantName = assistant.name,
-                    userText = lastUserText,
-                    assistantText = lastAssistantText,
-                    nowMillis = nowMillis,
-                )
             )
             val unifiedState = buildCompanionStateFromTurn(
                 previous = companionRuntime.snapshot(assistant.id.toString()).state,
@@ -1139,7 +1129,6 @@ class ChatService(
 
     private fun buildProactiveReminderPlansFromTurn(
         plan: CompanionIntentDecision,
-        assistantName: String,
         userText: String,
         assistantText: String,
     ): List<ProactiveReminderPlan> {
@@ -1168,19 +1157,7 @@ class ChatService(
                 assistantText = assistantText,
             )
         }
-        val rollingJudgments = if (plan.fromModel || fromFollowUps.isNotEmpty() || fromIntent != null || fallback != null) {
-            emptyList()
-        } else {
-            LivingPresencePlanner.planRollingJudgments(
-                input = LivingPresenceInput(
-                    assistantName = assistantName,
-                    userText = userText,
-                    assistantText = assistantText,
-                    preferredToolNames = plan.toolNames,
-                )
-            )
-        }
-        return (fromFollowUps + listOfNotNull(fromIntent ?: fallback) + rollingJudgments)
+        return (fromFollowUps + listOfNotNull(fromIntent ?: fallback))
             .distinctBy { it.triggerAtMillis to it.reason }
             .sortedBy { it.triggerAtMillis }
             .take(5)

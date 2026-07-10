@@ -16,13 +16,11 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.AppScope
-import me.rerere.rikkahub.service.LivingBeliefStore
 import me.rerere.rikkahub.service.LivingIntent
 import me.rerere.rikkahub.service.LivingIntentStatus
 import me.rerere.rikkahub.service.LivingIntentReturnClassifier
 import me.rerere.rikkahub.service.LivingJudgmentTrace
 import me.rerere.rikkahub.service.LivingObservation
-import me.rerere.rikkahub.service.LivingPresenceEvent
 import me.rerere.rikkahub.service.RollingJudgmentDecision
 import me.rerere.rikkahub.service.RollingJudgmentLoop
 import me.rerere.rikkahub.utils.JsonInstant
@@ -61,18 +59,6 @@ class LivingPresenceStore(
                     .getOrDefault(LivingPresenceState())
             } ?: LivingPresenceState()
             prefs[stateKey] = json.encodeToString(transform(current).normalized())
-        }
-    }
-
-    suspend fun mergeEvent(event: LivingPresenceEvent, nowMillis: Long = System.currentTimeMillis()) {
-        update { current ->
-            current.copy(
-                activeIntents = LivingBeliefStore.mergeEvent(
-                    existingIntents = current.activeIntents,
-                    event = event,
-                    nowMillis = nowMillis,
-                )
-            )
         }
     }
 

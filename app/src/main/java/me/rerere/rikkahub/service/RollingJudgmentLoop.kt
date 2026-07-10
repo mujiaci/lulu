@@ -275,8 +275,8 @@ object RollingJudgmentLoop {
             appraisal = appraisalFor(kind),
             consolidation = consolidationFor(kind),
             subjectKey = subjectKey?.takeIf { it.isNotBlank() }
-                ?: buildLivingPresenceSubjectKey(
-                    kind = kind.toEventKind(),
+                ?: buildLivingIntentSubjectKey(
+                    kind = kind,
                     userText = userText,
                     targetAtMillis = targetAtMillis,
                     deadlineAtMillis = deadlineAtMillis,
@@ -921,17 +921,29 @@ object RollingJudgmentLoop {
 
     private fun String.containsAny(words: Set<String>): Boolean = words.any { contains(it) }
 
-    private fun LivingIntentKind.toEventKind(): LivingPresenceEventKind = when (this) {
-        LivingIntentKind.HEALTH_SAFETY -> LivingPresenceEventKind.HEALTH_SAFETY
-        LivingIntentKind.ORDINARY_SILENCE -> LivingPresenceEventKind.ORDINARY_SILENCE
-        LivingIntentKind.STUDY_FOCUS -> LivingPresenceEventKind.STUDY_FOCUS
-        LivingIntentKind.DEADLINE -> LivingPresenceEventKind.DEADLINE
-        LivingIntentKind.WAKE_UP -> LivingPresenceEventKind.WAKE_UP
-    }
-
     private const val MINUTE_MILLIS = 60_000L
     private val HEALTH_WORDS = setOf("肚子疼", "肚子痛", "胃疼", "胃痛", "难受", "不舒服", "头疼", "头痛", "疼", "痛")
     private val STUDY_WORDS = setOf("学习", "复习", "背书", "刷题", "写作业", "自习", "看书", "专业课", "考研")
     private val DEADLINE_WORDS = setOf("ddl", "截止", "交", "提交", "今晚", "今天之前", "点前", "之前完成")
     private val WAKE_WORDS = setOf("起床", "叫醒", "闹钟", "醒来")
+}
+
+private fun buildLivingIntentSubjectKey(
+    kind: LivingIntentKind,
+    userText: String,
+    targetAtMillis: Long?,
+    deadlineAtMillis: Long?,
+): String = when {
+    kind == LivingIntentKind.WAKE_UP && targetAtMillis != null -> "wake:$targetAtMillis"
+    kind == LivingIntentKind.DEADLINE && deadlineAtMillis != null -> "deadline:$deadlineAtMillis"
+    kind == LivingIntentKind.ORDINARY_SILENCE -> "ordinary-silence"
+    else -> {
+        val subject = userText
+            .trim()
+            .lowercase()
+            .replace(Regex("\\s+"), " ")
+            .take(96)
+            .ifBlank { "general" }
+        "${kind.name.lowercase()}:$subject"
+    }
 }
