@@ -82,6 +82,7 @@ private fun conciseToolDescription(tool: Tool): String = when (tool.name.removeP
     "control_music" -> "Control device music playback."
     "eval_javascript" -> "Run a small JavaScript calculation."
     "explore_nearby" -> "Search nearby places when local surroundings matter."
+    "favorite_user_message" -> "Favorite the current user message when the character genuinely wants to keep it."
     "memory_tool" -> "Read or update explicit assistant memory records."
     "read_sms" -> "Read device SMS when message content is explicitly relevant."
     "scrape_web" -> "Read the content of a web page."

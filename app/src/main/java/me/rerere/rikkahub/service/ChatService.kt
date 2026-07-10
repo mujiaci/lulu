@@ -129,6 +129,8 @@ import me.rerere.rikkahub.data.model.luluStateHistory
 import me.rerere.rikkahub.data.model.replaceRegexes
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
+import me.rerere.rikkahub.data.repository.FavoriteRepository
+import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
@@ -271,6 +273,7 @@ class ChatService(
     private val appScope: AppScope,
     private val settingsStore: SettingsStore,
     private val conversationRepo: ConversationRepository,
+    private val favoriteRepository: FavoriteRepository,
     private val memoryBankService: MemoryBankService,
     private val generationHandler: GenerationHandler,
     private val templateTransformer: TemplateTransformer,
@@ -658,7 +661,7 @@ class ChatService(
             role = MessageRole.USER,
             parts = processedContent,
         )
-        val allTools = buildAvailableTools(settings, assistant)
+        val allTools = buildAvailableTools(settings, assistant, conversationId)
             .deduplicateByToolName()
             .selectRelevantToolsForPrompt(hiddenMessages)
         val availableTools = allTools
@@ -901,7 +904,7 @@ class ChatService(
             // check invalid messages
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
-            val allTools = buildAvailableTools(settings, assistant)
+            val allTools = buildAvailableTools(settings, assistant, conversationId)
                 .deduplicateByToolName()
                 .selectRelevantToolsForPrompt(conversation.currentMessages)
             val availableTools = allTools
@@ -1227,7 +1230,7 @@ class ChatService(
         assistant: Assistant,
         finalConversation: Conversation,
     ): CompanionIntentDecision {
-        val availableToolNames = buildAvailableTools(settings, assistant)
+        val availableToolNames = buildAvailableTools(settings, assistant, finalConversation.id)
             .activeModelTools()
             .map { it.name }
             .toSet()
@@ -1441,8 +1444,13 @@ class ChatService(
         )
     }
 
-    private fun buildAvailableTools(settings: Settings, assistant: Assistant): List<Tool> = buildList {
+    private fun buildAvailableTools(
+        settings: Settings,
+        assistant: Assistant,
+        conversationId: Uuid? = null,
+    ): List<Tool> = buildList {
         add(createTodayStudyPlanTool())
+        conversationId?.let { add(createFavoriteCurrentUserMessageTool(it)) }
         if (settings.enableWebSearch) {
             addAll(createSearchTools(settings))
         }
@@ -1482,6 +1490,26 @@ class ChatService(
 
         addAll(pluginToolProvider.getTools())
     }
+
+    private fun createFavoriteCurrentUserMessageTool(conversationId: Uuid): Tool = Tool(
+        name = "favorite_user_message",
+        description = "Favorite the current user's message only when the character genuinely wants to keep it as something precious or personally meaningful.",
+        execute = {
+            val conversation = conversationRepo.getConversationById(conversationId)
+                ?: error("Conversation not found")
+            val node = conversation.messageNodes.lastOrNull { it.currentMessage.role == MessageRole.USER }
+                ?: error("No user message to favorite")
+            favoriteRepository.addNodeFavorite(
+                NodeFavoriteTarget(
+                    conversationId = conversation.id,
+                    conversationTitle = conversation.title,
+                    nodeId = node.id,
+                    node = node,
+                )
+            )
+            listOf(UIMessagePart.Text("""{"success":true,"message":"Current user message favorited"}"""))
+        },
+    )
 
     private suspend fun collectProactiveToolContext(
         conversationId: Uuid,

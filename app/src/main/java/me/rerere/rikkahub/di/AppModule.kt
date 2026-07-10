@@ -118,6 +118,7 @@ val appModule = module {
             appScope = get(),
             settingsStore = get(),
             conversationRepo = get(),
+            favoriteRepository = get(),
             memoryBankService = get(),
             generationHandler = get(),
             templateTransformer = get(),
