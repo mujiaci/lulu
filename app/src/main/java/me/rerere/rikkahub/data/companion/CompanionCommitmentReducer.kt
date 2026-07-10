@@ -103,7 +103,19 @@ object CompanionCommitmentReducer {
             toolName = actionPlan.toolName?.trim()?.takeIf(String::isNotBlank),
             argumentsJson = actionPlan.argumentsJson.trim().ifBlank { "{}" },
             userFacingSummary = actionPlan.userFacingSummary.trim(),
+            contextText = actionPlan.contextText.trim(),
+            category = actionPlan.category.trim(),
+            preferredToolNames = actionPlan.preferredToolNames
+                .map { it.trim() }
+                .filter(String::isNotBlank)
+                .distinct()
+                .take(10),
         ),
+        lastActionResult = lastActionResult?.copy(
+            summary = lastActionResult.summary.trim().take(500),
+            outputReference = lastActionResult.outputReference?.trim()?.takeIf(String::isNotBlank),
+        ),
+        attemptCount = attemptCount.coerceAtLeast(0),
     )
 
     private fun CompanionCommitmentStatus.allowedNextStatuses(): Set<CompanionCommitmentStatus> = when (this) {

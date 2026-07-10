@@ -120,6 +120,8 @@ data class CompanionCommitment(
     val updatedAt: Long = createdAt,
     val resolvedAt: Long? = null,
     val statusReason: String? = null,
+    val lastActionResult: CompanionActionResult? = null,
+    val attemptCount: Int = 0,
 )
 
 @Serializable
@@ -141,6 +143,17 @@ data class CompanionActionPlan(
     val toolName: String? = null,
     val argumentsJson: String = "{}",
     val userFacingSummary: String = "",
+    val contextText: String = "",
+    val category: String = "",
+    val preferredToolNames: List<String> = emptyList(),
+)
+
+@Serializable
+data class CompanionActionResult(
+    val success: Boolean,
+    val summary: String,
+    val completedAt: Long,
+    val outputReference: String? = null,
 )
 
 @Serializable
