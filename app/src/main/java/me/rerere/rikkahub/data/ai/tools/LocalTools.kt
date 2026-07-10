@@ -346,7 +346,7 @@ class LocalTools(private val context: Context) {
                 Use when the character wants to record a first-person diary about real feelings, private thoughts, and what was not said aloud.
                 This is the only path that saves a formal Lulu diary entry; background perception PASS/WAIT should not use it just to record silence.
                 Before calling, compare with the recent diary/inner-journal context available in the prompt, especially the latest 3 entries, and only write if this turn adds new perception, a new change, or a new judgment.
-                The content must be 100-500 Chinese characters, in character, first person, and grounded in the current context.
+                Write in character and first person. Let the length follow the real thought: do not pad, summarize mechanically, or force a fixed word count.
                 Do not write detached third-person notes, field labels, or internal trace dumps.
             """.trimIndent().replace("\n", " "),
             parameters = {

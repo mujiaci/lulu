@@ -251,6 +251,22 @@ class ExamStudyPlanTest {
     }
 
     @Test
+    fun julyNineBacklogIsRebalancedAcrossThreeDaysAndNextWeek() {
+        val july10 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 10))!!.tasks.joinToString("\n") { it.title }
+        val july11 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 11))!!.tasks.joinToString("\n") { it.title }
+        val july12 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 12))!!.tasks.joinToString("\n") { it.title }
+        val july13 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))!!.tasks.joinToString("\n") { it.title }
+
+        assertTrue(july10.contains("法理第 1-3 章欠账"))
+        assertTrue(july10.contains("刑法第 1 章框架图欠账"))
+        assertTrue(july11.contains("法理第 1-3 章欠账"))
+        assertTrue(july11.contains("合成完整一张"))
+        assertTrue(july12.contains("欠账验收"))
+        assertTrue(july12.contains("下周回收清单"))
+        assertTrue(july13.contains("残留点"))
+    }
+
+    @Test
     fun movementPlanUsesMusicBasedIndoorOptionsForEnergyRecovery() {
         val habit = ExamStudyPlan.studyHabitReference
         val julyMovement = listOf(
