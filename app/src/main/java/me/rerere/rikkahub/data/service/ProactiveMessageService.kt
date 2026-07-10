@@ -102,7 +102,6 @@ import me.rerere.rikkahub.data.model.LuluThoughtCategory
 import me.rerere.rikkahub.data.model.appendLuluState
 import me.rerere.rikkahub.data.model.currentProjectedLuluState
 import me.rerere.rikkahub.data.model.luluStateHistory
-import me.rerere.rikkahub.data.model.thoughtHistory
 import me.rerere.rikkahub.data.model.toMessageNode
 import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.study.ExamStudyPlan
@@ -247,22 +246,20 @@ class ProactiveMessageService : KoinComponent {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val lastTriggeredTime = prefs.getLong("last_triggered_time", 0L)
             val activeTargetedTrigger = prefs.getLong(KEY_TARGETED_TRIGGER_TIME, 0L)
-            val pulseInput = LuluAutonomousPulseInput(
+            val companionRuntime = org.koin.core.context.GlobalContext.get().get<CompanionRuntime>()
+            val pulseInput = CompanionAutonomousPulseInput(
                 setting = setting,
-                state = settings.luluStates.currentProjectedLuluState(assistant.id, nowMillis),
+                snapshot = companionRuntime.snapshot(assistant.id.toString()),
                 minutesSinceLastChat = minutesSinceLastChat
                     ?: lastTriggeredTime
                         .takeIf { it > 0L }
                         ?.let { ((nowMillis - it) / 60_000L).coerceAtLeast(0L) }
                     ?: Long.MAX_VALUE,
-                pendingThoughtCount = settings.luluThoughts
-                    .thoughtHistory(assistant.id, nowMillis)
-                    .count { !it.expressed },
                 activeTargetedTriggerMillis = activeTargetedTrigger,
                 nowMillis = nowMillis,
             )
-            val pulsePlan = LuluAutonomousPulsePlanner.planNext(pulseInput)
-            val triggerTime = LuluAutonomousPulsePlanner.triggerTimeMillis(pulseInput, pulsePlan)
+            val pulsePlan = CompanionAutonomousPulsePlanner.planNext(pulseInput)
+            val triggerTime = CompanionAutonomousPulsePlanner.triggerTimeMillis(pulseInput, pulsePlan)
             scheduleAt(context, setting, triggerTime, pulsePlan.reason)
             ProactiveMessageWorker.scheduleNext(context, setting, pulsePlan.delayMinutes)
         }
