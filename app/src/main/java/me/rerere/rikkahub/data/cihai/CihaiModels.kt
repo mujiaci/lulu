@@ -10,7 +10,30 @@ data class CihaiState(
     val selectedAssistantId: String = "",
     val entries: List<CihaiEntry> = emptyList(),
     val books: List<CihaiBook> = emptyList(),
+    val memoryQueue: List<CihaiMemoryQueueItem> = emptyList(),
 )
+
+@Serializable
+data class CihaiMemoryQueueItem(
+    val entryId: String,
+    val assistantId: String,
+    val enqueuedAt: Long,
+    val attemptCount: Int = 0,
+    val nextAttemptAt: Long = enqueuedAt,
+    val lastError: String? = null,
+)
+
+@Serializable
+enum class CihaiMemoryDisposition {
+    @SerialName("pending")
+    PENDING,
+
+    @SerialName("saved")
+    SAVED,
+
+    @SerialName("cihai_only")
+    CIHAI_ONLY,
+}
 
 @Serializable
 data class CihaiMemoryPolicy(
@@ -49,8 +72,12 @@ data class CihaiEntry(
     val sourceTitle: String? = null,
     val sourceExcerpt: String? = null,
     val createdAt: Long = System.currentTimeMillis(),
+    val memoryDisposition: CihaiMemoryDisposition = CihaiMemoryDisposition.CIHAI_ONLY,
     val memorySaved: Boolean = false,
 ) {
+    val resolvedMemoryDisposition: CihaiMemoryDisposition
+        get() = if (memorySaved) CihaiMemoryDisposition.SAVED else memoryDisposition
+
     companion object {
         fun fromSilentJudgment(
             assistantId: String,
