@@ -20,6 +20,18 @@ class ExamStudyPlanTest {
     }
 
     @Test
+    fun currentMilestoneMovesFromCourseDeadlinesToScoreGates() {
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 7, 12)).contains("7 月 31 日"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 8, 10)).contains("8 月 20 日"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 8, 25)).contains("8 月 31 日"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 9, 10)).contains("9 月 14 日"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 9, 20)).contains("100-105 分"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 10, 20)).contains("110-115 分"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 11, 20)).contains("118-122 分"))
+        assertTrue(ExamStudyPlan.currentMilestone(LocalDate.of(2026, 12, 10)).contains("总分 385"))
+    }
+
+    @Test
     fun sichuanUniversityTargetUsesASafetyMarginInsteadOfTheHistoricalMinimum() {
         assertEquals(385, ExamStudyPlan.scuSafeTargetScore)
         assertEquals(70, ExamStudyPlan.politicsTargetScore)

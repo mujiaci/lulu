@@ -618,6 +618,17 @@ object ExamStudyPlan {
     fun daysLeft(date: LocalDate = LocalDate.now()): Long =
         ChronoUnit.DAYS.between(date, examDate).coerceAtLeast(0)
 
+    fun currentMilestone(date: LocalDate = LocalDate.now()): String = when {
+        date <= LocalDate.of(2026, 7, 31) -> "当前硬截止：7 月 31 日前完成刑法整本闭环"
+        date <= LocalDate.of(2026, 8, 20) -> "当前硬截止：8 月 20 日前完成民法整本闭环"
+        date <= LocalDate.of(2026, 8, 31) -> "当前硬截止：8 月 31 日前完成宪法整本闭环"
+        date <= LocalDate.of(2026, 9, 14) -> "当前硬截止：9 月 14 日前完成法制史和全部常规新课"
+        date <= LocalDate.of(2026, 9, 30) -> "当前分数关：9 月末两张专业课诊断卷各 100-105 分"
+        date <= LocalDate.of(2026, 10, 31) -> "当前分数关：10 月末两张专业课限时卷各 110-115 分"
+        date <= LocalDate.of(2026, 11, 30) -> "当前分数关：11 月末专业课各 118-122 分，总分进入 375 区间"
+        else -> "最终目标：总分 385，专业基础和专业综合各稳定在 120 分左右"
+    }
+
     private fun daily(date: String, title: String, vararg tasks: String): DailyStudyPlan {
         val normalizedTasks = tasks
             .map(::normalizeTaskTitle)

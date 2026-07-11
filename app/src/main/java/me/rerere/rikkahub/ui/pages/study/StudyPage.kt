@@ -672,7 +672,8 @@ private fun StudyHero(
     onOpenLevel: () -> Unit,
     onSelectCompanion: (Assistant) -> Unit,
 ) {
-    val daysLeft = remember { ExamStudyPlan.daysLeft() }
+    val daysLeft = ExamStudyPlan.daysLeft()
+    val currentMilestone = ExamStudyPlan.currentMilestone()
     val studyTimeOverview = StudyRules.studyTimeOverview(state)
     val professionalTargetScore =
         ExamStudyPlan.professionalFoundationTargetScore + ExamStudyPlan.professionalComprehensiveTargetScore
@@ -718,6 +719,12 @@ private fun StudyHero(
                         Modifier.weight(1f),
                     )
                 }
+                Text(
+                    text = currentMilestone,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     HeroMetric(
                         "今日学习",
