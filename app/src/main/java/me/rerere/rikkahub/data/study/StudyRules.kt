@@ -168,6 +168,7 @@ object StudyRules {
                 done = existing?.done ?: false,
                 createdAt = existing?.createdAt ?: date.toEpochDay(),
                 completedAt = existing?.completedAt,
+                completionRewardClaimed = existing?.completionRewardClaimed ?: existing?.done ?: false,
                 source = StudyTaskSource.Plan,
             )
         }.orEmpty()

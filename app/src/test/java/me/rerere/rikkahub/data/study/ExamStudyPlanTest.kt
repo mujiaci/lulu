@@ -128,7 +128,7 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("倍速听课"))
         assertTrue(habit.contains("不再宣称 9 月底前必然完成"))
         assertTrue(habit.contains("不能压缩课后消化、做题、错题、框架和背诵痕迹"))
-        assertTrue(habit.contains("法理学背诵可以作为复线"))
+        assertTrue(habit.contains("法理背诵复线"))
         assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
         assertTrue(habit.contains("刑法主线期间不把民法作为新开副线"))
         assertTrue(habit.contains("从每天 2-3 小时有效学习起步"))
@@ -141,7 +141,7 @@ class ExamStudyPlanTest {
         assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("刑法第 17-25 章"))
         assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("启动民法第 1 章"))
         assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("民法为唯一新课主线"))
-        assertTrue(week.contains("刑法主线 + 法理背诵复线"))
+        assertTrue(week.contains("第 2-6 章是合并题组"))
         assertTrue(week.contains("民法第 1 章不在刑法主线期间启动"))
         assertTrue(julySix?.title.orEmpty().contains("连续主块"))
         assertFalse(julySix?.tasks.orEmpty().any { it.title.contains("听众合法硕民法课程") })
@@ -152,7 +152,7 @@ class ExamStudyPlanTest {
         assertFalse(julyNineTasks.contains("预览"))
         assertTrue(prompt.contains("一本新课主线学完再学下一本"))
         assertTrue(prompt.contains("做题、错题收集和框架闭环优先集中完成"))
-        assertTrue(prompt.contains("法理学背诵可以作为复线"))
+        assertTrue(prompt.contains("法理背诵"))
         assertFalse(prompt.contains("另一科在连续主块期间最多安排 15-30 分钟复述或框架保温"))
     }
 
