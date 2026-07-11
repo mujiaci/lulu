@@ -232,6 +232,28 @@ class CompanionRuntime(
         return reduction?.affectedCommitment
     }
 
+    suspend fun fulfillCommitmentFromEvidence(
+        assistantId: String,
+        commitmentId: String,
+        summary: String,
+        completedAt: Long,
+        outputReference: String? = null,
+    ): CompanionCommitment? {
+        var reduction: CompanionRuntimeReduction? = null
+        store.update { current ->
+            fulfillCompanionCommitmentFromEvidence(
+                current = current,
+                assistantId = assistantId,
+                commitmentId = commitmentId,
+                summary = summary,
+                completedAt = completedAt,
+                outputReference = outputReference,
+            ).also { reduction = it }.persistedState
+        }
+        reduction?.snapshot?.let(::remember)
+        return reduction?.affectedCommitment
+    }
+
     suspend fun continueCommitment(
         assistantId: String,
         commitmentId: String,
@@ -649,6 +671,48 @@ fun finishCompanionCommitment(
         ),
         appliedRelationshipEventIds = relationshipReduction.appliedEventIds,
         affectedCommitmentId = commitmentId,
+    )
+}
+
+fun fulfillCompanionCommitmentFromEvidence(
+    current: CompanionPersistedState,
+    assistantId: String,
+    commitmentId: String,
+    summary: String,
+    completedAt: Long,
+    outputReference: String? = null,
+): CompanionRuntimeReduction {
+    val existing = current.snapshotOrEmpty(assistantId).commitments.firstOrNull {
+        it.assistantId == assistantId && it.id == commitmentId
+    } ?: return current.unchangedReduction(current.snapshotOrEmpty(assistantId))
+    val executingState = when (existing.status) {
+        CompanionCommitmentStatus.EXECUTING -> current
+        CompanionCommitmentStatus.ACTIVE,
+        CompanionCommitmentStatus.DUE,
+        CompanionCommitmentStatus.RETRY_SCHEDULED -> {
+            val started = beginCompanionCommitment(
+                current = current,
+                assistantId = assistantId,
+                commitmentId = commitmentId,
+                nowMillis = completedAt,
+            )
+            if (started.affectedCommitment == null) {
+                return current.unchangedReduction(current.snapshotOrEmpty(assistantId))
+            }
+            started.persistedState
+        }
+        else -> return current.unchangedReduction(current.snapshotOrEmpty(assistantId))
+    }
+    return finishCompanionCommitment(
+        current = executingState,
+        assistantId = assistantId,
+        commitmentId = commitmentId,
+        result = CompanionActionResult(
+            success = true,
+            summary = summary,
+            completedAt = completedAt,
+            outputReference = outputReference,
+        ),
     )
 }
 

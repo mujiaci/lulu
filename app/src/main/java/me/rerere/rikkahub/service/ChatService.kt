@@ -864,12 +864,24 @@ class ChatService(
             // check invalid messages
             checkInvalidMessages(conversationId)
             val conversation = getConversationFlow(conversationId).value
+            val latestUserMessage = conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }
+            val latestUserText = latestUserMessage?.toText().orEmpty()
+            val turnStartedAt = System.currentTimeMillis()
+            resolveExistingWakeGoalsFromUserMessage(
+                settings = settings,
+                assistant = assistant,
+                conversationId = conversationId,
+                assistantId = assistant.id.toString(),
+                userText = latestUserText,
+                userMessageAt = latestUserMessage?.createdAt
+                    ?.toInstant(TimeZone.currentSystemDefault())
+                    ?.toEpochMilliseconds()
+                    ?: turnStartedAt,
+                nowMillis = turnStartedAt,
+            )
             val allTools = buildAvailableTools(settings, assistant, conversationId)
                 .deduplicateByToolName()
                 .selectRelevantToolsForPrompt(conversation.currentMessages)
-            val latestUserText = conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }
-                ?.toText()
-                .orEmpty()
             val memoryContext = memoryBankService.buildRecallContext(
                 assistantId = assistant.id.toString(),
                 query = latestUserText,
@@ -963,18 +975,6 @@ class ChatService(
                 ?.toText()
                 .orEmpty()
             val nowMillis = System.currentTimeMillis()
-            resolveExistingWakeGoalsFromUserMessage(
-                settings = settings,
-                assistant = assistant,
-                conversationId = conversationId,
-                assistantId = assistant.id.toString(),
-                userText = lastUserText,
-                userMessageAt = lastUserMessage?.createdAt
-                    ?.toInstant(TimeZone.currentSystemDefault())
-                    ?.toEpochMilliseconds()
-                    ?: nowMillis,
-                nowMillis = nowMillis,
-            )
             val scheduledPlans = buildCompanionTurnReminderPlans(
                 plan = turnPreparation.plan,
                 userText = lastUserText,
@@ -1161,6 +1161,7 @@ class ChatService(
                 commitment.status in setOf(
                     CompanionCommitmentStatus.ACTIVE,
                     CompanionCommitmentStatus.DUE,
+                    CompanionCommitmentStatus.EXECUTING,
                     CompanionCommitmentStatus.RETRY_SCHEDULED,
                 ) && (commitment.isWakeGoal() || commitment.isSleepSupervisionGoal())
             }
@@ -1172,16 +1173,26 @@ class ChatService(
                     commitment.wakeTargetAtOrNull()?.let { target -> userMessageAt >= target } == true
                 if (userCancelled || userConfirmedSleep || userConfirmedAwake) {
                     shouldDismissWakeAlarms = shouldDismissWakeAlarms || userCancelled || userConfirmedAwake
-                    companionRuntime.cancelCommitment(
-                        assistantId = assistantId,
-                        commitmentId = commitment.id,
-                        reason = when {
-                            userCancelled -> "User cancelled the wake or sleep supervision goal"
-                            userConfirmedAwake -> "User sent a message after the wake target and is confirmed awake"
-                            else -> "User confirmed they are going to sleep"
-                        },
-                        nowMillis = nowMillis,
-                    )
+                    if (userConfirmedAwake && !userCancelled) {
+                        companionRuntime.fulfillCommitmentFromEvidence(
+                            assistantId = assistantId,
+                            commitmentId = commitment.id,
+                            summary = "User sent a message after the wake target and is confirmed awake",
+                            completedAt = nowMillis,
+                            outputReference = conversationId.toString(),
+                        )
+                    } else {
+                        companionRuntime.cancelCommitment(
+                            assistantId = assistantId,
+                            commitmentId = commitment.id,
+                            reason = if (userCancelled) {
+                                "User cancelled the wake or sleep supervision goal"
+                            } else {
+                                "User confirmed they are going to sleep"
+                            },
+                            nowMillis = nowMillis,
+                        )
+                    }
                 }
             }
         if (shouldDismissWakeAlarms) {

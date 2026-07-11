@@ -233,6 +233,61 @@ class CompanionRuntimeReducerTest {
     }
 
     @Test
+    fun `user evidence fulfills a commitment while wake execution is running`() {
+        val executing = commitment(status = CompanionCommitmentStatus.EXECUTING, attemptCount = 1)
+        val concern = concernFor(executing)
+
+        val reduced = fulfillCompanionCommitmentFromEvidence(
+            current = persisted(snapshot(commitments = listOf(executing)).copy(concerns = listOf(concern))),
+            assistantId = ASSISTANT_A,
+            commitmentId = executing.id,
+            summary = "User sent a message after the wake target",
+            completedAt = 300L,
+        )
+
+        val fulfilled = reduced.snapshot.commitments.single()
+        assertEquals(CompanionCommitmentStatus.FULFILLED, fulfilled.status)
+        assertEquals(true, fulfilled.lastActionResult?.success)
+        assertEquals(300L, fulfilled.resolvedAt)
+        assertEquals(CompanionConcernStatus.COMPLETED, reduced.snapshot.concerns.single().status)
+        assertEquals(0.53f, reduced.snapshot.relationship.reliability)
+    }
+
+    @Test
+    fun `user evidence starts and fulfills a due active commitment atomically`() {
+        val active = commitment(status = CompanionCommitmentStatus.ACTIVE)
+
+        val reduced = fulfillCompanionCommitmentFromEvidence(
+            current = persisted(snapshot(commitments = listOf(active))),
+            assistantId = ASSISTANT_A,
+            commitmentId = active.id,
+            summary = "User activity confirmed after target time",
+            completedAt = 300L,
+        )
+
+        val fulfilled = reduced.snapshot.commitments.single()
+        assertEquals(CompanionCommitmentStatus.FULFILLED, fulfilled.status)
+        assertEquals(1, fulfilled.attemptCount)
+        assertEquals(300L, fulfilled.resolvedAt)
+    }
+
+    @Test
+    fun `user can cancel a commitment while execution is running`() {
+        val executing = commitment(status = CompanionCommitmentStatus.EXECUTING, attemptCount = 1)
+
+        val reduced = cancelCompanionCommitment(
+            current = persisted(snapshot(commitments = listOf(executing))),
+            assistantId = ASSISTANT_A,
+            commitmentId = executing.id,
+            reason = "User cancelled wake-up supervision",
+            nowMillis = 300L,
+        )
+
+        assertEquals(CompanionCommitmentStatus.CANCELLED, reduced.snapshot.commitments.single().status)
+        assertEquals(executing.id, reduced.affectedCommitment?.id)
+    }
+
+    @Test
     fun `failed execution stores error and schedules retry`() {
         val executing = commitment(status = CompanionCommitmentStatus.EXECUTING, attemptCount = 1)
         val concern = concernFor(executing)
