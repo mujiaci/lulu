@@ -3,12 +3,59 @@ package me.rerere.rikkahub.data.service
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class MemoryBankServiceExtractionTest {
+    @Test
+    fun `processed memory node ids merge without duplicates and keep recent limit`() {
+        val merged = mergeProcessedMemoryNodeIds(
+            existing = listOf("node-1", "node-2", "node-3"),
+            incoming = listOf("node-2", "node-4", "node-5"),
+            limit = 4,
+        )
+
+        assertEquals(linkedSetOf("node-2", "node-3", "node-4", "node-5"), merged)
+    }
+
+    @Test
+    fun `extraction checkpoint survives even when no memory row was inserted`() = runBlocking {
+        val dao = RecordingMemoryBankDAO()
+        val service = MemoryBankService(dao, okHttpClient = null, context = null)
+
+        service.markExtractionProcessed(
+            assistantId = "assistant-1",
+            conversationId = "conversation-1",
+            sourceNodeIds = listOf("node-1", "node-2"),
+            now = 123L,
+        )
+
+        assertEquals(setOf("node-1", "node-2"), service.getProcessedSourceNodeIds("assistant-1", "conversation-1"))
+        assertEquals(123L, dao.extractionCheckpoint?.updatedAt)
+    }
+
+    @Test
+    fun `assistant memory stats include vector states`() = runBlocking {
+        val dao = RecordingMemoryBankDAO(
+            assistantMemories = listOf(
+                MemoryBankEntity(id = 1, assistantId = "assistant-1", vectorStatus = "done"),
+                MemoryBankEntity(id = 2, assistantId = "assistant-1", vectorStatus = "pending"),
+                MemoryBankEntity(id = 3, assistantId = "assistant-1", vectorStatus = "failed"),
+                MemoryBankEntity(id = 4, assistantId = "assistant-2", vectorStatus = "done"),
+            ),
+        )
+        val service = MemoryBankService(dao, okHttpClient = null, context = null)
+
+        val stats = service.getStats("assistant-1")
+
+        assertEquals(1, stats.vectorizedCount)
+        assertEquals(1, stats.pendingCount)
+        assertEquals(1, stats.failedCount)
+    }
+
     @Test
     fun `delete all memories removes graph edges before memory rows`() = runBlocking {
         val dao = RecordingMemoryBankDAO()
@@ -20,7 +67,7 @@ class MemoryBankServiceExtractionTest {
 
         service.deleteAllMemories()
 
-        assertEquals(listOf("edges", "memories"), dao.deleteAllCalls)
+        assertEquals(listOf("edges", "checkpoints", "memories"), dao.deleteAllCalls)
     }
 
     @Test
@@ -336,6 +383,7 @@ private class RecordingMemoryBankDAO(
     val deleteAllCalls = mutableListOf<String>()
     var lastAssistantKeywordTypeSearch: AssistantKeywordTypeSearch? = null
     var recalledAt: Long = 0L
+    var extractionCheckpoint: MemoryExtractionCheckpointEntity? = null
 
     override suspend fun insertMemory(memory: MemoryBankEntity): Long {
         inserted += memory
@@ -347,14 +395,31 @@ private class RecordingMemoryBankDAO(
         return insertedGraphEdges.size.toLong()
     }
 
+    override suspend fun upsertExtractionCheckpoint(checkpoint: MemoryExtractionCheckpointEntity) {
+        extractionCheckpoint = checkpoint
+    }
+
+    override suspend fun getExtractionCheckpoint(
+        assistantId: String,
+        conversationId: String,
+    ): MemoryExtractionCheckpointEntity? = extractionCheckpoint?.takeIf {
+        it.assistantId == assistantId && it.conversationId == conversationId
+    }
+
     override suspend fun updateMemory(memory: MemoryBankEntity) = unsupported()
     override suspend fun deleteMemory(memory: MemoryBankEntity) = unsupported()
     override suspend fun deleteMemoryById(id: Int) = unsupported()
     override suspend fun deleteMemoryGraphEdgesForMemory(id: Int) = unsupported()
     override suspend fun deleteMemoryGraphEdgesForAssistant(assistantId: String) = unsupported()
     override suspend fun deleteMemoriesByAssistant(assistantId: String) = unsupported()
+    override suspend fun deleteExtractionCheckpointsByAssistant(assistantId: String) = unsupported()
     override suspend fun deleteAllMemoryGraphEdges() {
         deleteAllCalls += "edges"
+    }
+
+    override suspend fun deleteAllExtractionCheckpoints() {
+        deleteAllCalls += "checkpoints"
+        extractionCheckpoint = null
     }
 
     override suspend fun deleteAllMemories() {
@@ -401,6 +466,8 @@ private class RecordingMemoryBankDAO(
 
     override suspend fun getCountByAssistant(assistantId: String): Int = 0
     override suspend fun getCountByAssistantAndType(assistantId: String, type: String): Int = 0
+    override suspend fun getCountByAssistantAndVectorStatus(assistantId: String, status: String): Int =
+        assistantMemories.count { it.assistantId == assistantId && it.vectorStatus == status }
     override suspend fun getRecentMemories(limit: Int): List<MemoryBankEntity> = recentMemories.take(limit)
     override suspend fun getDeprecatedMemories(limit: Int): List<MemoryBankEntity> =
         recentMemories.filter { it.deprecated }.take(limit)

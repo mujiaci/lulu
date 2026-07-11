@@ -13,6 +13,7 @@ import me.rerere.ai.provider.RerankItem
 import me.rerere.ai.provider.RerankParams
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -29,6 +30,7 @@ private const val HEAVY_MAINTENANCE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
 private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
 private const val LAST_LIGHT_MAINTENANCE_KEY = "last_light_maintenance_at"
 private const val LAST_HEAVY_MAINTENANCE_KEY = "last_heavy_maintenance_at"
+private const val MAX_PROCESSED_MEMORY_NODE_IDS = 5_000
 
 class MemoryBankService(
     private val memoryBankDAO: MemoryBankDAO,
@@ -77,17 +79,17 @@ class MemoryBankService(
             memoryBankDAO.getCountByType("manual")
         }
         val vectorizedCount = if (assistantId != null) {
-            0
+            memoryBankDAO.getCountByAssistantAndVectorStatus(assistantId, "done")
         } else {
             memoryBankDAO.getCountByVectorStatus("done")
         }
         val pendingCount = if (assistantId != null) {
-            0
+            memoryBankDAO.getCountByAssistantAndVectorStatus(assistantId, "pending")
         } else {
             memoryBankDAO.getCountByVectorStatus("pending")
         }
         val failedCount = if (assistantId != null) {
-            0
+            memoryBankDAO.getCountByAssistantAndVectorStatus(assistantId, "failed")
         } else {
             memoryBankDAO.getCountByVectorStatus("failed")
         }
@@ -143,11 +145,13 @@ class MemoryBankService(
 
     suspend fun deleteMemoriesByAssistant(assistantId: String) = withContext(Dispatchers.IO) {
         memoryBankDAO.deleteMemoryGraphEdgesForAssistant(assistantId)
+        memoryBankDAO.deleteExtractionCheckpointsByAssistant(assistantId)
         memoryBankDAO.deleteMemoriesByAssistant(assistantId)
     }
 
     suspend fun deleteAllMemories() = withContext(Dispatchers.IO) {
         memoryBankDAO.deleteAllMemoryGraphEdges()
+        memoryBankDAO.deleteAllExtractionCheckpoints()
         memoryBankDAO.deleteAllMemories()
     }
 
@@ -216,18 +220,18 @@ class MemoryBankService(
         val lastHeavy = prefs?.getLong(LAST_HEAVY_MAINTENANCE_KEY, 0L) ?: lastHeavyMaintenanceAt
 
         if (lastLight == 0L || now - lastLight >= LIGHT_MAINTENANCE_INTERVAL_MS) {
+            runLightMaintenance()
             lastLightMaintenanceAt = now
             prefs?.edit()?.putLong(LAST_LIGHT_MAINTENANCE_KEY, now)?.apply()
-            runLightMaintenance()
         }
 
         if (lastHeavy == 0L) {
             lastHeavyMaintenanceAt = now
             prefs?.edit()?.putLong(LAST_HEAVY_MAINTENANCE_KEY, now)?.apply()
         } else if (now - lastHeavy >= HEAVY_MAINTENANCE_INTERVAL_MS) {
+            runHeavyMaintenance()
             lastHeavyMaintenanceAt = now
             prefs?.edit()?.putLong(LAST_HEAVY_MAINTENANCE_KEY, now)?.apply()
-            runHeavyMaintenance()
         }
     }
 
@@ -325,7 +329,10 @@ class MemoryBankService(
         assistantId: String,
         conversationId: String,
     ): Set<String> = withContext(Dispatchers.IO) {
-        memoryBankDAO.getMemoriesByAssistant(assistantId)
+        val checkpointIds = memoryBankDAO.getExtractionCheckpoint(assistantId, conversationId)
+            ?.processedSourceNodeIdsJson
+            .decodeMemoryNodeIds()
+        val memoryIds = memoryBankDAO.getMemoriesByAssistant(assistantId)
             .asSequence()
             .filter { it.conversationId == conversationId && !it.sourceMessageNodeIdsJson.isNullOrBlank() }
             .flatMap { memory ->
@@ -334,6 +341,31 @@ class MemoryBankService(
                 }.getOrDefault(emptyList()).asSequence()
             }
             .toSet()
+        checkpointIds + memoryIds
+    }
+
+    suspend fun markExtractionProcessed(
+        assistantId: String,
+        conversationId: String,
+        sourceNodeIds: Collection<String>,
+        now: Long = System.currentTimeMillis(),
+    ) = withContext(Dispatchers.IO) {
+        val checkpoint = memoryBankDAO.getExtractionCheckpoint(assistantId, conversationId)
+        val merged = mergeProcessedMemoryNodeIds(
+            existing = checkpoint?.processedSourceNodeIdsJson.decodeMemoryNodeIds(),
+            incoming = sourceNodeIds,
+        )
+        memoryBankDAO.upsertExtractionCheckpoint(
+            MemoryExtractionCheckpointEntity(
+                assistantId = assistantId,
+                conversationId = conversationId,
+                processedSourceNodeIdsJson = JsonInstant.encodeToString(
+                    ListSerializer(String.serializer()),
+                    merged.toList(),
+                ),
+                updatedAt = now,
+            ),
+        )
     }
 
     suspend fun recallMemories(query: String, count: Int): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
@@ -798,6 +830,26 @@ private fun String.ellipsize(maxLength: Int): String {
     if (length <= maxLength) return this
     return take(maxLength).trimEnd() + "..."
 }
+
+private fun String?.decodeMemoryNodeIds(): Set<String> = runCatching {
+    JsonInstant.decodeFromString(ListSerializer(String.serializer()), orEmpty())
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .toCollection(linkedSetOf())
+}.getOrDefault(emptySet())
+
+internal fun mergeProcessedMemoryNodeIds(
+    existing: Collection<String>,
+    incoming: Collection<String>,
+    limit: Int = MAX_PROCESSED_MEMORY_NODE_IDS,
+): Set<String> = (existing.asSequence() + incoming.asSequence())
+    .map(String::trim)
+    .filter(String::isNotBlank)
+    .distinct()
+    .toList()
+    .takeLast(limit.coerceAtLeast(1))
+    .toCollection(linkedSetOf())
 
 private fun String.recallQueryTerms(): List<String> {
     val compact = trim().lowercase().filterNot(Char::isWhitespace)

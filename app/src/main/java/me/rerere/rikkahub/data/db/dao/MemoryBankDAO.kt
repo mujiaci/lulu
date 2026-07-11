@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 
 
@@ -19,6 +20,20 @@ interface MemoryBankDAO {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertMemoryGraphEdge(edge: MemoryGraphEdgeEntity): Long
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertExtractionCheckpoint(checkpoint: MemoryExtractionCheckpointEntity)
+
+    @Query(
+        """
+        SELECT * FROM memory_extraction_checkpoint
+        WHERE assistant_id = :assistantId AND conversation_id = :conversationId
+        """,
+    )
+    suspend fun getExtractionCheckpoint(
+        assistantId: String,
+        conversationId: String,
+    ): MemoryExtractionCheckpointEntity?
 
     @Update
     suspend fun updateMemory(memory: MemoryBankEntity)
@@ -44,11 +59,17 @@ interface MemoryBankDAO {
     @Query("DELETE FROM memory_bank WHERE assistant_id = :assistantId")
     suspend fun deleteMemoriesByAssistant(assistantId: String)
 
+    @Query("DELETE FROM memory_extraction_checkpoint WHERE assistant_id = :assistantId")
+    suspend fun deleteExtractionCheckpointsByAssistant(assistantId: String)
+
     @Query("DELETE FROM memory_graph_edge")
     suspend fun deleteAllMemoryGraphEdges()
 
     @Query("DELETE FROM memory_bank")
     suspend fun deleteAllMemories()
+
+    @Query("DELETE FROM memory_extraction_checkpoint")
+    suspend fun deleteAllExtractionCheckpoints()
 
     @Query("SELECT * FROM memory_bank WHERE id = :id")
     suspend fun getMemoryById(id: Int): MemoryBankEntity?
@@ -115,6 +136,9 @@ interface MemoryBankDAO {
 
     @Query("SELECT COUNT(*) FROM memory_bank WHERE assistant_id = :assistantId AND type = :type")
     suspend fun getCountByAssistantAndType(assistantId: String, type: String): Int
+
+    @Query("SELECT COUNT(*) FROM memory_bank WHERE assistant_id = :assistantId AND vector_status = :status")
+    suspend fun getCountByAssistantAndVectorStatus(assistantId: String, status: String): Int
 
     @Query("SELECT * FROM memory_bank WHERE deprecated = 0 ORDER BY created_at DESC LIMIT :limit")
     suspend fun getRecentMemories(limit: Int): List<MemoryBankEntity>

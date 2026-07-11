@@ -1381,7 +1381,18 @@ class ChatService(
                 val candidates = AffectiveMemoryExtractor.parseExtractionResult(rawText)
                     .memories
                     .take(8)
-                if (candidates.isEmpty()) return@runCatching
+                if (candidates.isEmpty()) {
+                    memoryBankService.markExtractionProcessed(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversationId.toString(),
+                        sourceNodeIds = plan.turns.map { it.nodeId },
+                    )
+                    Logging.log(
+                        TAG,
+                        "Memory extraction found no durable memories for conversation=$conversationId reason=${plan.reason}",
+                    )
+                    return@runCatching
+                }
 
                 val savedMemories = memoryBankService.saveExtractedMemories(
                     candidates = candidates,
@@ -1389,23 +1400,26 @@ class ChatService(
                     conversationId = conversationId.toString(),
                     createdAt = System.currentTimeMillis(),
                 )
-                if (savedMemories.isNotEmpty()) {
-                    val relationshipEvents = buildRelationshipEventsFromMemoryCandidates(
-                        candidates = candidates,
-                        assistantId = assistant.id.toString(),
-                        conversationId = conversationId.toString(),
-                        createdAt = System.currentTimeMillis(),
-                    )
-                    if (relationshipEvents.isNotEmpty()) {
-                        companionRuntime.applyTurn(
-                            CompanionTurnMutation(
-                                assistantId = assistant.id.toString(),
-                                relationshipEvents = relationshipEvents,
-                                nowMillis = System.currentTimeMillis(),
-                            )
+                val relationshipEvents = buildRelationshipEventsFromMemoryCandidates(
+                    candidates = candidates,
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversationId.toString(),
+                    createdAt = System.currentTimeMillis(),
+                )
+                if (relationshipEvents.isNotEmpty()) {
+                    companionRuntime.applyTurn(
+                        CompanionTurnMutation(
+                            assistantId = assistant.id.toString(),
+                            relationshipEvents = relationshipEvents,
+                            nowMillis = System.currentTimeMillis(),
                         )
-                    }
+                    )
                 }
+                memoryBankService.markExtractionProcessed(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversationId.toString(),
+                    sourceNodeIds = plan.turns.map { it.nodeId },
+                )
                 runCatching {
                     memoryBankService.processPendingVectors()
                     memoryBankService.runAutoMaintenanceIfDue()
@@ -1415,7 +1429,7 @@ class ChatService(
                 }
                 Logging.log(
                     TAG,
-                    "Saved ${candidates.size} affective memories for conversation=$conversationId reason=${plan.reason}",
+                    "Saved ${savedMemories.size}/${candidates.size} affective memories for conversation=$conversationId reason=${plan.reason}",
                 )
             }.onFailure { error ->
                 if (error is CancellationException) throw error
