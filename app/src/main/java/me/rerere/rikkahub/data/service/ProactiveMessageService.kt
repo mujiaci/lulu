@@ -13,32 +13,24 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
-import kotlinx.datetime.toLocalDateTime
 import androidx.core.app.NotificationCompat
 import android.os.Build
 import me.rerere.ai.core.MessageRole
-import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
-import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
-import me.rerere.ai.provider.ProviderSetting
-import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
-import me.rerere.ai.ui.canResumeToolExecution
-import me.rerere.ai.ui.handleMessageChunk
-import me.rerere.ai.ui.limitContext
+import me.rerere.rikkahub.data.ai.ApiUsageSource
+import me.rerere.rikkahub.data.ai.GenerationChunk
+import me.rerere.rikkahub.data.ai.GenerationHandler
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.ai.transformers.buildPromptInjectionPlannerContext
 import me.rerere.rikkahub.data.ai.transformers.companionInputTransformers
 import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
 import me.rerere.rikkahub.data.ai.transformers.companionOutputTransformers
-import me.rerere.rikkahub.data.ai.transformers.transforms
-import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.data.ai.tools.createAlarmTool
@@ -774,8 +766,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private val skillManager: SkillManager by inject()
     private val mcpManager: McpManager by inject()
     private val pluginToolProvider: PluginToolProvider by inject()
-    private val json: Json by inject()
     private val chatService: ChatService by inject()
+    private val generationHandler: GenerationHandler by inject()
     private val companionRuntime: CompanionRuntime by inject()
     private val proactiveMessageService = ProactiveMessageService()
 
@@ -800,6 +792,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             var conversationId: kotlin.uuid.Uuid? = null
             var executingCommitment: CompanionCommitment? = null
             var completedCommitmentResult: CompanionActionResult? = null
+            var executingAssistantName = "当前角色"
             try {
                 val settings = settingsStore.settingsFlow.first()
                 val prefs = getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
@@ -905,6 +898,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     stopSelf()
                     return@launch
                 }
+                executingAssistantName = assistant.name.ifBlank { "当前角色" }
                 val assistantUuid = assistant.id
                 if (isDurableCommitmentTrigger) {
                     val started = companionRuntime.beginCommitment(
@@ -1177,9 +1171,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     )
                 }
 
-                // 构建系统提示词（包含记忆）
-                val systemPrompt = buildSystemPrompt(assistant)
-
                 // 构建用户上下文消息
                 val userMessage = UIMessage(
                     role = MessageRole.USER,
@@ -1198,15 +1189,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
 
                 val messages = composeProactiveGenerationMessages(
-                    systemPrompt = systemPrompt,
                     historyMessages = fixedHistoryMessages,
                     currentContext = userMessage,
-                ).transforms(
-                    transformers = companionInputTransformers + templateTransformer,
-                    context = this@ProactiveMessageTriggerService,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings,
                 )
 
                 val preferredToolNames = buildList {
@@ -1222,9 +1206,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     .withConciseToolDescriptions()
                     .withHumanLikeToolPrompts()
 
-                // 直接调用 AI API 生成消息
-                val providerSetting = model.findProvider(settings.providers)
-                if (providerSetting == null) {
+                if (model.findProvider(settings.providers) == null) {
                     Log.e(ProactiveMessageService.TAG, "No provider found for proactive message")
                     val activeCommitment = executingCommitment
                     if (activeCommitment != null) {
@@ -1246,27 +1228,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
 
-                val providerImpl = providerManager.getProviderByType(providerSetting)
-
-                // 主动消息场景：支持工具调用，但限制最大步数
-                val params = TextGenerationParams(
-                    model = model,
-                    temperature = assistant.temperature ?: 0.8f,
-                    topP = assistant.topP,
-                    maxTokens = assistant.maxTokens,
-                    tools = tools,
-                    reasoningLevel = assistant.reasoningLevel,
-                    customHeaders = buildList {
-                        addAll(assistant.customHeaders)
-                        addAll(model.customHeaders)
-                    },
-                    customBody = buildList {
-                        addAll(assistant.customBodies)
-                        addAll(model.customBodies)
-                    }
-                )
-
-                Log.d(TAG, "Calling AI API for proactive message with ${historyMessages.size} history messages, ${tools.size} tools (reasoning=${assistant.reasoningLevel})...")
+                Log.d(TAG, "Calling shared generation pipeline for proactive message with ${historyMessages.size} history messages and ${tools.size} tools")
 
                 // 把数据库里的完整对话同步到 session，防止流式更新时 conv 是空状态导致覆盖历史
                 chatService.addConversationReference(conversationId)
@@ -1274,21 +1236,44 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     chatService.updateConversationState(conversationId) { _ -> conversation }
                 }
 
-                // 执行生成，支持工具调用
-                val (finalMessages, hasToolCalls) = generateWithTools(
-                    conversationId = conversationId,
-                    providerImpl = providerImpl,
-                    providerSetting = providerSetting,
-                    initialMessages = messages,
-                    params = params,
-                    tools = tools,
+                val initialMessageIds = messages.map { it.id }.toSet()
+                var finalMessages = messages
+                var generatedAnchorId: Uuid? = null
+                generationHandler.generateText(
+                    settings = settings,
                     model = model,
+                    messages = messages,
+                    inputTransformers = companionInputTransformers + templateTransformer,
+                    outputTransformers = companionOutputTransformers,
                     assistant = assistant,
-                    settings = settings
+                    tools = tools,
+                    maxSteps = MAX_TOOL_STEPS,
+                    conversationSystemPrompt = conversation?.customSystemPrompt,
+                    pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
+                    apiUsageSource = ApiUsageSource.OTHER,
+                    apiUsageTitle = "主动消息：${assistant.name.ifBlank { "当前角色" }}",
+                ).collect { chunk ->
+                    if (chunk is GenerationChunk.Messages) {
+                        finalMessages = chunk.messages
+                        val generated = generatedProactiveAssistantMessages(
+                            initialMessageIds = initialMessageIds,
+                            messages = finalMessages,
+                        )
+                        if (generated.isNotEmpty()) {
+                            val anchorId = generatedAnchorId ?: generated.first().id.also {
+                                generatedAnchorId = it
+                            }
+                            replaceAiMessageWithMessages(conversationId, anchorId, generated)
+                        }
+                    }
+                }
+
+                val generatedAiMessages = generatedProactiveAssistantMessages(
+                    initialMessageIds = initialMessageIds,
+                    messages = finalMessages,
                 )
-                
-                // 提取AI消息
-                val aiMessage = finalMessages.lastOrNull() ?: UIMessage(
+                val hasToolCalls = generatedAiMessages.any { it.getTools().isNotEmpty() }
+                val aiMessage = generatedAiMessages.lastOrNull() ?: UIMessage(
                     role = MessageRole.ASSISTANT,
                     parts = emptyList()
                 )
@@ -1299,14 +1284,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 Log.d(TAG, "Proactive message generated: '${replyText.take(100)}...' (${replyText.length} chars), hasToolCalls=$hasToolCalls")
 
-                if (replyText.isBlank() || replyText.contains("[PASS]")) {
-                    // AI 选择跳过，移除本次生成的 aiMessage node（基于 id 匹配，不误删历史）
+                if (replyText.isProactiveSkipReply()) {
+                    // AI 选择跳过，移除本次生成产生的全部 assistant node。
                     Log.d(ProactiveMessageService.TAG, "AI chose to skip proactive message")
-                    val aiId = aiMessage.id
+                    val generatedIds = generatedAiMessages.map { it.id }.toSet()
                     chatService.updateConversationState(conversationId) { conv ->
                         conv.copy(
                             messageNodes = conv.messageNodes.filterNot { node ->
-                                node.messages.any { it.id == aiId }
+                                node.messages.any { it.id in generatedIds }
                             }
                         )
                     }
@@ -1332,7 +1317,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     val completedAt = System.currentTimeMillis()
                     val actionResult = CompanionActionResult(
                         success = true,
-                        summary = if (replyText.isBlank() || replyText.contains("[PASS]")) {
+                        summary = if (replyText.isProactiveSkipReply()) {
                             "Reappraised at the promised time; no message was needed"
                         } else {
                             "Proactive message delivered"
@@ -1439,7 +1424,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             failDurableCommitment(
                                 commitment = activeCommitment,
                                 summary = (e.message ?: e::class.simpleName ?: "Proactive execution failed").take(500),
-                                assistantName = assistant.name,
+                                assistantName = executingAssistantName,
                             )
                         }
                     }.onFailure { persistenceError ->
@@ -1618,8 +1603,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             .apply()
         ProactiveMessageWorker.cancelTargeted(this)
     }
-
-    private fun buildSystemPrompt(assistant: Assistant): String = assistant.systemPrompt
 
     /**
      * 保存主动消息到对话历史
@@ -1857,42 +1840,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         }
     }.trim()
 
-    /**
-     * 基于 AI 消息 id 在对话里就地更新（保留 MessageNode.id，避免 Compose 重建/状态丢失）
-     * 或追加新 node。不使用 toMessageNode() 生成随机新 id，也不用 dropLast(1) 盲目删除。
-     */
-    private fun updateOrAppendAiMessage(
-        conversationId: Uuid,
-        aiMessage: UIMessage
-    ) {
-        chatService.updateConversationState(conversationId) { conv ->
-            val existingNodeIndex = conv.messageNodes.indexOfFirst { node ->
-                node.messages.any { it.id == aiMessage.id }
-            }
-            if (existingNodeIndex >= 0) {
-                // 已存在该 id 的 node：保留 node id，只更新其 messages
-                val oldNode = conv.messageNodes[existingNodeIndex]
-                val updatedNode = oldNode.copy(
-                    messages = oldNode.messages.map {
-                        if (it.id == aiMessage.id) aiMessage else it
-                    }
-                )
-                conv.copy(
-                    messageNodes = conv.messageNodes.toMutableList().apply {
-                        this[existingNodeIndex] = updatedNode
-                    }
-                )
-            } else {
-                // 本次生成的 node 还没有：追加（首次调用时才创建新 node）
-                conv.copy(messageNodes = conv.messageNodes + aiMessage.toMessageNode())
-            }
-        }
-    }
-
-    /**
-     * 生成消息，支持工具调用
-     * 返回最终消息列表和是否发生了工具调用
-     */
+    /** Synchronize assistant messages emitted by the shared generation pipeline. */
     private fun replaceAiMessageWithMessages(
         conversationId: Uuid,
         originalMessageId: Uuid,
@@ -1903,166 +1851,20 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             val existingNodeIndex = conv.messageNodes.indexOfFirst { node ->
                 node.messages.any { it.id == originalMessageId }
             }
-            val newNodes = aiMessages.map { it.toMessageNode() }
             if (existingNodeIndex >= 0) {
+                val existingNode = conv.messageNodes[existingNodeIndex]
+                val newNodes = aiMessages.mapIndexed { index, message ->
+                    if (index == 0) existingNode.copy(messages = listOf(message)) else message.toMessageNode()
+                }
                 conv.copy(
                     messageNodes = conv.messageNodes.take(existingNodeIndex) +
                         newNodes +
                         conv.messageNodes.drop(existingNodeIndex + 1)
                 )
             } else {
-                conv.copy(messageNodes = conv.messageNodes + newNodes)
+                conv.copy(messageNodes = conv.messageNodes + aiMessages.map { it.toMessageNode() })
             }
         }
-    }
-
-    private suspend fun generateWithTools(
-        conversationId: Uuid,
-        providerImpl: me.rerere.ai.provider.Provider<ProviderSetting>,
-        providerSetting: ProviderSetting,
-        initialMessages: List<UIMessage>,
-        params: TextGenerationParams,
-        tools: List<Tool>,
-        model: Model,
-        assistant: Assistant,
-        settings: Settings
-    ): Pair<List<UIMessage>, Boolean> {
-        var messages = initialMessages.toMutableList()
-        var hasToolCalls = false
-
-        for (step in 0 until MAX_TOOL_STEPS) {
-            Log.d(TAG, "generateWithTools: step $step/${MAX_TOOL_STEPS}")
-
-            // 流式调用 AI（替代非流式 generateText，兼容 thinking 模型）
-            var streamMessages = messages.toList()
-            providerImpl.streamText(
-                providerSetting = providerSetting,
-                messages = messages,
-                params = params
-            ).collect { chunk ->
-                streamMessages = streamMessages.handleMessageChunk(chunk = chunk, model = model)
-
-                // 实时更新 session 状态，让打开的聊天界面能看到消息生成
-                val currentAiMessage = streamMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
-                if (currentAiMessage != null) {
-                    // 用 id 匹配就地更新（保留 node id，避免思考链闪烁 / 覆盖上一条 assistant）
-                    updateOrAppendAiMessage(conversationId, currentAiMessage)
-                }
-            }
-
-            // 流式结束，更新 messages
-            messages = streamMessages.toMutableList()
-            val aiMessage = streamMessages.lastOrNull() ?: run {
-                Log.w(TAG, "No message in AI response")
-                break
-            }
-
-            // 应用输出转换器
-            val processedMessage = listOf(aiMessage).transforms(
-                transformers = companionOutputTransformers,
-                context = this@ProactiveMessageTriggerService,
-                model = model,
-                assistant = assistant,
-                settings = settings
-            ).first()
-            messages[messages.lastIndex] = processedMessage
-
-            // 检查是否有工具调用
-            val toolCalls = processedMessage.getTools().filter { !it.isExecuted }
-
-            if (toolCalls.isEmpty()) {
-                // 没有工具调用，生成完成
-                // 设置 Reasoning 的 finishedAt，否则UI会一直显示"思考中"
-                val now = kotlin.time.Clock.System.now()
-                val finalMessage = processedMessage.copy(
-                    parts = processedMessage.parts.map { part ->
-                        if (part is UIMessagePart.Reasoning && part.finishedAt == null) {
-                            part.copy(finishedAt = now)
-                        } else {
-                            part
-                        }
-                    }
-                )
-                messages[messages.lastIndex] = finalMessage
-                // 最终更新 session 状态（用 id 匹配就地更新）
-                val finishedAt = now.toLocalDateTime(TimeZone.currentSystemDefault())
-                messages = messages.onGenerationFinish(
-                    transformers = companionOutputTransformers,
-                    context = this@ProactiveMessageTriggerService,
-                    model = model,
-                    assistant = assistant,
-                    settings = settings,
-                )
-                    .markTrailingAssistantMessagesFinished(finishedAt)
-                    .toMutableList()
-                replaceAiMessageWithMessages(conversationId, finalMessage.id, messages.trailingAssistantMessages())
-                break
-            }
-
-            // 有工具调用
-            hasToolCalls = true
-            Log.d(TAG, "Tool calls detected: ${toolCalls.size}")
-
-            // 执行工具：后台主动消息把工具当作角色的本地感知/行动能力。
-            val executedTools = mutableListOf<UIMessagePart.Tool>()
-            for (toolCall in toolCalls) {
-                val toolDef = tools.find { it.name == toolCall.toolName }
-                if (toolDef == null) {
-                    Log.w(TAG, "Tool ${toolCall.toolName} not found")
-                    executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"Tool not found"}"""))
-                    ))
-                    continue
-                }
-
-                try {
-                    val args = json.parseToJsonElement(toolCall.input.ifBlank { "{}" })
-                    Log.d(TAG, "Executing proactive tool ${toolDef.name} with args: $args")
-                    val result = toolDef.execute(args)
-                    executedTools.add(toolCall.copy(output = result))
-                } catch (e: Exception) {
-                    Log.e(TAG, "Tool execution failed: ${toolCall.toolName}, args=${toolCall.input}", e)
-                    executedTools.add(toolCall.copy(
-                        output = listOf(UIMessagePart.Text("""{"error":"${e.message}"}"""))
-                    ))
-                }
-            }
-
-            // 更新消息中的工具状态
-            val updatedParts = processedMessage.parts.map { part ->
-                if (part is UIMessagePart.Tool) {
-                    executedTools.find { it.toolCallId == part.toolCallId } ?: part
-                } else {
-                    part
-                }
-            }
-            val updatedMessage = processedMessage.copy(parts = updatedParts)
-            messages[messages.lastIndex] = updatedMessage
-            // 更新 session 状态（带工具结果的消息，用 id 匹配就地更新）
-            updateOrAppendAiMessage(conversationId, updatedMessage)
-        }
-
-        return Pair(messages, hasToolCalls)
-    }
-
-    private fun List<UIMessage>.markTrailingAssistantMessagesFinished(
-        finishedAt: LocalDateTime,
-    ): List<UIMessage> {
-        val firstTrailingAssistantIndex = indexOfLast { it.role != MessageRole.ASSISTANT } + 1
-        if (firstTrailingAssistantIndex !in indices) return this
-        return mapIndexed { index, message ->
-            if (index >= firstTrailingAssistantIndex && message.role == MessageRole.ASSISTANT) {
-                message.copy(finishedAt = finishedAt)
-            } else {
-                message
-            }
-        }
-    }
-
-    private fun List<UIMessage>.trailingAssistantMessages(): List<UIMessage> {
-        val firstTrailingAssistantIndex = indexOfLast { it.role != MessageRole.ASSISTANT } + 1
-        if (firstTrailingAssistantIndex !in indices) return emptyList()
-        return drop(firstTrailingAssistantIndex).filter { it.role == MessageRole.ASSISTANT }
     }
 
     override fun onBind(intent: Intent?): android.os.IBinder? = null
@@ -2117,13 +1919,25 @@ internal fun buildAutonomousPlanPresenceState(
 }
 
 internal fun composeProactiveGenerationMessages(
-    systemPrompt: String,
     historyMessages: List<UIMessage>,
     currentContext: UIMessage,
 ): List<UIMessage> = buildList {
-    if (systemPrompt.isNotBlank()) add(UIMessage.system(systemPrompt))
     addAll(historyMessages)
     add(currentContext)
+}
+
+internal fun generatedProactiveAssistantMessages(
+    initialMessageIds: Set<Uuid>,
+    messages: List<UIMessage>,
+): List<UIMessage> = messages.filter { message ->
+    message.role == MessageRole.ASSISTANT && message.id !in initialMessageIds
+}
+
+private fun String.isProactiveSkipReply(): Boolean {
+    val normalized = trim()
+    return normalized.isBlank() ||
+        normalized.equals("[PASS]", ignoreCase = true) ||
+        normalized.equals("[SKIP]", ignoreCase = true)
 }
 
 internal fun shouldCompleteWakeGoal(
