@@ -18,29 +18,23 @@ fun buildCompanionStateFromTurn(
     presence: CompanionModelPresence?,
     nowMillis: Long,
 ): CompanionState {
-    if (assistantText.isBlank()) return previous
+    val cleanPrevious = previous.sanitizedCompanionState()
+    if (assistantText.isBlank()) return cleanPrevious
 
     val statusText = presence?.statusText.cleanPresenceField(MAX_STATE_FIELD_LENGTH)
-        ?: previous.statusText
+        ?: cleanPrevious.statusText
         .ifBlank { "刚刚回应" }
     val innerThought = presence?.innerThought.cleanPresenceField(MAX_INNER_THOUGHT_LENGTH)
         ?: presence?.memoryThought.cleanPresenceField(MAX_INNER_THOUGHT_LENGTH)
-        ?: previous.innerThought
-    val mood = presence?.mood.cleanPresenceField(MAX_STATE_FIELD_LENGTH) ?: previous.mood
-    val bodyState = presence?.bodyState.cleanPresenceField(MAX_STATE_FIELD_LENGTH) ?: previous.bodyState
-    val mindState = presence?.mindState.cleanPresenceField(MAX_STATE_FIELD_LENGTH) ?: previous.mindState
+        ?: cleanPrevious.innerThought
+    val mood = presence?.mood.cleanPresenceField(MAX_STATE_FIELD_LENGTH) ?: cleanPrevious.mood
+    val bodyState = presence?.bodyState.cleanPresenceField(MAX_STATE_FIELD_LENGTH) ?: cleanPrevious.bodyState
+    val mindState = presence?.mindState.cleanPresenceField(MAX_STATE_FIELD_LENGTH) ?: cleanPrevious.mindState
     val activityMode = presence?.activityMode.cleanPresenceField(MAX_STATE_FIELD_LENGTH)
-        ?: previous.activityMode
+        ?: cleanPrevious.activityMode
         .ifBlank { "conversation" }
-    val selfScene = presence?.description.cleanPresenceField(MAX_SCENE_LENGTH) ?: previous.selfScene
-    val visibleStateChanged = statusText != previous.statusText ||
-        mood != previous.mood ||
-        bodyState != previous.bodyState ||
-        mindState != previous.mindState ||
-        activityMode != previous.activityMode ||
-        selfScene != previous.selfScene
-
-    return previous.copy(
+    val selfScene = presence?.description.cleanPresenceField(MAX_SCENE_LENGTH) ?: cleanPrevious.selfScene
+    val candidate = cleanPrevious.copy(
         statusText = statusText,
         innerThought = innerThought,
         mood = mood,
@@ -48,8 +42,17 @@ fun buildCompanionStateFromTurn(
         mindState = mindState,
         activityMode = activityMode,
         selfScene = selfScene,
+    ).sanitizedCompanionState()
+    val visibleStateChanged = candidate.statusText != cleanPrevious.statusText ||
+        candidate.mood != cleanPrevious.mood ||
+        candidate.bodyState != cleanPrevious.bodyState ||
+        candidate.mindState != cleanPrevious.mindState ||
+        candidate.activityMode != cleanPrevious.activityMode ||
+        candidate.selfScene != cleanPrevious.selfScene
+
+    return candidate.copy(
         updatedAt = nowMillis,
-        sinceAt = if (visibleStateChanged || previous.sinceAt <= 0L) nowMillis else previous.sinceAt,
+        sinceAt = if (visibleStateChanged || cleanPrevious.sinceAt <= 0L) nowMillis else cleanPrevious.sinceAt,
     )
 }
 

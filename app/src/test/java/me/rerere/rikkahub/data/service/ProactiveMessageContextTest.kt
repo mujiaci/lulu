@@ -115,10 +115,11 @@ class ProactiveMessageContextTest {
             nowMillis = NOW,
         )
 
-        assertEquals("安静判断中", state.statusText)
+        assertEquals("安静留意", state.statusText)
         assertEquals("我先不把想靠近说出口，等你自己的节奏回来。", state.innerThought)
         assertEquals("waiting", state.activityMode)
         assertEquals("安静留意着现在的变化", state.mindState)
+        assertEquals("露露暂时没有开口，只是继续留意接下来的变化。", state.selfScene)
     }
 
     private companion object {

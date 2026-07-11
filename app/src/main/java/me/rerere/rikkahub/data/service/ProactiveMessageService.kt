@@ -2105,7 +2105,7 @@ internal fun buildAutonomousPlanPresenceState(
     val name = assistantName.ifBlank { "当前角色" }
     return previous.copy(
         statusText = when (plan.intent) {
-            CompanionIntent.WAIT -> "安静判断中"
+            CompanionIntent.WAIT -> "安静留意"
             CompanionIntent.STAY_AVAILABLE, CompanionIntent.OBSERVE -> "在心里记着"
             CompanionIntent.FOLLOW_UP -> "记着后续"
             CompanionIntent.REACH_OUT -> "想主动联系"
@@ -2121,7 +2121,13 @@ internal fun buildAutonomousPlanPresenceState(
         activityMode = if (plan.intent == CompanionIntent.OBSERVE) "observing" else "waiting",
         updatedAt = nowMillis,
         sinceAt = nowMillis,
-        selfScene = "$name 刚刚做了一次后台判断，还没开口，但状态栏留下了那句没说出口的话。",
+        selfScene = when (plan.intent) {
+            CompanionIntent.WAIT -> "$name 暂时没有开口，只是继续留意接下来的变化。"
+            CompanionIntent.STAY_AVAILABLE -> "$name 把注意力留在这里，安静等着下一次有意义的变化。"
+            CompanionIntent.OBSERVE -> "$name 正在重新看清现在的情况，还没有急着开口。"
+            CompanionIntent.FOLLOW_UP -> "$name 把要继续确认的事记在心里，等合适的时候回来。"
+            CompanionIntent.REACH_OUT -> "$name 正在斟酌怎样自然地开口联系你。"
+        },
     )
 }
 

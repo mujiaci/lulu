@@ -72,4 +72,28 @@ class CompanionPresenceStateTest {
         assertEquals("正在核对安排。", next.selfScene)
         assertEquals(50L, next.sinceAt)
     }
+
+    @Test
+    fun `missing model fields do not preserve technical runtime narration`() {
+        val previous = CompanionState(
+            statusText = "副 API 判断中",
+            innerThought = "本地规划兜底正在决定是否发消息",
+            mindState = "副 API 判断",
+            selfScene = "露露刚刚做了一次后台判断，状态栏留下了技术结果。",
+            updatedAt = 100L,
+            sinceAt = 50L,
+        )
+
+        val next = buildCompanionStateFromTurn(
+            previous = previous,
+            assistantText = "我在。",
+            presence = null,
+            nowMillis = 1_000L,
+        )
+
+        assertEquals("安静留意", next.statusText)
+        assertEquals("", next.innerThought)
+        assertEquals("安静留意着现在的变化", next.mindState)
+        assertEquals("暂时没有开口，只把注意力留在接下来的变化上。", next.selfScene)
+    }
 }

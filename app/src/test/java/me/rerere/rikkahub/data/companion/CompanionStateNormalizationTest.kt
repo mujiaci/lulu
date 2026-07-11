@@ -96,4 +96,37 @@ class CompanionStateNormalizationTest {
         assertEquals(listOf("assistant-b"), cleared.snapshots.map { it.assistantId })
         assertEquals(listOf("event-a", "event-b"), cleared.appliedRelationshipEventIds)
     }
+
+    @Test
+    fun `normalization cleans technical text from current and historical state`() {
+        val technicalState = CompanionState(
+            statusText = "副 API 判断中",
+            innerThought = "planner fallback result",
+            mindState = "本地规划兜底",
+            selfScene = "刚刚做了一次后台判断，状态栏留下了结果。",
+            updatedAt = 100L,
+        )
+        val snapshot = CompanionSnapshot(
+            assistantId = "assistant-a",
+            state = technicalState,
+            stateHistory = listOf(
+                CompanionStateHistoryEntry(
+                    id = "history-1",
+                    state = technicalState,
+                    recordedAt = 100L,
+                )
+            ),
+        )
+
+        val normalized = CompanionPersistedState(snapshots = listOf(snapshot))
+            .normalizedCompanionState()
+            .snapshots.single()
+
+        assertEquals("安静留意", normalized.state.statusText)
+        assertEquals("", normalized.state.innerThought)
+        assertEquals("安静留意着现在的变化", normalized.state.mindState)
+        assertEquals("暂时没有开口，只把注意力留在接下来的变化上。", normalized.state.selfScene)
+        assertEquals(normalized.state.statusText, normalized.stateHistory.single().state.statusText)
+        assertEquals(normalized.state.selfScene, normalized.stateHistory.single().state.selfScene)
+    }
 }

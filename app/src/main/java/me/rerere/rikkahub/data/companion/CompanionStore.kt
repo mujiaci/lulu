@@ -123,33 +123,14 @@ private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot
 )
 
 private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
-    state = state.copy(
-        statusText = state.statusText.trim().take(MAX_STATE_TEXT_LENGTH),
-        innerThought = state.innerThought.trim().take(MAX_INNER_THOUGHT_LENGTH),
-        mood = state.mood.trim().take(MAX_STATE_TEXT_LENGTH),
-        bodyState = state.bodyState.trim().take(MAX_STATE_TEXT_LENGTH),
-        mindState = state.mindState.trim().take(MAX_STATE_TEXT_LENGTH),
-        activityMode = state.activityMode.trim().take(MAX_STATE_TEXT_LENGTH),
-        selfScene = state.selfScene.trim().take(MAX_SELF_SCENE_LENGTH),
-    ),
+    state = state.normalizedForStorage(),
     stateHistory = stateHistory
         .filter { it.recordedAt > 0L && it.state.hasVisibleStateContent() }
         .distinctBy { it.id }
         .sortedBy { it.recordedAt }
         .takeLast(MAX_STATE_HISTORY_PER_ASSISTANT)
-        .map { entry ->
-            entry.copy(
-                state = entry.state.copy(
-                    statusText = entry.state.statusText.trim().take(MAX_STATE_TEXT_LENGTH),
-                    innerThought = entry.state.innerThought.trim().take(MAX_INNER_THOUGHT_LENGTH),
-                    mood = entry.state.mood.trim().take(MAX_STATE_TEXT_LENGTH),
-                    bodyState = entry.state.bodyState.trim().take(MAX_STATE_TEXT_LENGTH),
-                    mindState = entry.state.mindState.trim().take(MAX_STATE_TEXT_LENGTH),
-                    activityMode = entry.state.activityMode.trim().take(MAX_STATE_TEXT_LENGTH),
-                    selfScene = entry.state.selfScene.trim().take(MAX_SELF_SCENE_LENGTH),
-                )
-            )
-        },
+        .map { entry -> entry.copy(state = entry.state.normalizedForStorage()) }
+        .filter { it.state.hasVisibleStateContent() },
     relationship = relationship.copy(
         roleLabel = relationship.roleLabel.trim().take(MAX_STATE_TEXT_LENGTH),
         trust = relationship.trust.normalizedDimension(),
@@ -178,6 +159,16 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
         )
         .take(MAX_COMMITMENTS_PER_ASSISTANT),
 )
+
+private fun CompanionState.normalizedForStorage(): CompanionState = copy(
+    statusText = statusText.trim().take(MAX_STATE_TEXT_LENGTH),
+    innerThought = innerThought.trim().take(MAX_INNER_THOUGHT_LENGTH),
+    mood = mood.trim().take(MAX_STATE_TEXT_LENGTH),
+    bodyState = bodyState.trim().take(MAX_STATE_TEXT_LENGTH),
+    mindState = mindState.trim().take(MAX_STATE_TEXT_LENGTH),
+    activityMode = activityMode.trim().take(MAX_STATE_TEXT_LENGTH),
+    selfScene = selfScene.trim().take(MAX_SELF_SCENE_LENGTH),
+).sanitizedCompanionState()
 
 private fun CompanionConcernStatus.isTerminal(): Boolean =
     this == CompanionConcernStatus.COMPLETED || this == CompanionConcernStatus.CANCELLED
