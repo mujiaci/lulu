@@ -78,7 +78,9 @@ object CompanionPerceptionAssembler {
             activeConcerns = snapshot.concerns
                 .asSequence()
                 .filter { concern ->
-                    concern.assistantId == assistantId && concern.status == CompanionConcernStatus.ACTIVE
+                    concern.assistantId == assistantId &&
+                        concern.status == CompanionConcernStatus.ACTIVE &&
+                        concern.isStillRelevant(input.nowMillis)
                 }
                 .sortedWith(
                     compareByDescending<CompanionConcern> { it.importance }
@@ -135,6 +137,24 @@ object CompanionPerceptionAssembler {
         CompanionCommitmentStatus.RETRY_SCHEDULED,
     )
 
+    /**
+     * Concerns without fresh evidence should not stay in the character's foreground forever.
+     * Explicitly scheduled follow-ups remain visible, while unscheduled concerns naturally
+     * fade according to their importance.
+     */
+    private fun CompanionConcern.isStillRelevant(nowMillis: Long): Boolean {
+        if (nextPerceptionAt != null) return true
+        val ageMillis = (nowMillis - lastUpdatedAt).coerceAtLeast(0L)
+        val retentionMillis = when (importance.coerceIn(1, 5)) {
+            5 -> 90L * MILLIS_PER_DAY
+            4 -> 45L * MILLIS_PER_DAY
+            3 -> 21L * MILLIS_PER_DAY
+            2 -> 10L * MILLIS_PER_DAY
+            else -> 5L * MILLIS_PER_DAY
+        }
+        return ageMillis <= retentionMillis
+    }
+
     private fun String.clean(maxLength: Int): String = trim()
         .replace(Regex("\\s+"), " ")
         .take(maxLength)
@@ -150,6 +170,7 @@ object CompanionPerceptionAssembler {
     private const val MAX_ACTIVE_CONCERNS = 50
     private const val MAX_ACTIONABLE_COMMITMENTS = 50
     private const val MAX_TOOL_NAMES = 64
+    private const val MILLIS_PER_DAY = 24L * 60L * 60L * 1_000L
 }
 
 fun CompanionPerceptionPacket.toPromptContext(): String = buildString {

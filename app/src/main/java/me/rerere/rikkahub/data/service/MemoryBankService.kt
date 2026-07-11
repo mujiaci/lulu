@@ -22,9 +22,10 @@ import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
 
 private const val MEMORY_DUPLICATE_VECTOR_THRESHOLD = 0.85
-private const val MEMORY_HEBBIAN_EDGE_DELTA = 0.18
-private const val MEMORY_HEBBIAN_MAX_EDGE_WEIGHT = 3.0
-private const val MEMORY_GRAPH_MIN_RECALL_WEIGHT = 0.12
+private const val MEMORY_HEBBIAN_EDGE_DELTA = 0.025
+private const val MEMORY_HEBBIAN_MAX_EDGE_WEIGHT = 1.5
+private const val MEMORY_GRAPH_MIN_RECALL_WEIGHT = 0.08
+private const val MEMORY_GRAPH_DECAY_HALF_LIFE_DAYS = 45.0
 private const val LIGHT_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
 private const val HEAVY_MAINTENANCE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
 private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
@@ -603,6 +604,7 @@ internal fun selectMemoryRecallItems(
     maxItems: Int? = null,
     rerankCandidateCount: Int = 60,
     graphEdges: List<MemoryGraphEdgeEntity> = emptyList(),
+    nowMillis: Long = System.currentTimeMillis(),
     reranker: (List<MemoryBankEntity>) -> List<MemoryRerankResult> = { emptyList() },
 ): List<MemoryBankEntity> {
     val sorted = rankMemoryRecallCandidates(memories, query, queryVector)
@@ -614,7 +616,7 @@ internal fun selectMemoryRecallItems(
         results = runCatching { reranker(candidates) }.getOrDefault(emptyList()),
     ).take(limit)
     return direct
-        .expandGraphMemories(sorted, graphEdges, maxRelatedItems = 2)
+        .expandGraphMemories(sorted, graphEdges, maxRelatedItems = 2, nowMillis = nowMillis)
         .expandRelatedMemories(sorted, maxRelatedItems = 1)
         .distinctBy { it.id }
 }
@@ -667,14 +669,19 @@ private fun List<MemoryBankEntity>.expandGraphMemories(
     candidates: List<MemoryBankEntity>,
     graphEdges: List<MemoryGraphEdgeEntity>,
     maxRelatedItems: Int,
+    nowMillis: Long,
 ): List<MemoryBankEntity> {
     if (maxRelatedItems <= 0 || isEmpty() || graphEdges.isEmpty()) return this
     val selectedIds = mapTo(mutableSetOf()) { it.id }
     val candidateById = candidates.associateBy { it.id }
     val graphRelated = graphEdges.asSequence()
-        .filter { edge -> edge.sourceMemoryId in selectedIds && edge.targetMemoryId !in selectedIds }
+        .filter { edge ->
+            edge.sourceMemoryId in selectedIds &&
+                edge.targetMemoryId !in selectedIds &&
+                edge.effectiveWeight(nowMillis) >= MEMORY_GRAPH_MIN_RECALL_WEIGHT
+        }
         .sortedWith(
-            compareByDescending<MemoryGraphEdgeEntity> { it.weight }
+            compareByDescending<MemoryGraphEdgeEntity> { it.effectiveWeight(nowMillis) }
                 .thenByDescending { it.lastReinforcedAt }
         )
         .mapNotNull { edge -> candidateById[edge.targetMemoryId] }
@@ -693,7 +700,13 @@ private fun hebbianDelta(source: MemoryBankEntity, target: MemoryBankEntity?): D
     val sourceStrength = source.importance.coerceIn(1, 5) / 5.0 * source.confidence.coerceIn(0.0, 1.0)
     val targetStrength = (target?.importance ?: source.importance).coerceIn(1, 5) / 5.0 *
         (target?.confidence ?: source.confidence).coerceIn(0.0, 1.0)
-    return MEMORY_HEBBIAN_EDGE_DELTA + (sourceStrength + targetStrength) * 0.05
+    return MEMORY_HEBBIAN_EDGE_DELTA + (sourceStrength + targetStrength) * 0.015
+}
+
+private fun MemoryGraphEdgeEntity.effectiveWeight(nowMillis: Long): Double {
+    val ageMillis = (nowMillis - lastReinforcedAt).coerceAtLeast(0L)
+    val ageDays = ageMillis / (24.0 * 60.0 * 60.0 * 1_000.0)
+    return weight * Math.pow(0.5, ageDays / MEMORY_GRAPH_DECAY_HALF_LIFE_DAYS)
 }
 
 private fun List<RerankItem>.toMemoryRerankResults(): List<MemoryRerankResult> =

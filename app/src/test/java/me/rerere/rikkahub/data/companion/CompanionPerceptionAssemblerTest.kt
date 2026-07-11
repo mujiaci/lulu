@@ -37,6 +37,26 @@ class CompanionPerceptionAssemblerTest {
     }
 
     @Test
+    fun `assembler lets stale unscheduled concerns fade out but keeps scheduled follow ups`() {
+        val now = 100L * 24L * 60L * 60L * 1_000L
+        val packet = CompanionPerceptionAssembler.assemble(
+            input = input().copy(nowMillis = now),
+            snapshot = CompanionSnapshot(
+                assistantId = "assistant-a",
+                concerns = listOf(
+                    concern(id = "stale", importance = 1, nextPerceptionAt = null).copy(lastUpdatedAt = 0L),
+                    concern(id = "scheduled", importance = 1, nextPerceptionAt = now + 1_000L)
+                        .copy(lastUpdatedAt = 0L),
+                    concern(id = "important", importance = 5, nextPerceptionAt = null)
+                        .copy(lastUpdatedAt = now - 30L * 24L * 60L * 60L * 1_000L),
+                ),
+            ),
+        )
+
+        assertEquals(listOf("important", "scheduled"), packet.activeConcerns.map { it.id })
+    }
+
+    @Test
     fun `assembler orders due work before later work`() {
         val packet = CompanionPerceptionAssembler.assemble(
             input = input(),

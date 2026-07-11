@@ -406,9 +406,36 @@ class MemoryBankContextTest {
                     lastReinforcedAt = 20L,
                 ),
             ),
+            nowMillis = 20L,
         )
 
         assertEquals(listOf(1, 2), selected.map { it.id })
+    }
+
+    @Test
+    fun `stale graph edges do not pull unrelated memories back into recall`() {
+        val day = 24L * 60L * 60L * 1_000L
+        val memories = listOf(
+            MemoryBankEntity(id = 1, content = "current topic", importance = 5, createdAt = 300L),
+            MemoryBankEntity(id = 2, content = "old association", importance = 1, createdAt = 100L),
+        )
+
+        val selected = selectMemoryRecallItems(
+            memories = memories,
+            query = "current topic",
+            maxItems = 1,
+            graphEdges = listOf(
+                MemoryGraphEdgeEntity(
+                    sourceMemoryId = 1,
+                    targetMemoryId = 2,
+                    weight = 0.2,
+                    lastReinforcedAt = 0L,
+                ),
+            ),
+            nowMillis = 180L * day,
+        )
+
+        assertEquals(listOf(1), selected.map { it.id })
     }
 
     @Test
