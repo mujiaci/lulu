@@ -674,6 +674,8 @@ private fun StudyHero(
 ) {
     val daysLeft = remember { ExamStudyPlan.daysLeft() }
     val studyTimeOverview = StudyRules.studyTimeOverview(state)
+    val professionalTargetScore =
+        ExamStudyPlan.professionalFoundationTargetScore + ExamStudyPlan.professionalComprehensiveTargetScore
     var showCompanionPicker by remember { mutableStateOf(false) }
     ElevatedCard(
         colors = CardDefaults.elevatedCardColors(containerColor = StudyColors.hero),
@@ -708,6 +710,14 @@ private fun StudyHero(
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    HeroMetric("川大目标", "${ExamStudyPlan.scuSafeTargetScore}分", Modifier.weight(1f))
+                    HeroMetric(
+                        "专业课目标",
+                        "$professionalTargetScore/300",
+                        Modifier.weight(1f),
+                    )
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
                     HeroMetric(
                         "今日学习",
@@ -1093,10 +1103,7 @@ private fun StudyTipsContent(tips: List<StudyTip>) {
 private fun PlanOverviewCard() {
     var planView by remember { mutableStateOf(PlanView.Weekly) }
     val today = LocalDate.now()
-    val week = ExamStudyPlan.weeklyPlans.firstOrNull { week ->
-        val parts = week.dateRange.split(" 至 ")
-        parts.size == 2 && today >= LocalDate.parse(parts[0]) && today <= LocalDate.parse(parts[1])
-    } ?: ExamStudyPlan.weeklyPlans.firstOrNull()
+    val week = ExamStudyPlan.weekForDate(today) ?: ExamStudyPlan.weeklyPlans.firstOrNull()
 
     StudyCard {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {

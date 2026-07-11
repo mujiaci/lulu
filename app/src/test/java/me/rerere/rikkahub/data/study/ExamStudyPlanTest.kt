@@ -444,8 +444,11 @@ class ExamStudyPlanTest {
     fun finalPreExamWeekStillGeneratesAPlan() {
         val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 12, 18))
         val text = plan?.tasks.orEmpty().joinToString("\n") { it.title }
+        val week = ExamStudyPlan.weekForDate(LocalDate.of(2026, 12, 18))
 
         assertTrue(plan != null)
+        assertEquals("2026-12-w3", week?.id)
+        assertEquals("2026-12-15 至考前", week?.dateRange)
         assertTrue(text.contains("不再开常规新课"))
         assertTrue(text.contains("保温"))
     }

@@ -328,7 +328,7 @@ object ExamStudyPlan {
         )
     }
 
-    private fun weekForDate(date: LocalDate): WeeklyStudyPlan? =
+    fun weekForDate(date: LocalDate): WeeklyStudyPlan? =
         weeklyPlans.firstOrNull { week ->
             val parts = week.dateRange.split(" 至 ")
             if (parts.size != 2) return@firstOrNull false
