@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
@@ -23,6 +24,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import me.rerere.rikkahub.data.companion.CompanionCommitment
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
@@ -96,7 +98,7 @@ fun LuluStatusDialog(
                     if (selectedTab == 0) {
                         item {
                             StatusSection(
-                                title = "没说出口",
+                                title = "心里想着",
                                 text = state.innerThought.ifBlank { "此刻还没有留下明确的心声。" },
                             )
                         }
@@ -197,13 +199,24 @@ private fun StateHistoryRow(entry: CompanionStateHistoryEntry) {
 
 @Composable
 private fun StatusSection(title: String, text: String) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        SectionTitle(title)
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            SectionTitle(title)
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 5,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
 
@@ -218,48 +231,68 @@ private fun SectionTitle(text: String) {
 
 @Composable
 private fun ConcernRow(concern: CompanionConcern) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = concern.event.cleanCompanionHumanText("正在继续留意这件事。"),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        concern.goal.takeIf(String::isNotBlank)?.let { goal ->
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
             Text(
-                text = goal.cleanCompanionHumanText(""),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = concern.event.cleanCompanionHumanText("正在继续留意这件事。"),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
             )
+            concern.goal.takeIf(String::isNotBlank)?.let { goal ->
+                Text(
+                    text = goal.cleanCompanionHumanText(""),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            concern.nextPerceptionAt?.let { nextPerceptionAt ->
+                Text(
+                    text = formatNextPerception(nextPerceptionAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+            }
         }
-        concern.nextPerceptionAt?.let { nextPerceptionAt ->
-            Text(
-                text = formatNextPerception(nextPerceptionAt),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.primary,
-            )
-        }
-        HorizontalDivider()
     }
 }
 
 @Composable
 private fun CommitmentRow(commitment: CompanionCommitment) {
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Text(
-            text = commitment.promise.cleanCompanionHumanText("我会在合适的时候再确认这件事。"),
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-        )
-        Text(
-            text = formatCommitmentTime(commitment.dueAt),
-            style = MaterialTheme.typography.labelSmall,
-            color = if (commitment.dueAt <= System.currentTimeMillis()) {
-                MaterialTheme.colorScheme.error
-            } else {
-                MaterialTheme.colorScheme.primary
-            },
-        )
-        HorizontalDivider()
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                text = commitment.promise.cleanCompanionHumanText("我会在合适的时候再确认这件事。"),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = formatCommitmentTime(commitment.dueAt),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (commitment.dueAt <= System.currentTimeMillis()) {
+                    MaterialTheme.colorScheme.tertiary
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
+        }
     }
 }
 
@@ -292,13 +325,13 @@ private fun formatStateTime(timeMillis: Long): String {
 }
 
 private fun formatNextPerception(timeMillis: Long): String = if (timeMillis <= System.currentTimeMillis()) {
-    "现在该重新留意了"
+    "正在等待下一次确认"
 } else {
     "下次留意：${formatAbsoluteTime(timeMillis)}"
 }
 
 private fun formatCommitmentTime(timeMillis: Long): String = if (timeMillis <= System.currentTimeMillis()) {
-    "已到约定时间 · ${formatAbsoluteTime(timeMillis)}"
+    "等待她确认 · 原定 ${formatAbsoluteTime(timeMillis)}"
 } else {
     "约定时间：${formatAbsoluteTime(timeMillis)}"
 }
