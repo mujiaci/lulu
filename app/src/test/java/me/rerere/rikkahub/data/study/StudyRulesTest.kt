@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.study
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.LocalDate
@@ -175,7 +176,7 @@ class StudyRulesTest {
                 normalFragments = mapOf("normal:星穹图书馆:专属碎片" to 4),
                 rareFragments = mapOf("rare:any" to 2),
                 epicFragments = 3,
-                specialStoryFragments = 2,
+                rainbowFragments = 2,
                 universalNormalFragments = 5,
                 universalRareFragments = 4,
                 universalEpicFragments = 1,
@@ -200,7 +201,7 @@ class StudyRulesTest {
         assertEquals(4, reset.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
         assertEquals(2, reset.inventory.rareFragments.getValue("rare:any"))
         assertEquals(3, reset.inventory.epicFragments)
-        assertEquals(2, reset.inventory.specialStoryFragments)
+        assertEquals(2, reset.inventory.rainbowFragments)
         assertEquals(5, reset.inventory.universalNormalFragments)
         assertEquals(4, reset.inventory.universalRareFragments)
         assertEquals(1, reset.inventory.universalEpicFragments)
@@ -339,9 +340,10 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `syncing changed plan tasks preserves completed plan records by stable id`() {
+    fun `syncing plan tasks preserves completion only when the task title is unchanged`() {
         val date = LocalDate.of(2026, 7, 3)
         val completedAt = 1_700_000_123_000L
+        val firstPlanTitle = ExamStudyPlan.todayPlan(date)!!.tasks.first().let { "${it.kind.label}｜${it.title}" }
         val state = StudyState(
             today = date.toString(),
             activePlanDate = date.toString(),
@@ -351,7 +353,7 @@ class StudyRulesTest {
             tasks = listOf(
                 StudyTask(
                     id = "plan-${date}-0",
-                    title = "旧计划｜今天完全休息",
+                    title = firstPlanTitle,
                     done = true,
                     completedAt = completedAt,
                     source = StudyTaskSource.Plan,
@@ -368,6 +370,31 @@ class StudyRulesTest {
         assertEquals(2, synced.wallet.tenDrawTickets)
         assertEquals(4, synced.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
         assertEquals(5, synced.stats.totalPomodoros)
+    }
+
+    @Test
+    fun `rebalanced task at the same index does not inherit an old completion`() {
+        val date = LocalDate.of(2026, 7, 11)
+        val state = StudyState(
+            today = date.toString(),
+            activePlanDate = date.toString(),
+            tasks = listOf(
+                StudyTask(
+                    id = "plan-${date}-0",
+                    title = "背诵｜旧的法理第 2 章任务",
+                    done = true,
+                    completedAt = 1_700_000_123_000L,
+                    source = StudyTaskSource.Plan,
+                ),
+            ),
+        )
+
+        val synced = StudyRules.syncPlanTasks(state, date)
+        val firstPlanTask = synced.tasks.first { it.id == "plan-${date}-0" }
+
+        assertFalse(firstPlanTask.done)
+        assertNull(firstPlanTask.completedAt)
+        assertTrue(firstPlanTask.title.contains("法理第 1 章"))
     }
 
     @Test
@@ -472,15 +499,15 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `draw pool has small theater special story and rainbow video fragments`() {
+    fun `draw pool has purple gold and rainbow entertainment fragments`() {
         val state = StudyState(wallet = StudyWallet(singleDrawTickets = 3))
-        val rare = StudyRules.draw(state, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.95))).state
-        val special = StudyRules.draw(rare, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.98))).state
-        val video = StudyRules.draw(special, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.995))).state
+        val purple = StudyRules.draw(state, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.95))).state
+        val gold = StudyRules.draw(purple, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.98))).state
+        val rainbow = StudyRules.draw(gold, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.995))).state
 
-        assertEquals(1, rare.inventory.universalRareFragments)
-        assertEquals(1, special.inventory.specialStoryFragments)
-        assertEquals(1, video.inventory.epicFragments)
+        assertEquals(1, purple.inventory.universalRareFragments)
+        assertEquals(1, gold.inventory.epicFragments)
+        assertEquals(1, rainbow.inventory.rainbowFragments)
     }
 
     @Test
@@ -503,18 +530,25 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `video and story chapters cost one fragment each`() {
+    fun `entertainment rewards consume their matching fragment`() {
         val state = StudyState(
-            inventory = StudyInventory(epicFragments = 1, specialStoryFragments = 1),
+            inventory = StudyInventory(
+                universalRareFragments = 1,
+                epicFragments = 1,
+                rainbowFragments = 1,
+            ),
         )
 
-        val video = StudyRules.redeemVideo(state)
-        val story = StudyRules.redeemSpecialStory(video.state)
+        val douyin = StudyRules.redeemEntertainment(state, StudyEntertainmentReward.Douyin)
+        val game = StudyRules.redeemEntertainment(douyin.state, StudyEntertainmentReward.Game)
+        val anime = StudyRules.redeemEntertainment(game.state, StudyEntertainmentReward.Anime)
 
-        assertEquals(0, video.state.inventory.epicFragments)
-        assertEquals(1, video.state.stats.videoRewardsRedeemed)
-        assertEquals(0, story.state.inventory.specialStoryFragments)
-        assertEquals("特殊剧情章节 x1", story.reward.title)
+        assertEquals(0, anime.state.inventory.universalRareFragments)
+        assertEquals(0, anime.state.inventory.epicFragments)
+        assertEquals(0, anime.state.inventory.rainbowFragments)
+        assertEquals("抖音时间已兑换", douyin.reward.title)
+        assertEquals("游戏时间已兑换", game.reward.title)
+        assertEquals("动漫时间已兑换", anime.reward.title)
     }
 
     private class FixedDrawRandom(

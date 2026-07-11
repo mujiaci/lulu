@@ -62,7 +62,9 @@ data class StudyInventory(
     val normalFragments: Map<String, Int> = emptyMap(),
     val rareFragments: Map<String, Int> = emptyMap(),
     val epicFragments: Int = 0,
-    val specialStoryFragments: Int = 0,
+    val rainbowFragments: Int = 0,
+    @SerialName("specialStoryFragments")
+    val legacySpecialStoryFragments: Int = 0,
     val universalNormalFragments: Int = 0,
     val universalRareFragments: Int = 0,
     val universalEpicFragments: Int = 0,
@@ -112,6 +114,7 @@ enum class StudyEventType {
     Video,
     McDonalds,
     Fragment,
+    Entertainment,
 }
 
 @Serializable
@@ -123,7 +126,6 @@ data class StudyReward(
     val universalNormalFragments: Int = 0,
     val universalRareFragments: Int = 0,
     val universalEpicFragments: Int = 0,
-    val specialStoryFragments: Int = 0,
     val title: String = "",
 )
 
@@ -160,9 +162,15 @@ data class StudyDrawResult(
 @Serializable
 enum class StudyRarity(val label: String) {
     Normal("普通"),
-    Rare("稀有"),
-    Epic("史诗"),
+    Rare("紫色"),
+    Epic("金色"),
     Rainbow("彩色"),
+}
+
+enum class StudyEntertainmentReward(val label: String) {
+    Douyin("抖音"),
+    Game("游戏"),
+    Anime("动漫"),
 }
 
 @Serializable

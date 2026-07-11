@@ -24,22 +24,19 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.study.ExamStudyPlan
 import me.rerere.rikkahub.data.study.StudyDrawResult
 import me.rerere.rikkahub.data.study.StudyMysteryBoxReward
-import me.rerere.rikkahub.data.study.StudyRarity
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyShopItem
 import me.rerere.rikkahub.data.study.StudyState
 import me.rerere.rikkahub.data.study.StudyStore
 import me.rerere.rikkahub.data.study.SuperMomentChoice
-import me.rerere.rikkahub.data.starwish.StarWishRules
-import me.rerere.rikkahub.data.starwish.StarWishStore
 import me.rerere.rikkahub.data.starwish.StarWishVideoItem
+import me.rerere.rikkahub.data.study.StudyEntertainmentReward
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.random.Random
 
 class StudyVM(
     private val store: StudyStore,
-    private val starWishStore: StarWishStore,
     private val settingsStore: SettingsStore,
     private val providerManager: ProviderManager,
     private val apiUsageStore: ApiUsageStore,
@@ -171,35 +168,18 @@ class StudyVM(
         viewModelScope.launch {
             var revealItems: List<StudyDrawReveal> = emptyList()
             var message: String? = null
-            var shouldUpdateStarWish = false
-            var nextStarWishState = starWishStore.state.value
             store.update { current ->
                 val result = StudyRules.draw(current, count, Random.Default)
                 if (result.results.isEmpty()) {
                     message = "夸夸值或抽卡券不够"
                     return@update result.state
                 }
-                var nextStudyState = result.state
-                nextStarWishState = starWishStore.state.value
-                revealItems = result.results.map { drawResult ->
-                    if (drawResult.rarity == StudyRarity.Rainbow) {
-                        val unlock = StarWishRules.unlockNextVideo(nextStarWishState, nextStudyState, Random.Default)
-                        nextStudyState = unlock.studyState
-                        nextStarWishState = unlock.starWishState
-                        shouldUpdateStarWish = true
-                        StudyDrawReveal(drawResult, unlock.video)
-                    } else {
-                        StudyDrawReveal(drawResult)
-                    }
-                }
-                nextStudyState
+                revealItems = result.results.map(::StudyDrawReveal)
+                result.state
             }
             message?.let {
                 _effects.tryEmit(StudyEffect.Message(it))
                 return@launch
-            }
-            if (shouldUpdateStarWish && nextStarWishState != starWishStore.state.value) {
-                starWishStore.update { nextStarWishState }
             }
             _effects.tryEmit(StudyEffect.DrawResults(revealItems))
         }
@@ -231,13 +211,9 @@ class StudyVM(
         result.state
     }
 
-    fun redeemVideo() = reduce {
-        val result = StudyRules.redeemVideo(it)
-        if (result.reward.title.isBlank()) {
-            _effects.tryEmit(StudyEffect.Message("还需要 1 个视频碎片"))
-        } else {
-            _effects.tryEmit(StudyEffect.VideoRedeemed)
-        }
+    fun redeemEntertainment(rewardType: StudyEntertainmentReward) = reduce {
+        val result = StudyRules.redeemEntertainment(it, rewardType)
+        emitReward(result.reward.title.ifBlank { "还需要 1 个对应碎片" })
         result.state
     }
 
@@ -289,7 +265,6 @@ sealed interface StudyEffect {
     data object MysteryBoxReady : StudyEffect
     data class MysteryBox(val reward: StudyMysteryBoxReward) : StudyEffect
     data class DrawResults(val results: List<StudyDrawReveal>) : StudyEffect
-    data object VideoRedeemed : StudyEffect
     data object SuperMomentReady : StudyEffect
 }
 

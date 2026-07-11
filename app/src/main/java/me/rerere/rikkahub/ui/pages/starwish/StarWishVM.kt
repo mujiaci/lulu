@@ -37,7 +37,6 @@ import me.rerere.rikkahub.data.starwish.StarWishTheaterChapter
 import me.rerere.rikkahub.data.starwish.StarWishTheaterGuide
 import me.rerere.rikkahub.data.starwish.StarWishTheaterSeed
 import me.rerere.rikkahub.data.starwish.StarWishVideoItem
-import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyStore
 
 class StarWishVM(
@@ -144,7 +143,7 @@ class StarWishVM(
             store.update { current ->
                 current.copy(customVideos = current.customVideos + item)
             }
-            _videoMessage.tryEmit("已加入视频柜，抽到视频碎片后可解锁")
+            _videoMessage.tryEmit("已加入视频柜，使用金色碎片后可解锁")
         }
     }
 
@@ -157,7 +156,7 @@ class StarWishVM(
             var result = StarWishRules.unlockNextVideo(currentStarWish, studyState.value, Random.Default)
             val video = result.video
             if (video == null) {
-                _videoMessage.tryEmit(if (visibleVideos.isEmpty()) "先上传或内置视频后再解锁" else "还需要 1 个视频碎片")
+                _videoMessage.tryEmit(if (visibleVideos.isEmpty()) "先上传或内置视频后再解锁" else "还需要 1 枚金色碎片")
                 return@launch
             }
             if (result.consumedFragment) {
@@ -166,13 +165,13 @@ class StarWishVM(
                     result.studyState
                 }
                 if (!result.consumedFragment || result.video == null) {
-                    _videoMessage.tryEmit("还需要 1 个视频碎片")
+                    _videoMessage.tryEmit("还需要 1 枚金色碎片")
                     return@launch
                 }
                 store.update { result.starWishState }
                 _videoMessage.tryEmit("已解锁：${result.video!!.title}")
             } else if (hasLockedVideo) {
-                _videoMessage.tryEmit("还需要 1 个视频碎片")
+                _videoMessage.tryEmit("还需要 1 枚金色碎片")
                 return@launch
             }
             _videoPlayback.emit(result.video ?: video)
@@ -245,43 +244,6 @@ class StarWishVM(
         }
     }
 
-    fun createNextSpecialStoryChapter(story: String, influence: String = "") {
-        viewModelScope.launch {
-            try {
-                _isGeneratingChapter.value = true
-                _chapterError.value = null
-                val seed = StarWishRules.allSpecialStories(state.value.customSpecialStories).firstOrNull { it.title == story } ?: return@launch
-                val study = studyState.value
-                if (study.inventory.specialStoryFragments < StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER) return@launch
-                val chapters = state.value.specialStoryChapters[story].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
-                val guide = state.value.specialStoryGuides[story] ?: StarWishRules.defaultTheaterGuide(seed, includeChapterPlan = false)
-                val nextChapter = chapters.size + 1
-                val content = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim(), guide)
-                studyStore.update { current ->
-                    StudyRules.redeemSpecialStory(current).state
-                }
-                store.update { current ->
-                    val latestChapters = current.specialStoryChapters[story].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
-                    val chapter = StarWishTheaterChapter(
-                        id = "special-${System.currentTimeMillis()}-${story.hashCode()}",
-                        theater = story,
-                        chapter = nextChapter,
-                        title = "第 $nextChapter 章",
-                        content = content,
-                        userInfluence = influence.trim(),
-                        createdAt = System.currentTimeMillis(),
-                    )
-                    current.copy(specialStoryChapters = current.specialStoryChapters + (story to (latestChapters + chapter)))
-                }
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                _chapterError.value = e.message ?: "特殊剧情生成失败"
-            } finally {
-                _isGeneratingChapter.value = false
-            }
-        }
-    }
-
     fun deleteChapter(theater: String, chapterId: String) {
         viewModelScope.launch {
             store.update { current ->
@@ -298,34 +260,10 @@ class StarWishVM(
         }
     }
 
-    fun deleteSpecialStoryChapter(story: String, chapterId: String) {
-        viewModelScope.launch {
-            store.update { current ->
-                val updated = current.specialStoryChapters[story].orEmpty()
-                    .filterNot { it.id == chapterId }
-                    .mapIndexed { index, chapter ->
-                        chapter.copy(
-                            chapter = index + 1,
-                            title = "第 ${index + 1} 章",
-                        )
-                    }
-                current.copy(specialStoryChapters = current.specialStoryChapters + (story to updated))
-            }
-        }
-    }
-
     fun saveTheaterGuide(title: String, guide: StarWishTheaterGuide) {
         viewModelScope.launch {
             store.update { current ->
                 current.copy(theaterGuides = current.theaterGuides + (title to guide.normalized()))
-            }
-        }
-    }
-
-    fun saveSpecialStoryGuide(title: String, guide: StarWishTheaterGuide) {
-        viewModelScope.launch {
-            store.update { current ->
-                current.copy(specialStoryGuides = current.specialStoryGuides + (title to guide.normalized()))
             }
         }
     }
@@ -373,19 +311,6 @@ class StarWishVM(
                     customTheaters = current.customTheaters.filterNot { it.title == title },
                     theaterChapters = current.theaterChapters - title,
                     theaterGuides = current.theaterGuides - title,
-                )
-            }
-        }
-    }
-
-    fun deleteSpecialStory(title: String) {
-        viewModelScope.launch {
-            store.update { current ->
-                current.copy(
-                    hiddenSpecialStoryTitles = current.hiddenSpecialStoryTitles + title,
-                    customSpecialStories = current.customSpecialStories.filterNot { it.title == title },
-                    specialStoryChapters = current.specialStoryChapters - title,
-                    specialStoryGuides = current.specialStoryGuides - title,
                 )
             }
         }
@@ -449,22 +374,6 @@ class StarWishVM(
         }
     }
 
-    fun addCustomSpecialStory(title: String, prompt: String) {
-        val cleanTitle = title.trim()
-        val cleanPrompt = prompt.trim()
-        if (cleanTitle.isBlank()) return
-        viewModelScope.launch {
-            val seed = StarWishTheaterSeed(
-                id = "custom-special-${System.currentTimeMillis()}-${cleanTitle.hashCode()}",
-                title = cleanTitle,
-                prompt = cleanPrompt,
-                createdAt = System.currentTimeMillis(),
-            )
-            store.update { current ->
-                current.copy(customSpecialStories = current.customSpecialStories + seed)
-            }
-        }
-    }
 }
 
 private fun StarWishTheaterChapter.isPromptPlaceholder(seed: StarWishTheaterSeed): Boolean {

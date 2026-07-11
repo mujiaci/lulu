@@ -83,7 +83,6 @@ import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.BookOpen02
 import me.rerere.hugeicons.stroke.CircleLock01
 import me.rerere.hugeicons.stroke.Delete01
-import me.rerere.hugeicons.stroke.Favourite
 import me.rerere.hugeicons.stroke.Image03
 import me.rerere.hugeicons.stroke.MoreVertical
 import me.rerere.hugeicons.stroke.PencilEdit01
@@ -111,7 +110,6 @@ import org.koin.androidx.compose.koinViewModel
 private enum class StarWishSection(val label: String) {
     Scrolls("画卷"),
     Theaters("小剧场"),
-    SpecialStories("特殊剧情"),
     Video("视频"),
 }
 
@@ -136,7 +134,6 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     var scrollSubsection by remember { mutableStateOf(ScrollSubsection.Prompts) }
     var selectedScroll by remember { mutableStateOf<Pair<String, StarWishScroll>?>(null) }
     var showAddTheater by remember { mutableStateOf(false) }
-    var showAddSpecialStory by remember { mutableStateOf(false) }
     val companionAssistant = remember(settings.assistants, settings.assistantId, studyState.selectedAssistantId) {
         val selected = studyState.selectedAssistantId
         settings.assistants.firstOrNull { it.id.toString() == selected }
@@ -278,7 +275,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         val hasChapter = chapters > 0
                         StarWishListRow(
                             title = theater.title,
-                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 1 个小剧场碎片续写" else "候选剧场 · 花 1 个小剧场碎片生成第一章",
+                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 1 枚紫色碎片续写" else "候选剧场 · 花 1 枚紫色碎片生成第一章",
                             unlocked = canCreate || hasChapter,
                             progress = (studyState.inventory.universalRareFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.BookOpen02,
@@ -289,40 +286,6 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                                 }
                             },
                             onDelete = { vm.deleteTheater(theater.title) },
-                        )
-                    }
-                }
-                StarWishSection.SpecialStories -> {
-                    item {
-                        SpecialStoryWalletCard(
-                            fragments = studyState.inventory.specialStoryFragments,
-                            onAdd = { showAddSpecialStory = true },
-                        )
-                    }
-                    items(StarWishRules.allSpecialStories(state.customSpecialStories).filterNot { it.title in state.hiddenSpecialStoryTitles }) { story ->
-                        val chapters = state.specialStoryChapters[story.title].orEmpty()
-                            .filterNot { it.isPromptPlaceholder(story) }
-                            .size
-                        val canCreate = studyState.inventory.specialStoryFragments >= StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER
-                        val hasChapter = chapters > 0
-                        StarWishListRow(
-                            title = story.title,
-                            subtitle = if (hasChapter) {
-                                "已生成 $chapters 章 · 再花 1 个特殊剧情碎片续写"
-                            } else {
-                                "候选特殊剧情 · 花 1 个特殊剧情碎片生成第一章"
-                            },
-                            unlocked = canCreate || hasChapter,
-                            progress = studyState.inventory.specialStoryFragments.coerceAtMost(StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER) /
-                                StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER.toFloat(),
-                            icon = HugeIcons.Favourite,
-                            onClick = {
-                                if (canCreate || hasChapter) {
-                                    vm.rememberSection(StarWishSection.SpecialStories.name)
-                                    navController.navigate(Screen.StarWishSpecialStory(story.title))
-                                }
-                            },
-                            onDelete = { vm.deleteSpecialStory(story.title) },
                         )
                     }
                 }
@@ -343,7 +306,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         item {
                             StarWishEmptyCard(
                                 title = "还没有视频",
-                                subtitle = "先上传豆包生成的视频；它会以灰色锁定状态进入视频柜，抽到视频碎片后解锁。",
+                                subtitle = "先上传 AI 生成的视频；它会以灰色锁定状态进入视频柜，使用金色碎片后解锁。",
                                 icon = HugeIcons.Play,
                                 onClick = { videoPickerLauncher.launch("video/*") },
                             )
@@ -418,7 +381,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     if (showAddTheater) {
         AddTheaterDialog(
             dialogTitle = "添加小剧场",
-            description = "添加后会出现在小剧场列表里；未花小剧场碎片生成章节前，它仍然只是候选。",
+            description = "添加后会出现在小剧场列表里；未花紫色碎片生成章节前，它仍然只是候选。",
             promptLabel = "剧情提示词",
             promptRequired = true,
             onDismiss = { showAddTheater = false },
@@ -429,49 +392,23 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
         )
     }
 
-    if (showAddSpecialStory) {
-        AddTheaterDialog(
-            dialogTitle = "添加特殊剧情",
-            description = "添加后会出现在特殊剧情列表里；剧情指导可以留空，右上角指导也会保持空白。",
-            promptLabel = "剧情指导（可空）",
-            promptRequired = false,
-            onDismiss = { showAddSpecialStory = false },
-            onAdd = { title, prompt ->
-                vm.addCustomSpecialStory(title, prompt)
-                showAddSpecialStory = false
-            },
-        )
-    }
 }
 
 @Composable
 fun StarWishTheaterPage(
     theaterTitle: String,
-    special: Boolean = false,
     vm: StarWishVM = koinViewModel(),
 ) {
     val state by vm.state.collectAsStateWithLifecycle()
     val studyState by vm.studyState.collectAsStateWithLifecycle()
     val isGeneratingChapter by vm.isGeneratingChapter.collectAsStateWithLifecycle()
     val chapterError by vm.chapterError.collectAsStateWithLifecycle()
-    val theater = if (special) {
-        StarWishRules.allSpecialStories(state.customSpecialStories).firstOrNull { it.title == theaterTitle }
-    } else {
-        StarWishRules.allTheaters(state.customTheaters).firstOrNull { it.title == theaterTitle }
-    }
-    val guide = theater?.let {
-        if (special) {
-            state.specialStoryGuides[it.title] ?: StarWishRules.defaultTheaterGuide(it, includeChapterPlan = false)
-        } else {
-            state.theaterGuides[it.title] ?: StarWishRules.defaultTheaterGuide(it)
-        }
-    }
-    var showGuideMenu by remember(theaterTitle, special) { mutableStateOf(false) }
-    var showGuideEditor by remember(theaterTitle, special) { mutableStateOf(false) }
+    val theater = StarWishRules.allTheaters(state.customTheaters).firstOrNull { it.title == theaterTitle }
+    val guide = theater?.let { state.theaterGuides[it.title] ?: StarWishRules.defaultTheaterGuide(it) }
+    var showGuideMenu by remember(theaterTitle) { mutableStateOf(false) }
+    var showGuideEditor by remember(theaterTitle) { mutableStateOf(false) }
     val saveGuide: (StarWishTheaterGuide) -> Unit = { updatedGuide ->
-        theater?.let {
-            if (special) vm.saveSpecialStoryGuide(it.title, updatedGuide) else vm.saveTheaterGuide(it.title, updatedGuide)
-        }
+        theater?.let { vm.saveTheaterGuide(it.title, updatedGuide) }
     }
     Scaffold(
         topBar = {
@@ -518,24 +455,16 @@ fun StarWishTheaterPage(
         } else {
             TheaterDetailContent(
                 theater = theater,
-                credits = if (special) {
-                    studyState.inventory.specialStoryFragments / StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER
-                } else {
-                    StarWishRules.chapterCredits(studyState)
-                },
-                rareFragments = if (special) studyState.inventory.specialStoryFragments else studyState.inventory.universalRareFragments,
-                chapters = if (special) state.specialStoryChapters[theater.title].orEmpty() else state.theaterChapters[theater.title].orEmpty(),
+                credits = StarWishRules.chapterCredits(studyState),
+                rareFragments = studyState.inventory.universalRareFragments,
+                chapters = state.theaterChapters[theater.title].orEmpty(),
                 isGenerating = isGeneratingChapter,
                 error = chapterError,
                 modifier = Modifier.padding(padding).padding(horizontal = 16.dp, vertical = 14.dp),
-                costPerChapter = if (special) StarWishRules.SPECIAL_FRAGMENTS_PER_CHAPTER else StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
-                fragmentLabel = if (special) "特殊剧情碎片" else "小剧场碎片",
-                onCreateChapter = { influence ->
-                    if (special) vm.createNextSpecialStoryChapter(theater.title, influence) else vm.createNextChapter(theater.title, influence)
-                },
-                onDeleteChapter = { chapterId ->
-                    if (special) vm.deleteSpecialStoryChapter(theater.title, chapterId) else vm.deleteChapter(theater.title, chapterId)
-                },
+                costPerChapter = StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
+                fragmentLabel = "紫色碎片",
+                onCreateChapter = { influence -> vm.createNextChapter(theater.title, influence) },
+                onDeleteChapter = { chapterId -> vm.deleteChapter(theater.title, chapterId) },
             )
         }
     }
@@ -647,36 +576,8 @@ private fun TheaterWalletCard(
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text("小剧场碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("1 个小剧场碎片可生成或续写 1 章。自定义剧场会先锁定，兑换后点亮。", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TextButton(onClick = onAdd) { Text("添加") }
-        }
-    }
-}
-
-@Composable
-private fun SpecialStoryWalletCard(
-    fragments: Int,
-    onAdd: () -> Unit,
-) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.82f)),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Surface(shape = CircleShape, color = Color(0xFFF5DDEC), modifier = Modifier.size(44.dp)) {
-                Box(contentAlignment = Alignment.Center) {
-                    Icon(HugeIcons.Favourite, null, tint = Color(0xFF8A3E67))
-                }
-            }
-            Column(Modifier.weight(1f)) {
-                Text("特殊剧情碎片 $fragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                Text("1 个特殊剧情碎片兑换 1 章。这里放更贴 XP、更有奖励感的专属剧情。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("紫色碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("可用于小剧场章节，也可以在考研 App 兑换一次抖音时间。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onAdd) { Text("添加") }
         }
@@ -897,12 +798,12 @@ private fun VideoRewardCard(
                 }
                 Column(Modifier.weight(1f)) {
                     Text("视频收藏柜", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("视频碎片 $epicFragments 枚 · 已解锁 $unlocked/$total", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("金色碎片 $epicFragments 枚 · 已解锁 $unlocked/$total", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                 Text(
-                    "上传豆包生成的视频后，它会先以灰色锁定状态进入收藏柜。每消耗 1 个视频碎片，按列表顺序解锁下一个视频并自动播放；全部解锁后会随机播放已解锁视频。",
+                    "上传 AI 生成的视频后，它会先以灰色锁定状态进入收藏柜。每消耗 1 枚金色碎片，按列表顺序解锁下一个视频并自动播放；全部解锁后会随机播放已解锁视频。",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWishColors.inkBlue,
@@ -959,7 +860,7 @@ private fun StarWishVideoRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(video.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (unlocked) "已解锁 · 可反复播放" else "未解锁 · 抽到视频碎片后点亮",
+                    if (unlocked) "已解锁 · 可反复播放" else "未解锁 · 使用金色碎片后点亮",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1040,7 +941,7 @@ private fun TheaterDetailContent(
     error: String?,
     modifier: Modifier = Modifier,
     costPerChapter: Int = StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
-    fragmentLabel: String = "小剧场碎片",
+    fragmentLabel: String = "紫色碎片",
     onCreateChapter: (String) -> Unit,
     onDeleteChapter: (String) -> Unit,
 ) {

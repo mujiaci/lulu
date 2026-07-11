@@ -28,11 +28,12 @@ class StudyStorePersistenceTest {
             }
         """.trimIndent()
 
-        val decoded = decodeStudyStateOrNull(raw)
+        val decoded = decodeStudyStateOrNull(raw)?.migrateLegacyEntertainmentFragments()
 
         requireNotNull(decoded)
         assertEquals(345, decoded.wallet.kudos)
         assertEquals(3, decoded.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
+        assertEquals(3, decoded.inventory.epicFragments)
         assertEquals(6, decoded.stats.totalPomodoros)
         assertEquals(8, decoded.stats.totalTasksCompleted)
         assertEquals(150, decoded.stats.totalStudyMinutes)

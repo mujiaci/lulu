@@ -251,31 +251,35 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun julyNineBacklogIsRebalancedWithoutSkippingLegalTheoryChapters() {
-        val july10 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 10))!!.tasks.joinToString("\n") { it.title }
+    fun julyTenHeadacheBacklogIsRebalancedWithoutSkippingLegalTheoryChapters() {
+        val july10 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 10))!!
         val july11 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 11))!!.tasks.joinToString("\n") { it.title }
         val july12 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 12))!!.tasks.joinToString("\n") { it.title }
         val july13 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))!!.tasks.joinToString("\n") { it.title }
+        val july15 = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 15))!!.tasks.joinToString("\n") { it.title }
 
-        assertTrue(july10.contains("法理第 1 章"))
-        assertTrue(july10.contains("刑法第 1 章框架图欠账"))
-        assertFalse(july10.contains("法理学第 5 章"))
-        assertTrue(july11.contains("法理第 2 章"))
-        assertTrue(july11.contains("合成完整一张"))
-        assertTrue(july12.contains("法理第 3 章"))
-        assertTrue(july12.contains("第 1-3 章连续验收"))
-        assertTrue(july12.contains("下周回收清单"))
-        assertTrue(july13.contains("法理第 4 章"))
+        assertTrue(july10.title.contains("头晕"))
+        assertTrue(july10.tasks.isEmpty())
+        assertTrue(july11.contains("法理第 1 章"))
+        assertTrue(july11.contains("刑法第 1 章框架图欠账"))
+        assertTrue(july11.contains("状态允许再选做"))
+        assertTrue(july12.contains("法理第 2 章"))
+        assertTrue(july12.contains("合成完整一张"))
+        assertTrue(july13.contains("法理第 3 章"))
+        assertTrue(july13.contains("第 1-3 章连续验收"))
+        assertFalse(july13.contains("法理第 4 章"))
         assertFalse(july13.contains("法理第 8 章"))
+        assertTrue(july15.contains("法理学第 4 章"))
     }
 
     @Test
     fun julyLegalTheoryReviewAdvancesInChapterOrder() {
         val expectedChapters = mapOf(
-            15 to "法理学第 5 章",
-            16 to "法理学第 6 章",
-            17 to "法理学第 7 章",
-            19 to "法理第 8 章",
+            15 to "法理学第 4 章",
+            16 to "法理学第 5 章",
+            17 to "法理学第 6 章",
+            19 to "法理第 7 章",
+            20 to "法理第 8 章",
             22 to "法理学第 9 章",
             23 to "法理第 10 章",
             24 to "法理学第 11 章",

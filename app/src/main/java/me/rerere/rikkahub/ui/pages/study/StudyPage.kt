@@ -117,6 +117,7 @@ import me.rerere.rikkahub.data.study.DailyStudyPlan
 import me.rerere.rikkahub.data.study.StudyAchievement
 import me.rerere.rikkahub.data.study.StudyScheduleBlock
 import me.rerere.rikkahub.data.study.StudyDrawResult
+import me.rerere.rikkahub.data.study.StudyEntertainmentReward
 import me.rerere.rikkahub.data.study.ExamStudyPlan
 import me.rerere.rikkahub.data.study.StudyEvent
 import me.rerere.rikkahub.data.study.StudyInventory
@@ -190,7 +191,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     var drawDialog by remember { mutableStateOf<List<StudyDrawReveal>?>(null) }
     var pendingBoxDialog by remember { mutableStateOf(false) }
     var boxDialog by remember { mutableStateOf<StudyMysteryBoxReward?>(null) }
-    var showVideoDialog by remember { mutableStateOf(false) }
     var showSuperDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -203,7 +203,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                 StudyEffect.MysteryBoxReady -> pendingBoxDialog = true
                 is StudyEffect.MysteryBox -> boxDialog = effect.reward
                 is StudyEffect.DrawResults -> drawDialog = effect.results
-                StudyEffect.VideoRedeemed -> showVideoDialog = true
                 StudyEffect.SuperMomentReady -> showSuperDialog = true
             }
         }
@@ -287,6 +286,13 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                             inventory = state.inventory,
                             onUseUniversalNormalTarget = vm::applyUniversalNormal,
                             onOpenMysteryBox = { vm.openMysteryBox(it) },
+                            onRedeemDouyin = { vm.redeemEntertainment(StudyEntertainmentReward.Douyin) },
+                            onRedeemGame = {
+                                vm.redeemEntertainment(StudyEntertainmentReward.Game)
+                                navController.navigate(Screen.GameHub)
+                            },
+                            onRedeemAnime = { vm.redeemEntertainment(StudyEntertainmentReward.Anime) },
+                            onOpenStarWish = { navController.navigate(Screen.StarWish) },
                             onOpenImageGen = { outfit ->
                                 val scroll = StarWishRules.scrollForOutfit(outfit)
                                 val prompt = StarWishRules.imagePromptForCompanion(
@@ -376,10 +382,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                 vm.claimSuperMoment(SuperMomentChoice.RareFragment)
             },
         )
-    }
-
-    if (showVideoDialog) {
-        VideoRewardCelebration(onDismissRequest = { showVideoDialog = false })
     }
 
     if (showLevelDialog) {
@@ -1866,44 +1868,6 @@ private fun MysteryBoxPendingDialog(
 }
 
 @Composable
-private fun VideoRewardCelebration(onDismissRequest: () -> Unit) {
-    val transition = rememberInfiniteTransition(label = "video_reward")
-    val pulse by transition.animateFloat(
-        initialValue = 0.9f,
-        targetValue = 1.1f,
-        animationSpec = infiniteRepeatable(tween(760), RepeatMode.Reverse),
-        label = "pulse",
-    )
-    AlertDialog(
-        onDismissRequest = onDismissRequest,
-        confirmButton = { Button(onClick = onDismissRequest) { Text("好耶，去星愿馆") } },
-        title = { Text("视频奖励点亮") },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(drawBrush(StudyRarity.Rainbow), RoundedCornerShape(18.dp))
-                    .padding(18.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                Surface(shape = CircleShape, color = Color.White.copy(alpha = 0.82f), modifier = Modifier.size((92 * pulse).dp)) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Icon(HugeIcons.Play, null, tint = StudyColors.goldText, modifier = Modifier.size(44.dp))
-                    }
-                }
-                Text("角色为你点亮了一次视频收藏解锁。", color = Color.White, fontWeight = FontWeight.SemiBold)
-                Text(
-                    "已消耗 1 个视频碎片。去星愿馆的视频板块上传视频，已解锁的视频可以反复观看。",
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-        },
-    )
-}
-
-@Composable
 private fun GachaCard(
     state: StudyState,
     onSingle: () -> Unit,
@@ -1922,15 +1886,14 @@ private fun GachaCard(
                     Icon(HugeIcons.AiMagic, null, tint = Color.White)
                     Column {
                         Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("专属普通 88% · 通用普通 4% · 小剧场 5% · 特殊剧情 2% · 视频 1%", color = Color.White.copy(alpha = 0.84f))
+                        Text("普通 93% · 紫色 4% · 金色 2% · 彩色 1%", color = Color.White.copy(alpha = 0.84f))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    DrawPoolChip("专属", "88%", StudyColors.blue)
-                    DrawPoolChip("通用", "4%", Color(0xFF4F8F6A))
-                    DrawPoolChip("剧场", "5%", StudyColors.purple)
-                    DrawPoolChip("特殊", "2%", StudyColors.goldText)
-                    DrawPoolChip("视频", "1%", Color(0xFF41D6C3))
+                    DrawPoolChip("普通", "93%", StudyColors.blue)
+                    DrawPoolChip("紫色", "4%", StudyColors.purple)
+                    DrawPoolChip("金色", "2%", StudyColors.goldText)
+                    DrawPoolChip("彩色", "1%", Color(0xFF41D6C3))
                 }
             }
         }
@@ -1950,6 +1913,10 @@ private fun CollectionCard(
     inventory: StudyInventory,
     onUseUniversalNormalTarget: (String) -> Unit,
     onOpenMysteryBox: (Int) -> Unit,
+    onRedeemDouyin: () -> Unit,
+    onRedeemGame: () -> Unit,
+    onRedeemAnime: () -> Unit,
+    onOpenStarWish: () -> Unit,
     onOpenImageGen: (String) -> Unit,
 ) {
     var collectionSection by remember { mutableStateOf(CollectionSection.Scrolls) }
@@ -1992,6 +1959,24 @@ private fun CollectionCard(
                 Text("${inventory.universalNormalFragments}", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, color = StudyColors.blue)
             }
         }
+        EntertainmentRewardRow(
+            label = "紫色碎片",
+            count = inventory.universalRareFragments,
+            color = StudyColors.purple,
+            actions = listOf("刷抖音" to onRedeemDouyin, "小剧场" to onOpenStarWish),
+        )
+        EntertainmentRewardRow(
+            label = "金色碎片",
+            count = inventory.epicFragments,
+            color = StudyColors.goldText,
+            actions = listOf("玩游戏" to onRedeemGame, "AI 视频" to onOpenStarWish),
+        )
+        EntertainmentRewardRow(
+            label = "彩色碎片",
+            count = inventory.rainbowFragments,
+            color = Color(0xFF23C8B8),
+            actions = listOf("看动漫" to onRedeemAnime),
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             FilterChip(
                 selected = collectionSection == CollectionSection.Scrolls,
@@ -2038,6 +2023,32 @@ private fun CollectionCard(
             },
             dismissButton = { TextButton(onClick = { pendingNormalTarget = null }) { Text("取消") } },
         )
+    }
+}
+
+@Composable
+private fun EntertainmentRewardRow(
+    label: String,
+    count: Int,
+    color: Color,
+    actions: List<Pair<String, () -> Unit>>,
+) {
+    Surface(color = Color.White.copy(alpha = 0.72f), shape = MaterialTheme.shapes.medium) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(label, fontWeight = FontWeight.SemiBold, color = color)
+                Text("$count 枚", style = MaterialTheme.typography.bodySmall)
+            }
+            actions.forEach { (title, action) ->
+                TextButton(onClick = action, enabled = count > 0 || title in setOf("小剧场", "AI 视频")) {
+                    Text(title)
+                }
+            }
+        }
     }
 }
 
@@ -2099,9 +2110,9 @@ private fun CollectionProgressList(
         }
         CollectionSection.Theaters -> {
             Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("小剧场碎片不再区分剧情。去星愿馆选择任意小剧场，花 1 个小剧场碎片生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("紫色碎片可用于抖音或小剧场。去星愿馆选择任意小剧场，花 1 枚生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             CollectionProgressRow(
-                title = "当前小剧场碎片",
+                title = "当前紫色碎片",
                 detail = "${inventory.universalRareFragments} 个 · 每 1 个可兑换 1 章",
                 progress = inventory.universalRareFragments.coerceAtMost(1).toFloat(),
                 unlocked = inventory.universalRareFragments >= 1,
@@ -2374,9 +2385,9 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "专属普通碎片 88%，通用普通碎片 4%，小剧场碎片 5%，特殊剧情碎片 2%，视频碎片 1%。",
+                "普通碎片合计 93%，紫色碎片 4%，金色碎片 2%，彩色碎片 1%。",
                 "每套画卷需要 10 个专属碎片；通用普通碎片仍可补任意未满画卷，但现在主要靠少量抽卡、盲盒和阶段奖励获得。",
-                "小剧场碎片不区分剧情，1 个小剧场碎片可在星愿馆兑换或续写 1 章小剧场。",
+                "紫色碎片可兑换抖音时间，或在星愿馆生成、续写 1 章小剧场。",
             ),
         )
         GuideBlock(
@@ -2384,7 +2395,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "约 4155 夸夸值，可折算 41 次单抽；十连 800 会比单抽省 200。",
                 "超神 5 天给 5 张十连券；等级、成就和商店会追加抽卡券。",
-                "按基础约 91 抽估算：专属普通约 80，通用普通约 4，小剧场约 5，特殊剧情约 2，视频约 1。",
+                "按 100 抽估算：普通约 93，紫色约 4，金色约 2，彩色约 1。",
                 "超神不再发碎片，神秘商店也不再直接刷通用普通碎片；画卷进度主要来自抽卡、盲盒、等级和成就。",
             ),
         )
@@ -2409,7 +2420,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
                 "收藏已按 20 套画卷、每套 10 个专属碎片展示。",
-                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；它的产出已收紧，小剧场碎片用于星愿馆章节兑换。",
+                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；紫色碎片同时承担抖音和小剧场奖励。",
                 "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
                 "更深的角色主动督学、画卷提示词自动带入、星愿馆视频收藏柜可以作为后续增强。",
@@ -2621,7 +2632,7 @@ private fun drawResultTitle(best: StudyRarity, count: Int): String {
     return when (best) {
         StudyRarity.Rainbow -> "彩色光芒亮起来了"
         StudyRarity.Epic -> "金光炸开了"
-        StudyRarity.Rare -> if (count >= 10) "十连有好东西" else "小剧场碎片出现"
+        StudyRarity.Rare -> if (count >= 10) "十连有好东西" else "紫色碎片出现"
         StudyRarity.Normal -> if (count >= 10) "十连结果" else "抽卡结果"
     }
 }

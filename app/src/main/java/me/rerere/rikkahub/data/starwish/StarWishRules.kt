@@ -7,7 +7,6 @@ import kotlin.random.Random
 
 object StarWishRules {
     const val RARE_FRAGMENTS_PER_CHAPTER = 1
-    const val SPECIAL_FRAGMENTS_PER_CHAPTER = 1
     const val VIDEO_FRAGMENTS_PER_UNLOCK = 1
 
     val scrolls: List<StarWishScroll> = listOf(
@@ -222,11 +221,6 @@ object StarWishRules {
 
     fun allTheaters(custom: List<StarWishTheaterSeed>): List<StarWishTheaterSeed> = theaters + custom
 
-    val specialStories: List<StarWishTheaterSeed> = listOf(
-    )
-
-    fun allSpecialStories(custom: List<StarWishTheaterSeed>): List<StarWishTheaterSeed> = specialStories + custom
-
     val builtInVideos: List<StarWishVideoItem> = emptyList()
 
     fun allVideos(custom: List<StarWishVideoItem>): List<StarWishVideoItem> = builtInVideos + custom
@@ -329,28 +323,18 @@ object StarWishRules {
         return studyState.inventory.universalRareFragments / RARE_FRAGMENTS_PER_CHAPTER
     }
 
-    fun defaultTheaterGuide(seed: StarWishTheaterSeed, includeChapterPlan: Boolean = true): StarWishTheaterGuide {
-        return if (includeChapterPlan) {
-            StarWishTheaterGuide(
-                overview = seed.prompt,
-                chapters = listOf(
-                    "强钩子开局，女主被轻视、被误解或被推入困局，含“露”的核心角色登场，建立关系张力。",
-                    "女主第一次反击，局势出现爽点，露字角色开始被她吸引、信服、臣服或产生强烈兴趣。",
-                    "危机升级，恶人或规则露出破绽，女主用智谋、气场或现代知识控场，关系继续升温。",
-                    "情感、主从、搭档或命运关系爆发，强者低头，角色之间出现更明确的偏爱和牵绊。",
-                    "终局反转，惩罚恶人、打脸旧秩序或破解核心危机，把前文伏笔集中回收。",
-                    "奖励、余韵、亲密收束，并留下可续写钩子，让读者期待下一轮故事。",
-                ),
-                wordCount = "1200-2200",
-            )
-        } else {
-            StarWishTheaterGuide(
-                overview = seed.prompt,
-                chapters = List(6) { "" },
-                wordCount = "1200-2200",
-            )
-        }
-    }
+    fun defaultTheaterGuide(seed: StarWishTheaterSeed): StarWishTheaterGuide = StarWishTheaterGuide(
+        overview = seed.prompt,
+        chapters = listOf(
+            "强钩子开局，女主被轻视、被误解或被推入困局，含“露”的核心角色登场，建立关系张力。",
+            "女主第一次反击，局势出现爽点，露字角色开始被她吸引、信服、臣服或产生强烈兴趣。",
+            "危机升级，恶人或规则露出破绽，女主用智谋、气场或现代知识控场，关系继续升温。",
+            "情感、主从、搭档或命运关系爆发，强者低头，角色之间出现更明确的偏爱和牵绊。",
+            "终局反转，惩罚恶人、打脸旧秩序或破解核心危机，把前文伏笔集中回收。",
+            "奖励、余韵、亲密收束，并留下可续写钩子，让读者期待下一轮故事。",
+        ),
+        wordCount = "1200-2200",
+    )
 
     fun theaterGuide(seed: StarWishTheaterSeed, guide: StarWishTheaterGuide = defaultTheaterGuide(seed)): String {
         val normalized = guide.normalized()
