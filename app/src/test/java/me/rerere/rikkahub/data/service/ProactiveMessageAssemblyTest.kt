@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.service
 
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -40,5 +41,33 @@ class ProactiveMessageAssemblyTest {
         )
 
         assertEquals(generated.map { it.id }, actual.map { it.id })
+    }
+
+    @Test
+    fun `proactive reply is discarded when user resolves its commitment during generation`() {
+        assertEquals(
+            true,
+            shouldDiscardProactiveReply(
+                replyText = "起床了吗？",
+                executingCommitmentId = "wake-1",
+                currentCommitmentStatus = CompanionCommitmentStatus.FULFILLED,
+            ),
+        )
+        assertEquals(
+            true,
+            shouldDiscardProactiveReply(
+                replyText = "我再叫你一次",
+                executingCommitmentId = "wake-1",
+                currentCommitmentStatus = CompanionCommitmentStatus.CANCELLED,
+            ),
+        )
+        assertEquals(
+            false,
+            shouldDiscardProactiveReply(
+                replyText = "醒醒，时间到了",
+                executingCommitmentId = "wake-1",
+                currentCommitmentStatus = CompanionCommitmentStatus.EXECUTING,
+            ),
+        )
     }
 }

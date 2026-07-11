@@ -1281,12 +1281,32 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val replyText = aiMessage.parts.filterIsInstance<UIMessagePart.Text>()
                     .joinToString("\n") { it.text }.trim()
                 val finalPresence = finalMessages.companionModelPresence()
+                val executingCommitmentId = executingCommitment?.id
+                val currentCommitmentStatus = executingCommitment?.let { commitment ->
+                    companionRuntime.snapshot(commitment.assistantId).commitments
+                        .firstOrNull { it.id == commitment.id }
+                        ?.status
+                }
+                val commitmentResolvedExternally = executingCommitmentId != null &&
+                    currentCommitmentStatus != CompanionCommitmentStatus.EXECUTING
+                val shouldDiscardReply = shouldDiscardProactiveReply(
+                    replyText = replyText,
+                    executingCommitmentId = executingCommitmentId,
+                    currentCommitmentStatus = currentCommitmentStatus,
+                )
 
                 Log.d(TAG, "Proactive message generated: '${replyText.take(100)}...' (${replyText.length} chars), hasToolCalls=$hasToolCalls")
 
-                if (replyText.isProactiveSkipReply()) {
+                if (shouldDiscardReply) {
                     // AI 选择跳过，移除本次生成产生的全部 assistant node。
-                    Log.d(ProactiveMessageService.TAG, "AI chose to skip proactive message")
+                    Log.d(
+                        ProactiveMessageService.TAG,
+                        if (commitmentResolvedExternally) {
+                            "Discarding proactive reply because its commitment was resolved during generation"
+                        } else {
+                            "AI chose to skip proactive message"
+                        },
+                    )
                     val generatedIds = generatedAiMessages.map { it.id }.toSet()
                     chatService.updateConversationState(conversationId) { conv ->
                         conv.copy(
@@ -1294,6 +1314,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 node.messages.any { it.id in generatedIds }
                             }
                         )
+                    }
+                    if (commitmentResolvedExternally && executingCommitment?.isWakeGoal() == true) {
+                        dismissWakeAlarms(assistant.name)
                     }
                 } else {
                     // 有效回复：session 里已有 aiMessage（流式过程已追加），持久化并发通知
@@ -1313,6 +1336,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     showProactiveNotification(conversationId, assistant.name.ifBlank { "AI" }, replyText)
                 }
 
+                if (commitmentResolvedExternally) {
+                    executingCommitment = null
+                    completedCommitmentResult = null
+                }
                 executingCommitment?.let { commitment ->
                     val completedAt = System.currentTimeMillis()
                     val actionResult = CompanionActionResult(
@@ -1507,6 +1534,27 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             )
         }.onFailure { error ->
             Log.w(TAG, "Failed to schedule continued wake alarm", error)
+        }
+    }
+
+    private suspend fun dismissWakeAlarms(assistantName: String) {
+        val alarmTool = createAlarmTool(this)
+        listOf(
+            "${assistantName.ifBlank { "当前角色" }}叫你起床",
+            "${assistantName.ifBlank { "当前角色" }}继续叫你起床",
+        ).forEach { label ->
+            runCatching {
+                alarmTool.execute(
+                    JsonObject(
+                        mapOf(
+                            "action" to JsonPrimitive("dismiss"),
+                            "label" to JsonPrimitive(label),
+                        ),
+                    ),
+                )
+            }.onFailure { error ->
+                Log.w(TAG, "Failed to dismiss stale wake alarm label=$label", error)
+            }
         }
     }
 
@@ -1939,6 +1987,13 @@ private fun String.isProactiveSkipReply(): Boolean {
         normalized.equals("[PASS]", ignoreCase = true) ||
         normalized.equals("[SKIP]", ignoreCase = true)
 }
+
+internal fun shouldDiscardProactiveReply(
+    replyText: String,
+    executingCommitmentId: String?,
+    currentCommitmentStatus: CompanionCommitmentStatus?,
+): Boolean = replyText.isProactiveSkipReply() ||
+    (executingCommitmentId != null && currentCommitmentStatus != CompanionCommitmentStatus.EXECUTING)
 
 internal fun shouldCompleteWakeGoal(
     wakeTargetAt: Long,
