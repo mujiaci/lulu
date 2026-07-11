@@ -16,6 +16,29 @@ import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import java.util.concurrent.TimeUnit
 import kotlin.random.Random
+import kotlin.uuid.Uuid
+
+internal data class TargetedProactiveWorkSpec(
+    val uniqueWorkName: String,
+    val delayMillis: Long,
+    val assistantId: String,
+    val commitmentId: String,
+) {
+    val isTargeted: Boolean
+        get() = assistantId.isNotBlank() && commitmentId.isNotBlank()
+}
+
+internal fun buildTargetedProactiveWorkSpec(
+    triggerAtMillis: Long,
+    nowMillis: Long = System.currentTimeMillis(),
+    assistantId: String,
+    commitmentId: String,
+): TargetedProactiveWorkSpec = TargetedProactiveWorkSpec(
+    uniqueWorkName = "targeted_proactive_message_work",
+    delayMillis = (triggerAtMillis - nowMillis).coerceAtLeast(0L),
+    assistantId = assistantId.trim(),
+    commitmentId = commitmentId.trim(),
+)
 
 /**
  * WorkManager-based fallback for proactive message scheduling.
@@ -29,6 +52,7 @@ class ProactiveMessageWorker(
     companion object {
         private const val TAG = "ProactiveMessageWorker"
         private const val UNIQUE_WORK_NAME = "proactive_message_work"
+        private const val TARGETED_UNIQUE_WORK_NAME = "targeted_proactive_message_work"
 
         fun scheduleNext(context: Context, setting: me.rerere.rikkahub.data.datastore.ProactiveMessageSetting) {
             if (!setting.enabled) {
@@ -80,6 +104,41 @@ class ProactiveMessageWorker(
             Log.d(TAG, "Cancelled WorkManager proactive message")
         }
 
+        fun scheduleTargeted(
+            context: Context,
+            triggerAtMillis: Long,
+            assistantId: String,
+            commitmentId: String,
+        ) {
+            val spec = buildTargetedProactiveWorkSpec(
+                triggerAtMillis = triggerAtMillis,
+                assistantId = assistantId,
+                commitmentId = commitmentId,
+            )
+            if (!spec.isTargeted) return
+
+            val inputData = Data.Builder()
+                .putString(ProactiveMessageService.EXTRA_ASSISTANT_ID, spec.assistantId)
+                .putString(ProactiveMessageService.EXTRA_COMMITMENT_ID, spec.commitmentId)
+                .build()
+            val workRequest = OneTimeWorkRequestBuilder<ProactiveMessageWorker>()
+                .setInputData(inputData)
+                .setInitialDelay(spec.delayMillis, TimeUnit.MILLISECONDS)
+                .build()
+
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                TARGETED_UNIQUE_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                workRequest,
+            )
+            Log.d(TAG, "Scheduled targeted WorkManager fallback commitment=${spec.commitmentId}")
+        }
+
+        fun cancelTargeted(context: Context) {
+            WorkManager.getInstance(context).cancelUniqueWork(TARGETED_UNIQUE_WORK_NAME)
+            Log.d(TAG, "Cancelled targeted WorkManager fallback")
+        }
+
         /**
          * Check if exact alarm permission is granted (Android 12+)
          */
@@ -105,9 +164,21 @@ class ProactiveMessageWorker(
 
         val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
         val settings = settingsStore.settingsFlow.first()
-        val proactiveSetting = settings.getProactiveMessageSetting()
+        val targetedAssistantId = inputData
+            .getString(ProactiveMessageService.EXTRA_ASSISTANT_ID)
+            ?.takeIf(String::isNotBlank)
+        val targetedCommitmentId = inputData
+            .getString(ProactiveMessageService.EXTRA_COMMITMENT_ID)
+            ?.takeIf(String::isNotBlank)
+        val isTargeted = targetedAssistantId != null && targetedCommitmentId != null
+        val targetedAssistantUuid = if (isTargeted) {
+            runCatching { Uuid.parse(targetedAssistantId.orEmpty()) }.getOrNull() ?: return Result.failure()
+        } else {
+            null
+        }
+        val proactiveSetting = settings.getProactiveMessageSetting(targetedAssistantUuid)
 
-        if (!proactiveSetting.enabled) {
+        if (!proactiveSetting.enabled && !isTargeted) {
             Log.d(TAG, "Proactive message disabled, skipping")
             return Result.success()
         }
@@ -125,6 +196,7 @@ class ProactiveMessageWorker(
             // Start the foreground service which handles the actual AI generation
             val serviceIntent = android.content.Intent(applicationContext, ProactiveMessageTriggerService::class.java).apply {
                 putExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID, proactiveSetting.assistantId)
+                targetedCommitmentId?.let { putExtra(ProactiveMessageService.EXTRA_COMMITMENT_ID, it) }
             }
             
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -133,14 +205,16 @@ class ProactiveMessageWorker(
                 applicationContext.startService(serviceIntent)
             }
 
-            // Schedule the next trigger via WorkManager
-            scheduleNext(applicationContext, proactiveSetting)
+            if (!isTargeted) {
+                scheduleNext(applicationContext, proactiveSetting)
+            }
 
             return Result.success()
         } catch (e: Exception) {
             Log.e(TAG, "ProactiveMessageWorker failed", e)
-            // Schedule next even on failure
-            scheduleNext(applicationContext, proactiveSetting)
+            if (!isTargeted) {
+                scheduleNext(applicationContext, proactiveSetting)
+            }
             return Result.retry()
         } finally {
             if (wakeLock.isHeld) {

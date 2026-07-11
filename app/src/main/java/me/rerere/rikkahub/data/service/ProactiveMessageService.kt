@@ -343,6 +343,14 @@ class ProactiveMessageService : KoinComponent {
             }
 
             Log.d(TAG, "Scheduled targeted proactive message kind=$kind at ${java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date(triggerAtMillis))}")
+            commitmentId?.takeIf { it.isNotBlank() }?.let { id ->
+                ProactiveMessageWorker.scheduleTargeted(
+                    context = context,
+                    triggerAtMillis = triggerAtMillis,
+                    assistantId = assistantId,
+                    commitmentId = id,
+                )
+            }
         }
 
         fun scheduleCommitment(
@@ -384,6 +392,7 @@ class ProactiveMessageService : KoinComponent {
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
             pendingIntent?.let { alarmManager.cancel(it) }
+            ProactiveMessageWorker.cancelTargeted(context)
         }
 
         fun resetAssistantProjection(
@@ -476,6 +485,7 @@ class ProactiveMessageService : KoinComponent {
 
             // Also cancel WorkManager fallback
             ProactiveMessageWorker.cancel(context)
+            ProactiveMessageWorker.cancelTargeted(context)
         }
 
         fun resetTimer(context: Context, setting: ProactiveMessageSetting) {
@@ -1613,14 +1623,15 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     }
 
     private fun clearDurableCommitmentProjection() {
-            getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit()
-                .remove(ProactiveMessageService.KEY_TARGETED_TRIGGER_TIME)
-                .remove(ProactiveMessageService.KEY_TARGETED_REASON)
-                .remove(ProactiveMessageService.KEY_TARGETED_USER_TEXT)
-                .remove(ProactiveMessageService.KEY_TARGETED_KIND)
-                .remove(ProactiveMessageService.KEY_TARGETED_COMMITMENT_ID)
-                .apply()
+        getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit()
+            .remove(ProactiveMessageService.KEY_TARGETED_TRIGGER_TIME)
+            .remove(ProactiveMessageService.KEY_TARGETED_REASON)
+            .remove(ProactiveMessageService.KEY_TARGETED_USER_TEXT)
+            .remove(ProactiveMessageService.KEY_TARGETED_KIND)
+            .remove(ProactiveMessageService.KEY_TARGETED_COMMITMENT_ID)
+            .apply()
+        ProactiveMessageWorker.cancelTargeted(this)
     }
 
     private fun buildSystemPrompt(assistant: Assistant): String = assistant.systemPrompt
