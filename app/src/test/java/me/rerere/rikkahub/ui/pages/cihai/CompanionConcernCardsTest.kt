@@ -129,6 +129,42 @@ class CompanionConcernCardsTest {
         assertEquals("起床提醒", cards.single().title)
     }
 
+    @Test
+    fun `legacy planner keys link by matching meaning and nearby target time`() {
+        val snapshot = CompanionSnapshot(
+            assistantId = "lulu",
+            concerns = listOf(
+                CompanionConcern(
+                    id = "legacy-concern",
+                    assistantId = "lulu",
+                    subjectKey = "care:important-task",
+                    event = "记着这件有时间要求的事",
+                    goal = "在约定时间继续提醒和确认",
+                    nextPerceptionAt = NOW + 60_000L,
+                ),
+            ),
+            commitments = listOf(
+                CompanionCommitment(
+                    id = "legacy-commitment",
+                    assistantId = "lulu",
+                    subjectKey = "schedule:important-task",
+                    promise = "在约定时间继续提醒和确认",
+                    dueAt = NOW + 60_500L,
+                    status = CompanionCommitmentStatus.ACTIVE,
+                    actionPlan = CompanionActionPlan(
+                        type = CompanionActionType.CHECK_IN,
+                        category = "schedule",
+                    ),
+                ),
+            ),
+        )
+
+        val cards = buildCompanionConcernCards(snapshot, nowMillis = NOW)
+
+        assertEquals(1, cards.size)
+        assertEquals("时间提醒", cards.single().title)
+    }
+
     private fun concern(
         id: String,
         subject: String,

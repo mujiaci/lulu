@@ -10,6 +10,7 @@ import me.rerere.rikkahub.data.companion.normalizeCompanionSubjectKey
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
 data class CompanionConcernCardModel(
     val id: String,
@@ -43,6 +44,10 @@ fun buildCompanionConcernCards(
                 .asSequence()
                 .filterNot { it.id in representedCommitmentIds }
                 .firstOrNull { it.sharesSourceMessageWith(concern) }
+            ?: commitments
+                .asSequence()
+                .filterNot { it.id in representedCommitmentIds }
+                .firstOrNull { it.semanticallyMatches(concern) }
         commitment
             ?.also { representedCommitmentIds += it.id }
         concern.toCardModel(commitment, nowMillis)
@@ -98,6 +103,35 @@ private fun CompanionCommitment.normalizedSubjectKey(): String = normalizeCompan
 
 private fun CompanionCommitment.sharesSourceMessageWith(concern: CompanionConcern): Boolean =
     sourceMessageId?.takeIf(String::isNotBlank)?.let { it in concern.sourceMessageIds } == true
+
+private fun CompanionCommitment.semanticallyMatches(concern: CompanionConcern): Boolean {
+    val concernAt = concern.nextPerceptionAt ?: return false
+    val concernFamily = listOf(concern.subjectKey, concern.event, concern.goal).companionConcernFamily()
+        ?: return false
+    val commitmentFamily = listOf(
+        subjectKey,
+        promise,
+        actionPlan.category,
+        actionPlan.contextText,
+    ).companionConcernFamily() ?: return false
+    if (concernFamily != commitmentFamily) return false
+    val toleranceMillis = if (concernFamily == "time") 60_000L else 5 * 60_000L
+    return abs(dueAt - concernAt) <= toleranceMillis
+}
+
+private fun List<String>.companionConcernFamily(): String? {
+    val text = joinToString(" ").lowercase()
+    return when {
+        listOf("wake", "起床", "叫醒").any { marker -> marker in text } -> "wake"
+        listOf("sleep", "休息", "睡觉", "入睡").any { marker -> marker in text } -> "sleep"
+        listOf("study", "学习", "复习", "背书").any { marker -> marker in text } -> "study"
+        listOf("health", "身体", "健康", "不舒服", "吃药").any { marker -> marker in text } -> "health"
+        listOf("meal", "吃饭", "早餐", "午饭", "晚饭").any { marker -> marker in text } -> "meal"
+        listOf("schedule", "deadline", "reminder", "time", "时间", "提醒", "约定", "到点")
+            .any { marker -> marker in text } -> "time"
+        else -> null
+    }
+}
 
 private fun CompanionCommitmentStatus.visiblePriority(): Int = when (this) {
     CompanionCommitmentStatus.EXECUTING -> 0
