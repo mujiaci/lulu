@@ -11,8 +11,8 @@ import org.junit.Test
 
 class AffectiveMemoryExtractionPlannerTest {
     @Test
-    fun `planner waits until sixty stable logical messages remain after tail buffer`() {
-        val shortConversation = nodes(69)
+    fun `planner waits until twenty stable logical messages remain after tail buffer`() {
+        val shortConversation = nodes(25)
 
         val plan = buildAffectiveMemoryExtractionPlan(
             messageNodes = shortConversation,
@@ -24,7 +24,7 @@ class AffectiveMemoryExtractionPlannerTest {
 
     @Test
     fun `planner builds first extraction window from stable messages and excludes tail buffer`() {
-        val conversation = nodes(70)
+        val conversation = nodes(26)
 
         val plan = buildAffectiveMemoryExtractionPlan(
             messageNodes = conversation,
@@ -33,16 +33,16 @@ class AffectiveMemoryExtractionPlannerTest {
 
         requireNotNull(plan)
         assertEquals("interval", plan.reason)
-        assertEquals(60, plan.turns.size)
+        assertEquals(20, plan.turns.size)
         assertEquals(idOf(1), plan.turns.first().nodeId)
-        assertEquals(idOf(60), plan.turns.last().nodeId)
-        assertFalse(plan.turns.any { it.nodeId == idOf(61) })
+        assertEquals(idOf(20), plan.turns.last().nodeId)
+        assertFalse(plan.turns.any { it.nodeId == idOf(21) })
     }
 
     @Test
-    fun `planner overlaps ten messages after the latest processed source node`() {
-        val conversation = nodes(130)
-        val processed = (1..60).map { idOf(it) }.toSet()
+    fun `planner overlaps six messages after the latest processed source node`() {
+        val conversation = nodes(52)
+        val processed = (1..20).map { idOf(it) }.toSet()
 
         val plan = buildAffectiveMemoryExtractionPlan(
             messageNodes = conversation,
@@ -50,8 +50,8 @@ class AffectiveMemoryExtractionPlannerTest {
         )
 
         requireNotNull(plan)
-        assertEquals(idOf(51), plan.turns.first().nodeId)
-        assertEquals(idOf(110), plan.turns.last().nodeId)
+        assertEquals(idOf(15), plan.turns.first().nodeId)
+        assertEquals(idOf(44), plan.turns.last().nodeId)
     }
 
     @Test

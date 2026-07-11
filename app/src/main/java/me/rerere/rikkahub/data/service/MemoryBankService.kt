@@ -18,6 +18,7 @@ import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
+import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
 
@@ -377,7 +378,11 @@ class MemoryBankService(
         }
     }
 
-    suspend fun buildRecallContext(assistantId: String?, query: String = ""): String = withContext(Dispatchers.IO) {
+    suspend fun buildRecallContext(
+        assistantId: String?,
+        query: String = "",
+        commitmentStatusesBySourceId: Map<String, CompanionCommitmentStatus>? = null,
+    ): String = withContext(Dispatchers.IO) {
         val memories = buildList {
             if (assistantId != null) {
                 addAll(memoryBankDAO.getMemoriesByAssistant(assistantId).take(120))
@@ -394,6 +399,7 @@ class MemoryBankService(
             addAll(memoryBankDAO.getMemoriesByTypeLimit("manual", 5))
         }
             .distinctBy { it.id }
+            .filter { memory -> memory.isRecallablePromise(commitmentStatusesBySourceId) }
 
         val queryVector = buildQueryEmbedding(query)
         val rerankCandidateCount = memoryRerankCandidateCount()
@@ -546,6 +552,26 @@ private data class DuplicateMemoryDeprecation(
     val deprecated: MemoryBankEntity,
     val keep: MemoryBankEntity,
 )
+
+private fun MemoryBankEntity.isRecallablePromise(
+    commitmentStatusesBySourceId: Map<String, CompanionCommitmentStatus>?,
+): Boolean {
+    if ((memoryKind ?: type) != "promise" || commitmentStatusesBySourceId == null) return true
+    val evidenceIds = sourceMessageNodeIdsJson.decodeMemoryNodeIds() +
+        evidenceMessageNodeIdsJson.decodeMemoryNodeIds()
+    val linkedStatuses = evidenceIds.mapNotNull(commitmentStatusesBySourceId::get)
+    if (linkedStatuses.isEmpty()) return true
+    return linkedStatuses.any { status ->
+        status in setOf(
+            CompanionCommitmentStatus.PROPOSED,
+            CompanionCommitmentStatus.ACTIVE,
+            CompanionCommitmentStatus.DUE,
+            CompanionCommitmentStatus.EXECUTING,
+            CompanionCommitmentStatus.FAILED,
+            CompanionCommitmentStatus.RETRY_SCHEDULED,
+        )
+    }
+}
 
 internal data class MemoryRerankResult(
     val index: Int,

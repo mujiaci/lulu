@@ -71,6 +71,7 @@ import me.rerere.rikkahub.data.companion.CompanionState
 import me.rerere.rikkahub.data.companion.CompanionTurnMutation
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
+import me.rerere.rikkahub.data.companion.commitmentStatusesBySourceMessageId
 import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
 import me.rerere.rikkahub.data.companion.isWakeGoal
 import me.rerere.rikkahub.data.companion.retryMinutesOrDefault
@@ -1034,6 +1035,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val memoryContext = memoryBankService.buildRecallContext(
                     assistantId = assistantUuid.toString(),
                     query = memoryQuery,
+                    commitmentStatusesBySourceId = companionRuntime.snapshot(assistantUuid.toString())
+                        .commitmentStatusesBySourceMessageId(),
                 )
                 val companionContext = companionRuntime.perception(
                     CompanionPerceptionInput(

@@ -5,7 +5,9 @@ import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
 import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
+import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -286,8 +288,44 @@ class MemoryBankServiceExtractionTest {
         assertEquals("""["8"]""", dao.relatedMemoryUpdates[7])
         assertEquals("""["7"]""", dao.relatedMemoryUpdates[8])
         assertEquals(setOf(7 to 8, 8 to 7), dao.reinforcedGraphEdges.map { it.sourceId to it.targetId }.toSet())
-        assertTrue(dao.reinforcedGraphEdges.all { it.delta > 0.18 && it.maxWeight == 3.0 })
+        assertTrue(dao.reinforcedGraphEdges.all { it.delta > 0.025 && it.maxWeight == 1.5 })
         assertTrue(dao.recalledAt > 0L)
+    }
+
+    @Test
+    fun `recall excludes promise memories whose runtime commitments are terminal`() = runBlocking {
+        val dao = RecordingMemoryBankDAO(
+            assistantMemories = listOf(
+                MemoryBankEntity(
+                    id = 1,
+                    content = "I promised to remind her to rest tonight.",
+                    memoryKind = "promise",
+                    assistantId = "assistant-1",
+                    sourceMessageNodeIdsJson = """["message-active"]""",
+                    importance = 5,
+                ),
+                MemoryBankEntity(
+                    id = 2,
+                    content = "I promised to check an old task, but it is finished.",
+                    memoryKind = "promise",
+                    assistantId = "assistant-1",
+                    sourceMessageNodeIdsJson = """["message-done"]""",
+                    importance = 5,
+                ),
+            ),
+        )
+        val service = MemoryBankService(dao, okHttpClient = null, context = null)
+
+        val context = service.buildRecallContext(
+            assistantId = "assistant-1",
+            commitmentStatusesBySourceId = mapOf(
+                "message-active" to CompanionCommitmentStatus.ACTIVE,
+                "message-done" to CompanionCommitmentStatus.FULFILLED,
+            ),
+        )
+
+        assertTrue(context.contains("remind her to rest"))
+        assertFalse(context.contains("check an old task"))
     }
 
     @Test

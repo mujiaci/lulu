@@ -110,6 +110,7 @@ import me.rerere.rikkahub.data.companion.CompanionToolExecution
 import me.rerere.rikkahub.data.companion.buildScheduledToolFollowUp
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
+import me.rerere.rikkahub.data.companion.commitmentStatusesBySourceMessageId
 import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
 import me.rerere.rikkahub.data.companion.isWakeGoal
 import me.rerere.rikkahub.data.companion.reconcileCompanionFollowUpDrafts
@@ -624,6 +625,8 @@ class ChatService(
         val memoryContext = memoryBankService.buildRecallContext(
             assistantId = assistant.id.toString(),
             query = latestUserText,
+            commitmentStatusesBySourceId = companionRuntime.snapshot(assistant.id.toString())
+                .commitmentStatusesBySourceMessageId(),
         )
         val proactiveContext = collectProactiveToolContext(
             conversationId = conversationId,
@@ -885,6 +888,8 @@ class ChatService(
             val memoryContext = memoryBankService.buildRecallContext(
                 assistantId = assistant.id.toString(),
                 query = latestUserText,
+                commitmentStatusesBySourceId = companionRuntime.snapshot(assistant.id.toString())
+                    .commitmentStatusesBySourceMessageId(),
             )
             turnPreparation = collectProactiveToolContext(
                 conversationId = conversationId,

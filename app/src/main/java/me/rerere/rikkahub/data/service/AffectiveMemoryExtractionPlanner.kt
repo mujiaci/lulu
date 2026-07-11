@@ -3,11 +3,11 @@ package me.rerere.rikkahub.data.service
 import me.rerere.ai.core.MessageRole
 import me.rerere.rikkahub.data.model.MessageNode
 
-private const val EXTRACTION_INTERVAL = 60
-private const val STABLE_TAIL_BUFFER = 10
+private const val EXTRACTION_INTERVAL = 20
+private const val STABLE_TAIL_BUFFER = 6
 private const val BURST_TAIL_BUFFER = 3
-private const val EXTRACTION_WINDOW_SIZE = 60
-private const val EXTRACTION_OVERLAP = 10
+private const val EXTRACTION_WINDOW_SIZE = 30
+private const val EXTRACTION_OVERLAP = 6
 
 data class AffectiveMemoryExtractionPlan(
     val turns: List<MemoryExtractionTurn>,

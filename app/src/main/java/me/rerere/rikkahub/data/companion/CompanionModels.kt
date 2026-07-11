@@ -144,6 +144,15 @@ enum class CompanionCommitmentStatus {
     SUPERSEDED,
 }
 
+fun CompanionSnapshot.commitmentStatusesBySourceMessageId(): Map<String, CompanionCommitmentStatus> = commitments
+    .mapNotNull { commitment ->
+        commitment.sourceMessageId
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?.let { sourceId -> sourceId to commitment.status }
+    }
+    .toMap()
+
 @Serializable
 data class CompanionActionPlan(
     val type: CompanionActionType = CompanionActionType.NONE,
