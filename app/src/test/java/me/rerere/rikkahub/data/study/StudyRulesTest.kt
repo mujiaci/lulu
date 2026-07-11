@@ -119,6 +119,33 @@ class StudyRulesTest {
     }
 
     @Test
+    fun `legacy mystery boxes cannot grant universal fragments`() {
+        val state = StudyState(
+            inventory = StudyInventory(
+                unopenedMysteryBoxes = listOf(StudyMysteryBoxReward(kudos = 50, universalNormalFragments = 2)),
+            ),
+        )
+
+        val opened = StudyRules.openMysteryBox(state)
+
+        assertEquals(50, opened.reward.kudos)
+        assertEquals(0, opened.reward.universalNormalFragments)
+        assertEquals(0, opened.state.inventory.universalNormalFragments)
+        assertFalse(opened.reward.title.contains("通用"))
+    }
+
+    @Test
+    fun `universal fragments are configured only for levels and shop purchases`() {
+        assertTrue(StudyRules.levels.any { it.reward.universalNormalFragments > 0 })
+        assertTrue(StudyRules.achievements.none { it.reward.universalNormalFragments > 0 })
+        val superMomentReward = StudyRules.claimSuperMoment(
+            StudyState(),
+            SuperMomentChoice.NormalFragments,
+        ).reward
+        assertEquals(0, superMomentReward.universalNormalFragments)
+    }
+
+    @Test
     fun `draws consume coupons before kudos and add fragments`() {
         val state = StudyState(
             wallet = StudyWallet(kudos = 800, singleDrawTickets = 1, tenDrawTickets = 1)
@@ -271,18 +298,24 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `daily shop no longer sells universal normal fragments directly`() {
-        val state = StudyState(wallet = StudyWallet(kudos = 1_000))
-
-        val refreshed = StudyRules.refreshShopIfNeeded(state, LocalDate.of(2026, 7, 6), Random(8))
+    fun `daily shop can sell universal normal fragments`() {
+        val refreshed = StudyRules.refreshShopIfNeeded(
+            StudyState(wallet = StudyWallet(kudos = 1_000)),
+            LocalDate.of(2026, 7, 6),
+            FixedDrawRandom(ints = mutableListOf(0, 0, 0)),
+        )
+        val bought = StudyRules.buyShopItem(refreshed, refreshed.shopItems.first().id)
 
         assertEquals(3, refreshed.shopItems.size)
-        assertTrue(refreshed.shopItems.none { it.type == StudyShopItemType.UniversalNormalFragment })
+        assertTrue(refreshed.shopItems.all { it.type == StudyShopItemType.UniversalNormalFragment })
+        assertEquals(1, bought.state.inventory.universalNormalFragments)
+        assertEquals(880, bought.state.wallet.kudos)
     }
 
     @Test
-    fun `daily shop uses only explicit entertainment fragment types`() {
+    fun `daily shop uses only supported purchasable item types`() {
         val allowed = setOf(
+            StudyShopItemType.UniversalNormalFragment,
             StudyShopItemType.DouyinFragment,
             StudyShopItemType.TheaterFragment,
             StudyShopItemType.GameFragment,
@@ -301,7 +334,7 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `mystery boxes make universal normal fragments uncommon`() {
+    fun `mystery boxes never grant universal fragments`() {
         val none = StudyRules.completePomodoro(
             state = StudyState(today = "2026-07-06"),
             minutes = 25,
@@ -319,8 +352,8 @@ class StudyRulesTest {
         )
 
         assertEquals(0, none.reward.universalNormalFragments)
-        assertEquals(1, one.reward.universalNormalFragments)
-        assertEquals(2, two.reward.universalNormalFragments)
+        assertEquals(0, one.reward.universalNormalFragments)
+        assertEquals(0, two.reward.universalNormalFragments)
     }
 
     @Test
@@ -436,29 +469,47 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `data loss compensation grants one ten draw ticket once without clearing study assets`() {
+    fun `fragment reset compensation grants sixty draws once and clears only image fragments`() {
         val state = StudyState(
-            wallet = StudyWallet(kudos = 123, totalKudosEarned = 456, singleDrawTickets = 1),
+            wallet = StudyWallet(kudos = 123, totalKudosEarned = 456, singleDrawTickets = 1, tenDrawTickets = 2),
             inventory = StudyInventory(
                 normalFragments = mapOf("normal:星穹图书馆:专属碎片" to 2),
+                rareFragments = mapOf("rare:legacy-picture" to 3),
+                universalNormalFragments = 4,
                 epicFragments = 1,
+                douyinFragments = 2,
+                videoFragments = 1,
+                unlockedOutfits = setOf("星穹图书馆"),
+                unopenedMysteryBoxes = listOf(StudyMysteryBoxReward(kudos = 50, universalNormalFragments = 2)),
             ),
             stats = StudyStats(totalPomodoros = 3, totalTasksCompleted = 4, totalStudyMinutes = 75),
             internalTestGrantVersion = StudyRules.OFFICIAL_ECONOMY_RESET_VERSION,
         )
 
         val compensated = StudyRules.grantDataLossCompensation(state)
-        val duplicate = StudyRules.grantDataLossCompensation(compensated)
+        val earnedAfterMigration = compensated.copy(
+            inventory = compensated.inventory.copy(
+                normalFragments = mapOf("normal:云上列车:专属碎片" to 1),
+            ),
+        )
+        val duplicate = StudyRules.grantDataLossCompensation(earnedAfterMigration)
 
         assertEquals(123, compensated.wallet.kudos)
         assertEquals(456, compensated.wallet.totalKudosEarned)
         assertEquals(1, compensated.wallet.singleDrawTickets)
-        assertEquals(1, compensated.wallet.tenDrawTickets)
-        assertEquals(2, compensated.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
+        assertEquals(8, compensated.wallet.tenDrawTickets)
+        assertTrue(compensated.inventory.normalFragments.isEmpty())
+        assertTrue(compensated.inventory.rareFragments.isEmpty())
+        assertEquals(0, compensated.inventory.universalNormalFragments)
         assertEquals(1, compensated.inventory.epicFragments)
+        assertEquals(2, compensated.inventory.douyinFragments)
+        assertEquals(1, compensated.inventory.videoFragments)
+        assertTrue("星穹图书馆" in compensated.inventory.unlockedOutfits)
+        assertEquals(0, compensated.inventory.unopenedMysteryBoxes.single().universalNormalFragments)
         assertEquals(3, compensated.stats.totalPomodoros)
         assertEquals(StudyRules.DATA_LOSS_COMPENSATION_VERSION, compensated.internalTestGrantVersion)
-        assertEquals(compensated, duplicate)
+        assertEquals(earnedAfterMigration, duplicate)
+        assertEquals(1, duplicate.inventory.normalFragments.getValue("normal:云上列车:专属碎片"))
     }
 
     @Test
@@ -580,22 +631,42 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `draw pool keeps universal normal fragments scarce`() {
-        val state = StudyState(wallet = StudyWallet(singleDrawTickets = 2))
-        val universal = StudyRules.draw(
+    fun `draw pool never grants universal fragments`() {
+        val state = StudyState(
+            wallet = StudyWallet(singleDrawTickets = 2),
+            inventory = StudyInventory(universalNormalFragments = 3),
+        )
+        val first = StudyRules.draw(
             state,
             count = 1,
-            random = FixedDrawRandom(doubles = mutableListOf(0.039), ints = mutableListOf(99)),
+            random = FixedDrawRandom(doubles = mutableListOf(0.0), ints = mutableListOf(0, 0)),
         ).state
         val outfit = StudyRules.draw(
-            universal,
+            first,
             count = 1,
             random = FixedDrawRandom(doubles = mutableListOf(0.04), ints = mutableListOf(0, 0)),
         ).state
 
-        assertEquals(1, universal.inventory.universalNormalFragments)
-        assertEquals(1, outfit.inventory.universalNormalFragments)
-        assertEquals(1, outfit.inventory.normalFragments.values.sum())
+        assertEquals(3, first.inventory.universalNormalFragments)
+        assertEquals(3, outfit.inventory.universalNormalFragments)
+        assertEquals(2, outfit.inventory.normalFragments.values.sum())
+    }
+
+    @Test
+    fun `clearing image fragments does not relock completed images after later draws`() {
+        val state = StudyState(
+            wallet = StudyWallet(singleDrawTickets = 1),
+            inventory = StudyInventory(unlockedOutfits = setOf("星穹图书馆")),
+        )
+
+        val drawn = StudyRules.draw(
+            state,
+            count = 1,
+            random = FixedDrawRandom(doubles = mutableListOf(0.0), ints = mutableListOf(1, 0)),
+        ).state
+
+        assertTrue("星穹图书馆" in drawn.inventory.unlockedOutfits)
+        assertEquals(1, drawn.inventory.normalFragments.values.sum())
     }
 
     @Test

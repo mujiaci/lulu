@@ -1867,16 +1867,6 @@ private fun MysteryBoxCelebration(reward: StudyMysteryBoxReward, onDismissReques
                         }
                     }
                     Text(mysteryBoxText(reward.kudos), color = Color.White, fontWeight = FontWeight.SemiBold)
-                    if (reward.universalNormalFragments > 0) {
-                        Surface(color = Color.White.copy(alpha = 0.78f), shape = CircleShape) {
-                            Text(
-                                "通用普通碎片 x${reward.universalNormalFragments}",
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                color = StudyColors.blue,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                        }
-                    }
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         repeat(7) {
                             Surface(
@@ -1966,7 +1956,7 @@ private fun GachaCard(
                     }
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "抽卡券 ${state.wallet.singleDrawTickets + state.wallet.tenDrawTickets}",
+                        "券可抽 ${state.wallet.singleDrawTickets + state.wallet.tenDrawTickets * 10} 次",
                         color = Color.White.copy(alpha = 0.78f),
                         style = MaterialTheme.typography.labelMedium,
                     )
@@ -2590,8 +2580,9 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "普通碎片合计 93%，紫色 4%（抖音/剧场各半），金色 2%（游戏/视频各半），彩色动漫碎片 1%。",
-                "每套画卷需要 10 个专属碎片；通用普通碎片仍可补任意未满画卷，但现在主要靠少量抽卡、盲盒和阶段奖励获得。",
+                "普通图片专属碎片 93%，紫色 4%（抖音/剧场各半），金色 2%（游戏/视频各半），彩色动漫碎片 1%。",
+                "卡池不产出通用碎片；通用普通碎片只可通过等级奖励或神秘商店购买获得。",
+                "每套画卷需要 10 个专属碎片；通用普通碎片可以补任意一套未满画卷。",
                 "抖音碎片只兑换抖音时间；剧场碎片只用于生成或续写小剧场。",
             ),
         )
@@ -2601,7 +2592,8 @@ private fun StudyGuideCard() {
                 "约 4155 夸夸值，可折算 41 次单抽；十连 800 会比单抽省 200。",
                 "超神 5 天给 5 张十连券；等级、成就和商店会追加抽卡券。",
                 "按 100 抽估算：普通约 93，紫色约 4，金色约 2，彩色约 1。",
-                "超神不再发碎片，神秘商店也不再直接刷通用普通碎片；画卷进度主要来自抽卡、盲盒、等级和成就。",
+                "普通图片专属碎片只来自抽卡；通用普通碎片只来自等级奖励和神秘商店。",
+                "盲盒、超神和成就不再产出通用碎片。",
             ),
         )
         GuideBlock(
@@ -2625,7 +2617,8 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
                 "收藏已按 20 套画卷、每套 10 个专属碎片展示。",
-                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；娱乐碎片均按用途独立保存。",
+                "通用普通碎片仅由等级奖励或商店获得，可自动补最佳目标，也可在收藏里指定画卷。",
+                "娱乐碎片均按用途独立保存，卡池内不存在任何通用碎片。",
                 "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
                 "更深的角色主动督学、画卷提示词自动带入、星愿馆视频收藏柜可以作为后续增强。",

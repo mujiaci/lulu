@@ -11,7 +11,7 @@ object StudyRules {
     const val TASK_COMPLETE_KUDOS = 50
     const val POMODORO_KUDOS = 50
     const val OFFICIAL_ECONOMY_RESET_VERSION = 2
-    const val DATA_LOSS_COMPENSATION_VERSION = 3
+    const val DATA_LOSS_COMPENSATION_VERSION = 4
     const val NORMAL_FRAGMENTS_PER_OUTFIT = 10
     private const val OVERFLOW_NORMAL_FRAGMENT_KUDOS = 100
     private const val INTERNAL_TEST_GRANT_VERSION = 1
@@ -83,7 +83,7 @@ object StudyRules {
         StudyAchievement("warm_start", "热身完成", "累计完成3个番茄钟", StudyReward(kudos = 50, title = "夸夸值 50")),
         StudyAchievement("todo_slayer", "清单杀手", "累计完成30项待办", StudyReward(kudos = 100, title = "夸夸值 100")),
         StudyAchievement("task_spark", "清单起势", "累计完成10项待办", StudyReward(singleDrawTickets = 1, title = "单抽券 x1")),
-        StudyAchievement("perfect_3", "连续全清3天", "连续3天待办全清", StudyReward(universalNormalFragments = 2, title = "通用普通碎片 x2")),
+        StudyAchievement("perfect_3", "连续全清3天", "连续3天待办全清", StudyReward(kudos = 100, title = "夸夸值 100")),
         StudyAchievement("perfect_7", "连续全清7天", "连续7天待办全清", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
         StudyAchievement("deep_work_10h", "坐稳书桌", "累计学习时长10小时", StudyReward(kudos = 100, title = "夸夸值 100")),
         StudyAchievement("time_traveler", "时光旅人", "累计学习时长50小时", StudyReward(kudos = 200, title = "夸夸值 200")),
@@ -139,14 +139,22 @@ object StudyRules {
 
     fun grantDataLossCompensation(state: StudyState): StudyState {
         if (state.internalTestGrantVersion >= DATA_LOSS_COMPENSATION_VERSION) return state
-        val reward = StudyReward(tenDrawTickets = 1, title = "数据保护补偿：十连抽券 x1")
+        val reward = StudyReward(tenDrawTickets = 6, title = "版本碎片补偿：十连抽券 x6（60 抽）")
         return state.copy(
             wallet = state.wallet.add(reward),
+            inventory = state.inventory.copy(
+                normalFragments = emptyMap(),
+                rareFragments = emptyMap(),
+                universalNormalFragments = 0,
+                unopenedMysteryBoxes = state.inventory.unopenedMysteryBoxes.map { box ->
+                    box.copy(universalNormalFragments = 0)
+                },
+            ),
             internalTestGrantVersion = DATA_LOSS_COMPENSATION_VERSION,
             recentEvents = state.recentEvents.addEvent(
                 StudyEventType.Fragment,
-                "数据保护补偿",
-                "十连抽券 x1；之后更新会继续保留夸夸值、碎片、待办完成和番茄记录",
+                "版本碎片补偿",
+                "已清空图片碎片（含通用普通碎片）并补发十连抽券 x6（60 抽）；已解锁图片和娱乐碎片保留",
             ),
         )
     }
@@ -325,13 +333,7 @@ object StudyRules {
         val box = state.inventory.unopenedMysteryBoxes.getOrNull(index) ?: return StudyActionResult(state)
         val reward = StudyReward(
             kudos = box.kudos,
-            universalNormalFragments = box.universalNormalFragments,
-            title = buildString {
-                append("盲盒 +${box.kudos} 夸夸值")
-                if (box.universalNormalFragments > 0) {
-                    append(" + 通用普通碎片 x${box.universalNormalFragments}")
-                }
-            },
+            title = "盲盒 +${box.kudos} 夸夸值",
         )
         val remainingBoxes = state.inventory.unopenedMysteryBoxes.toMutableList().also { it.removeAt(index) }
         return StudyActionResult(
@@ -496,12 +498,13 @@ object StudyRules {
         val dateText = date.toString()
         if (state.shopDate == dateText && state.shopItems.size == 3) return state
         val pool = listOf(
+            StudyShopItemType.UniversalNormalFragment to 5,
             StudyShopItemType.DouyinFragment to 7,
             StudyShopItemType.TheaterFragment to 7,
             StudyShopItemType.GameFragment to 3,
             StudyShopItemType.VideoFragment to 3,
             StudyShopItemType.AnimeFragment to 1,
-            StudyShopItemType.SingleDrawTicket to 79,
+            StudyShopItemType.SingleDrawTicket to 74,
         )
         val items = (1..3).map { slot ->
             val type = weighted(pool, random)
@@ -682,17 +685,12 @@ object StudyRules {
 
     private fun mysteryBox(random: Random): StudyMysteryBoxReward {
         val kudos = weighted(listOf(15 to 40, 25 to 30, 50 to 15, 100 to 4, 200 to 1), random)
-        val normalFragments = weighted(listOf(0 to 70, 1 to 28, 2 to 2), random)
-        return StudyMysteryBoxReward(kudos = kudos, universalNormalFragments = normalFragments)
+        return StudyMysteryBoxReward(kudos = kudos)
     }
 
     private fun drawOne(random: Random): StudyDrawResult {
         val roll = random.nextDouble()
         return when {
-            roll < 0.04 -> {
-                val amount = if (random.nextInt(100) < 5) 2 else 1
-                StudyDrawResult(StudyRarity.Normal, "normal:universal:$amount", "通用普通碎片 x$amount")
-            }
             roll < 0.93 -> {
                 val outfit = outfitNames[random.nextInt(outfitNames.size)]
                 val part = outfitParts[random.nextInt(outfitParts.size)]
@@ -832,11 +830,12 @@ private fun StudyEntertainmentReward.fragmentLabel(): String = when (this) {
 }
 
 private fun StudyInventory.refreshUnlockStats(): Pair<StudyInventory, Pair<Int, Int>> {
-    val unlockedOutfits = StudyRules.outfitNames.filter { outfit ->
+    val newlyUnlockedOutfits = StudyRules.outfitNames.filter { outfit ->
         normalFragments.normalOutfitTotal(outfit) >= StudyRules.NORMAL_FRAGMENTS_PER_OUTFIT
     }.toSet()
-    return copy(unlockedOutfits = unlockedOutfits, unlockedTheaters = emptySet()) to
-        (unlockedOutfits.size to 0)
+    val allUnlockedOutfits = unlockedOutfits + newlyUnlockedOutfits
+    return copy(unlockedOutfits = allUnlockedOutfits, unlockedTheaters = emptySet()) to
+        (allUnlockedOutfits.size to 0)
 }
 
 private fun Map<String, Int>.plusCount(key: String, count: Int): Map<String, Int> {
