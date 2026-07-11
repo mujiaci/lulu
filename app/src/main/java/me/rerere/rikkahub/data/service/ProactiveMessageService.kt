@@ -384,7 +384,15 @@ class ProactiveMessageService : KoinComponent {
                     return@repeat
                 }
                 val setting = settings.getProactiveMessageSetting(assistantId)
-                if (!setting.enabled) return false
+                if (!setting.enabled) {
+                    runtime.cancelCommitment(
+                        assistantId = commitment.assistantId,
+                        commitmentId = commitment.id,
+                        reason = "这个角色没有开启主动消息，提醒已停止",
+                        nowMillis = nowMillis,
+                    )
+                    return@repeat
+                }
                 scheduleCommitment(context, setting, commitment)
                 return true
             }
