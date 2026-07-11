@@ -340,6 +340,24 @@ class ExamStudyPlanTest {
     }
 
     @Test
+    fun downstreamPlanUsesProgressGatesAndStopsLongCoursesBeforeFinalSprint() {
+        val october = ExamStudyPlan.postJulyWeeks
+            .filter { it.id.startsWith("2026-10") }
+            .flatMap { it.tasks }
+            .joinToString("\n")
+        val november = ExamStudyPlan.postJulyWeeks
+            .filter { it.id.startsWith("2026-11") }
+            .flatMap { it.tasks }
+            .joinToString("\n")
+
+        assertTrue(october.contains("民法为唯一新课主线"))
+        assertTrue(october.contains("民法整本验收通过才启动宪法"))
+        assertFalse(october.contains("全科新课验收"))
+        assertTrue(november.contains("11 月 14 日做长课截止审计"))
+        assertTrue(november.contains("不再追完整长课"))
+    }
+
+    @Test
     fun formalStudyDaysIncludeFixedVocabularyReview() {
         val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 2))
         val taskTitles = plan?.tasks.orEmpty().map { it.title }
