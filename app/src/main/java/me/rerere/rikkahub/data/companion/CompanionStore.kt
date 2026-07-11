@@ -111,6 +111,7 @@ internal fun CompanionPersistedState.normalizedCompanionState(): CompanionPersis
 
 private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot = copy(
     state = if (other.state.updatedAt >= state.updatedAt) other.state else state,
+    stateHistory = (stateHistory + other.stateHistory).distinctBy { it.id },
     relationship = if (other.relationship.updatedAt >= relationship.updatedAt) {
         other.relationship
     } else {
@@ -131,6 +132,24 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
         activityMode = state.activityMode.trim().take(MAX_STATE_TEXT_LENGTH),
         selfScene = state.selfScene.trim().take(MAX_SELF_SCENE_LENGTH),
     ),
+    stateHistory = stateHistory
+        .filter { it.recordedAt > 0L && it.state.hasVisibleStateContent() }
+        .distinctBy { it.id }
+        .sortedBy { it.recordedAt }
+        .takeLast(MAX_STATE_HISTORY_PER_ASSISTANT)
+        .map { entry ->
+            entry.copy(
+                state = entry.state.copy(
+                    statusText = entry.state.statusText.trim().take(MAX_STATE_TEXT_LENGTH),
+                    innerThought = entry.state.innerThought.trim().take(MAX_INNER_THOUGHT_LENGTH),
+                    mood = entry.state.mood.trim().take(MAX_STATE_TEXT_LENGTH),
+                    bodyState = entry.state.bodyState.trim().take(MAX_STATE_TEXT_LENGTH),
+                    mindState = entry.state.mindState.trim().take(MAX_STATE_TEXT_LENGTH),
+                    activityMode = entry.state.activityMode.trim().take(MAX_STATE_TEXT_LENGTH),
+                    selfScene = entry.state.selfScene.trim().take(MAX_SELF_SCENE_LENGTH),
+                )
+            )
+        },
     relationship = relationship.copy(
         roleLabel = relationship.roleLabel.trim().take(MAX_STATE_TEXT_LENGTH),
         trust = relationship.trust.normalizedDimension(),
@@ -171,9 +190,20 @@ private fun CompanionCommitmentStatus.isTerminal(): Boolean = this in setOf(
 
 private fun Float.normalizedDimension(): Float = coerceIn(0f, 1f)
 
+private fun CompanionState.hasVisibleStateContent(): Boolean = listOf(
+    statusText,
+    innerThought,
+    mood,
+    bodyState,
+    mindState,
+    activityMode,
+    selfScene,
+).any(String::isNotBlank)
+
 private const val MAX_APPLIED_RELATIONSHIP_EVENTS = 2_000
 private const val MAX_CONCERNS_PER_ASSISTANT = 300
 private const val MAX_COMMITMENTS_PER_ASSISTANT = 300
+private const val MAX_STATE_HISTORY_PER_ASSISTANT = 160
 private const val MAX_STATE_TEXT_LENGTH = 120
 private const val MAX_INNER_THOUGHT_LENGTH = 600
 private const val MAX_SELF_SCENE_LENGTH = 800

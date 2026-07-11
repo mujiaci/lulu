@@ -82,9 +82,10 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                 try {
                     val params = args.jsonObject
                     val forceRefresh = params["force_refresh"]?.jsonPrimitive?.booleanOrNull ?: false
+                    val includeAddress = params["include_address"]?.jsonPrimitive?.booleanOrNull ?: true
                     val apiKey = settings.systemToolsSetting.amapApiKey
                     val locationService = LocationService(context, AmapService(apiKey))
-                    val locationResult = if (apiKey.isNotBlank()) {
+                    val locationResult = if (includeAddress) {
                         runBlocking { locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh) }
                     } else {
                         runBlocking { locationService.getCoordinatesOnly(forceRefresh = forceRefresh) }
@@ -114,6 +115,9 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                         put("city", loc.city)
                         put("district", loc.district)
                         put("street", loc.street)
+                        put("place_name", loc.placeName)
+                        put("address_provider", loc.addressProvider)
+                        put("precise_address_available", loc.address.isNotBlank() || loc.placeName.isNotBlank())
                     }
                     listOf(UIMessagePart.Text(result.toString()))
                 } catch (e: Exception) {

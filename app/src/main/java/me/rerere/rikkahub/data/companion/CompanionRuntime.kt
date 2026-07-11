@@ -16,15 +16,18 @@ data class CompanionFollowUpDraft(
     val importance: Int = 3,
     val actionType: CompanionActionType = CompanionActionType.CHECK_IN,
     val argumentsJson: String = "{}",
+    val subjectKeyOverride: String? = null,
+    val commitmentIdOverride: String? = null,
 ) {
     fun toConcern(nowMillis: Long): CompanionConcern {
         val subjectKey = stableSubjectKey()
+        val humanText = humanFacingConcernText()
         return CompanionConcern(
             id = stableId("concern", subjectKey),
             assistantId = assistantId,
             subjectKey = subjectKey,
-            event = reason.trim(),
-            goal = reason.trim(),
+            event = humanText.first,
+            goal = humanText.second,
             importance = importance.coerceIn(1, 5),
             nextPerceptionAt = dueAt,
             sourceMessageIds = listOfNotNull(sourceMessageId?.trim()?.takeIf(String::isNotBlank)),
@@ -35,16 +38,18 @@ data class CompanionFollowUpDraft(
 
     fun toCommitment(nowMillis: Long): CompanionCommitment {
         val subjectKey = stableSubjectKey()
+        val humanText = humanFacingConcernText()
         return CompanionCommitment(
-            id = stableId("commitment", subjectKey),
+            id = commitmentIdOverride?.trim()?.takeIf(String::isNotBlank)
+                ?: stableId("commitment", subjectKey),
             assistantId = assistantId,
             subjectKey = subjectKey,
-            promise = reason.trim(),
+            promise = humanText.second,
             dueAt = dueAt,
             actionPlan = CompanionActionPlan(
                 type = actionType,
                 argumentsJson = argumentsJson,
-                userFacingSummary = reason.trim(),
+                userFacingSummary = humanText.second,
                 contextText = sourceText.trim(),
                 category = category.trim(),
                 preferredToolNames = preferredToolNames,
@@ -56,15 +61,94 @@ data class CompanionFollowUpDraft(
         )
     }
 
-    private fun stableSubjectKey(): String = normalizeCompanionSubjectKey(
-        "${category.trim().ifBlank { "follow-up" }}:${reason.trim().take(120)}:${sourceText.trim().take(120)}",
-    )
+    private fun stableSubjectKey(): String = subjectKeyOverride
+        ?.trim()
+        ?.takeIf(String::isNotBlank)
+        ?.let(::normalizeCompanionSubjectKey)
+        ?: normalizeCompanionSubjectKey(
+            "${category.family()}:${sourceText.semanticConcernText().take(160)}",
+        )
 
     private fun stableId(prefix: String, subjectKey: String): String {
-        val evidence = "$assistantId|$subjectKey|${sourceMessageId.orEmpty()}"
+        val evidence = "$assistantId|$subjectKey|${sourceConversationId.orEmpty()}"
         return "$prefix:${UUID.nameUUIDFromBytes(evidence.toByteArray(StandardCharsets.UTF_8))}"
     }
+
+    private fun humanFacingConcernText(): Pair<String, String> = when (category.family()) {
+        "wake" -> "记着叫你起床" to "到点叫醒你，并继续确认你已经醒来。"
+        "sleep" -> "留意你的休息" to "在起床时间之前提醒你早点休息。"
+        "study" -> "记着你的学习安排" to "按你现在的状态继续跟进学习节奏。"
+        "health" -> "还在留意你的身体" to "过一会儿再确认你有没有好一点。"
+        "meal" -> "记着你还要吃饭" to "到合适的时候确认你有没有好好吃饭。"
+        "time" -> "记着这件有时间要求的事" to "在约定时间继续提醒和确认。"
+        else -> {
+            val event = sourceText.trim().take(120).ifBlank { "还有一件事放在心上" }
+            event to "之后再回来确认这件事的进展。"
+        }
+    }
 }
+
+fun reconcileCompanionFollowUpDrafts(
+    drafts: List<CompanionFollowUpDraft>,
+    snapshot: CompanionSnapshot,
+    latestUserText: String,
+): List<CompanionFollowUpDraft> {
+    if (!latestUserText.containsRescheduleIntent()) return drafts
+    return drafts.map { draft ->
+        val candidates = snapshot.commitments.filter { commitment ->
+            commitment.status in setOf(
+                CompanionCommitmentStatus.PROPOSED,
+                CompanionCommitmentStatus.ACTIVE,
+                CompanionCommitmentStatus.DUE,
+                CompanionCommitmentStatus.RETRY_SCHEDULED,
+            ) &&
+                commitment.actionPlan.category.family() == draft.category.family() &&
+                (draft.sourceConversationId == null || commitment.sourceConversationId == draft.sourceConversationId)
+        }
+        val existing = candidates.singleOrNull()
+            ?: candidates.minByOrNull { commitment -> kotlin.math.abs(commitment.dueAt - draft.dueAt) }
+        if (existing == null) {
+            draft
+        } else {
+            draft.copy(
+                subjectKeyOverride = existing.subjectKey,
+                commitmentIdOverride = existing.id,
+            )
+        }
+    }
+}
+
+private fun String.containsRescheduleIntent(): Boolean {
+    val normalized = lowercase()
+    return RESCHEDULE_MARKERS.any { marker -> marker in normalized }
+}
+
+private fun String.semanticConcernText(): String = lowercase()
+    .replace(Regex("\\d{1,2}[:：点时]\\d{0,2}分?"), " ")
+    .replace(Regex("\\d+\\s*(分钟|小时|天|周)后"), " ")
+    .replace(Regex("明天|后天|今天|今晚|早上|上午|中午|下午|晚上|凌晨"), " ")
+    .replace(Regex("改成|改到|改为|换成|换到|推迟到|提前到|延后到|重新定|时间改"), " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
+    .ifBlank { "ongoing" }
+
+private fun String.family(): String {
+    val normalized = lowercase()
+    return when {
+        "wake" in normalized || "起床" in normalized || "叫醒" in normalized -> "wake"
+        "sleep" in normalized || "休息" in normalized || "睡" in normalized -> "sleep"
+        "study" in normalized || "学习" in normalized -> "study"
+        "health" in normalized || "身体" in normalized || "健康" in normalized -> "health"
+        "meal" in normalized || "吃饭" in normalized -> "meal"
+        normalized in setOf("schedule", "deadline", "reminder", "time") -> "time"
+        else -> normalized.ifBlank { "follow-up" }
+    }
+}
+
+private val RESCHEDULE_MARKERS = setOf(
+    "改成", "改到", "改为", "换成", "换到", "推迟到", "提前到", "延后到", "重新定", "时间改",
+    "reschedule", "move it to", "change it to",
+)
 
 data class CompanionTurnMutation(
     val assistantId: String,
@@ -294,8 +378,21 @@ fun reduceCompanionRuntimeState(
         ?.takeIf { candidate -> candidate.updatedAt >= existing.state.updatedAt }
         ?.copy(updatedAt = maxOf(mutation.state.updatedAt, mutation.nowMillis))
         ?: existing.state
+    val nextStateHistory = if (
+        mutation.state != null &&
+        nextState.hasVisibleStateContent() &&
+        !nextState.hasSameVisibleContent(existing.state)
+    ) {
+        existing.stateHistory + CompanionStateHistoryEntry(
+            state = nextState,
+            recordedAt = nextState.updatedAt,
+        )
+    } else {
+        existing.stateHistory
+    }
     val updatedSnapshot = existing.copy(
         state = nextState,
+        stateHistory = nextStateHistory,
         relationship = relationshipReduction.relationship,
         concerns = CompanionConcernReducer.apply(
             current = existing.concerns,
@@ -314,6 +411,25 @@ fun reduceCompanionRuntimeState(
         appliedRelationshipEventIds = relationshipReduction.appliedEventIds,
     )
 }
+
+private fun CompanionState.hasVisibleStateContent(): Boolean = listOf(
+    statusText,
+    innerThought,
+    mood,
+    bodyState,
+    mindState,
+    activityMode,
+    selfScene,
+).any(String::isNotBlank)
+
+private fun CompanionState.hasSameVisibleContent(other: CompanionState): Boolean =
+    statusText.trim() == other.statusText.trim() &&
+        innerThought.trim() == other.innerThought.trim() &&
+        mood.trim() == other.mood.trim() &&
+        bodyState.trim() == other.bodyState.trim() &&
+        mindState.trim() == other.mindState.trim() &&
+        activityMode.trim() == other.activityMode.trim() &&
+        selfScene.trim() == other.selfScene.trim()
 
 fun beginCompanionCommitment(
     current: CompanionPersistedState,

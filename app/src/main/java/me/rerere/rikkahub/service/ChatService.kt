@@ -76,6 +76,7 @@ import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
 import me.rerere.rikkahub.data.ai.tools.activeModelTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
+import me.rerere.rikkahub.data.ai.tools.selectCompanionToolsForGeneration
 import me.rerere.rikkahub.data.ai.tools.withConciseToolDescriptions
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.files.SkillManager
@@ -121,6 +122,7 @@ import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
 import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
 import me.rerere.rikkahub.data.companion.isWakeGoal
+import me.rerere.rikkahub.data.companion.reconcileCompanionFollowUpDrafts
 import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.companion.wakeTargetAtOrNull
 import me.rerere.rikkahub.data.files.FilesManager
@@ -650,10 +652,6 @@ class ChatService(
         val allTools = buildAvailableTools(settings, assistant, conversationId)
             .deduplicateByToolName()
             .selectRelevantToolsForPrompt(hiddenMessages)
-        val availableTools = allTools
-            .activeModelTools()
-            .withConciseToolDescriptions()
-            .withHumanLikeToolPrompts()
         val latestUserText = hiddenMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
         val memoryContext = memoryBankService.buildRecallContext(
             assistantId = assistant.id.toString(),
@@ -667,6 +665,13 @@ class ChatService(
             assistant = assistant,
             memoryContext = memoryContext,
         )
+        val availableTools = allTools
+            .selectCompanionToolsForGeneration(
+                messages = hiddenMessages,
+                preferredToolNames = proactiveContext.plan.toolRequests.map { it.toolName },
+            )
+            .withConciseToolDescriptions()
+            .withHumanLikeToolPrompts()
         var generatedMessages = hiddenMessages
 
         generationHandler.generateText(
@@ -894,10 +899,6 @@ class ChatService(
             val allTools = buildAvailableTools(settings, assistant, conversationId)
                 .deduplicateByToolName()
                 .selectRelevantToolsForPrompt(conversation.currentMessages)
-            val availableTools = allTools
-                .activeModelTools()
-                .withConciseToolDescriptions()
-                .withHumanLikeToolPrompts()
             val latestUserText = conversation.currentMessages.lastOrNull { it.role == MessageRole.USER }
                 ?.toText()
                 .orEmpty()
@@ -913,6 +914,13 @@ class ChatService(
                 assistant = assistant,
                 memoryContext = memoryContext,
             )
+            val availableTools = allTools
+                .selectCompanionToolsForGeneration(
+                    messages = conversation.currentMessages,
+                    preferredToolNames = turnPreparation.plan.toolRequests.map { it.toolName },
+                )
+                .withConciseToolDescriptions()
+                .withHumanLikeToolPrompts()
 
             // start generating
             val session = getOrCreateSession(conversationId)
@@ -1044,8 +1052,9 @@ class ChatService(
                     nowMillis = nowMillis,
                 )
             }).distinctBy { draft -> draft.reason to draft.dueAt }
+            val snapshotBeforeTurn = companionRuntime.snapshot(assistant.id.toString())
             val unifiedState = buildCompanionStateFromTurn(
-                previous = companionRuntime.snapshot(assistant.id.toString()).state,
+                previous = snapshotBeforeTurn.state,
                 assistantText = lastAssistantText,
                 presence = finalConversation.currentMessages.takeLast(8).companionModelPresence(),
                 nowMillis = nowMillis,
@@ -1064,7 +1073,7 @@ class ChatService(
             val wakeTargetAt = effectiveScheduledPlans
                 .firstOrNull { it.kind == ProactiveReminderKind.WAKE }
                 ?.triggerAtMillis
-            val followUpDrafts = effectiveScheduledPlans.map { plan ->
+            val rawFollowUpDrafts = effectiveScheduledPlans.map { plan ->
                 val isSleepSupervision = plan.kind == ProactiveReminderKind.SLEEP &&
                     wakeTargetAt != null && plan.triggerAtMillis < wakeTargetAt
                 CompanionFollowUpDraft(
@@ -1099,6 +1108,11 @@ class ChatService(
                     },
                 )
             } + effectiveScheduledToolDrafts
+            val followUpDrafts = reconcileCompanionFollowUpDrafts(
+                drafts = rawFollowUpDrafts,
+                snapshot = snapshotBeforeTurn,
+                latestUserText = lastUserText,
+            )
             runCatching {
                 companionRuntime.applyTurn(
                     CompanionTurnMutation(
@@ -1363,6 +1377,7 @@ class ChatService(
                         messages = conversation.currentMessages,
                         settings = settings,
                     ),
+                    stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
                 )
                 val chunk = providerImpl.generateText(
                     providerSetting = provider,

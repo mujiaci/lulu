@@ -22,6 +22,7 @@ import me.rerere.tts.model.PlaybackStatus
 import me.rerere.tts.model.TTSResponse
 import me.rerere.tts.provider.TTSManager
 import me.rerere.tts.provider.TTSProviderSetting
+import java.io.File
 import java.util.UUID
 
 private const val TAG = "TtsController"
@@ -42,6 +43,7 @@ class TtsController(
     private val chunker = TextChunker(maxChunkLength = 160)
     private val synthesizer = TtsSynthesizer(ttsManager)
     private val audio = AudioPlayer(context)
+    private val audioCache = TtsAudioCache(File(context.cacheDir, "tts_audio_v1"))
 
     // Provider & 作业
     private var currentProvider: TTSProviderSetting? = null
@@ -298,7 +300,7 @@ class TtsController(
         for (i in begin until endExclusive) {
             val chunk = allChunks.getOrNull(i) ?: continue
             cache.computeIfAbsent(chunk.id) {
-                scope.async(Dispatchers.IO) { synthesizer.synthesize(provider, chunk) }
+                scope.async(Dispatchers.IO) { loadOrSynthesize(provider, chunk) }
             }
         }
         lastPrefetchedIndex = endExclusive - 1
@@ -306,12 +308,22 @@ class TtsController(
 
     private suspend fun awaitOrCreate(chunk: TtsChunk, provider: TTSProviderSetting): TTSResponse {
         val deferred = cache.computeIfAbsent(chunk.id) {
-            scope.async(Dispatchers.IO) { synthesizer.synthesize(provider, chunk) }
+            scope.async(Dispatchers.IO) { loadOrSynthesize(provider, chunk) }
         }
         return try {
             deferred.await()
         } finally {
             // 可按需保留缓存（此处保留，便于重播/重试）
+        }
+    }
+
+    private suspend fun loadOrSynthesize(
+        provider: TTSProviderSetting,
+        chunk: TtsChunk,
+    ): TTSResponse {
+        audioCache.read(provider, chunk.text)?.let { return it }
+        return synthesizer.synthesize(provider, chunk).also { response ->
+            audioCache.write(provider, chunk.text, response)
         }
     }
     // endregion

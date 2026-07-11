@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
 import me.rerere.rikkahub.utils.JsonInstant
+import me.rerere.rikkahub.data.companion.CompanionStateHistoryEntry
 
 @Serializable
 data class MemoryExtractionTurn(
@@ -206,6 +207,7 @@ object AffectiveMemoryExtractor {
         turns: List<MemoryExtractionTurn>,
         assistantName: String = "当前角色",
         assistantPersona: String = "",
+        stateHistory: List<CompanionStateHistoryEntry> = emptyList(),
     ): String = buildString {
         val name = assistantName.ifBlank { "当前角色" }
         appendLine("你是$name 的记忆整理器。只提取值得以后想起的候选记忆。")
@@ -222,6 +224,15 @@ object AffectiveMemoryExtractor {
         appendLine("每条字段：type, content, roleFeeling, bodySense, unspokenThought, userSignal, relationshipEffect, importance, confidence, tags, embeddingText, sourceMessageNodeIds, evidenceMessageNodeIds, relatedMemoryIds, people, topics, supersededByMemoryId, correctedAt。")
         appendLine("type 只能使用 user_fact, user_preference, user_boundary, promise, relationship, shared_event, correction。")
         appendLine("每条必须提供 sourceMessageNodeIds 或 evidenceMessageNodeIds，并用 userSignal 简述用户原话或真实工具结果证据；无新事实时返回空 memories。")
+        val visibleStateHistory = stateHistory.filter { entry -> entry.toExtractionContext().isNotBlank() }
+        if (visibleStateHistory.isNotEmpty()) {
+            appendLine("<character_state_history>")
+            appendLine("以下是角色当时真实保存的状态栏与没说出口内容，只用于理解语境和补充第一人称感受；仍然必须用 conversation_turns 里的消息节点作为事实证据。")
+            visibleStateHistory.takeLast(60).forEach { entry ->
+                appendLine("[${entry.recordedAt}] ${entry.toExtractionContext()}")
+            }
+            appendLine("</character_state_history>")
+        }
         appendLine("<conversation_turns>")
         turns.forEach { turn ->
             appendLine("[${turn.nodeId}] ${turn.role}: ${turn.text.trim()}")
@@ -244,6 +255,16 @@ object AffectiveMemoryExtractor {
         )
     }
 }
+
+private fun CompanionStateHistoryEntry.toExtractionContext(): String = buildList {
+    state.statusText.takeIf(String::isNotBlank)?.let { add("状态=$it") }
+    state.mood.takeIf(String::isNotBlank)?.let { add("心情=$it") }
+    state.bodyState.takeIf(String::isNotBlank)?.let { add("身体=$it") }
+    state.mindState.takeIf(String::isNotBlank)?.let { add("精神=$it") }
+    state.activityMode.takeIf(String::isNotBlank)?.let { add("活动=$it") }
+    state.selfScene.takeIf(String::isNotBlank)?.let { add("此刻=$it") }
+    state.innerThought.takeIf(String::isNotBlank)?.let { add("没说出口=$it") }
+}.joinToString("；").take(1_200)
 
 private val DURABLE_MEMORY_TYPES = setOf(
     "user_fact",

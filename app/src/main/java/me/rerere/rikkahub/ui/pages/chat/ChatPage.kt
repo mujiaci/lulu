@@ -9,16 +9,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -67,8 +64,6 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
 import me.rerere.rikkahub.ui.context.Navigator
 import me.rerere.rikkahub.ui.hooks.ChatInputState
-import me.rerere.rikkahub.ui.hooks.EditStateContent
-import me.rerere.rikkahub.ui.hooks.useEditState
 import me.rerere.rikkahub.utils.base64Decode
 import org.koin.androidx.compose.koinViewModel
 import org.koin.compose.koinInject
@@ -200,14 +195,10 @@ private fun ChatPageContent(
                     companionSnapshot = companionState.snapshots
                         .firstOrNull { it.assistantId == assistant.id.toString() }
                         ?: CompanionSnapshot.empty(assistant.id.toString()),
-                    conversation = conversation,
                     navController = navController,
                     previewMode = previewMode,
                     onClickMenu = {
                         previewMode = !previewMode
-                    },
-                    onUpdateTitle = {
-                        vm.updateTitle(it)
                     },
                     onStartVoiceCall = {
                         navController.navigate(
@@ -415,18 +406,12 @@ private fun TopBar(
     settings: Settings,
     assistant: Assistant,
     companionSnapshot: CompanionSnapshot,
-    conversation: Conversation,
     navController: Navigator,
     previewMode: Boolean,
     onClickMenu: () -> Unit,
-    onUpdateTitle: (String) -> Unit,
     onStartVoiceCall: () -> Unit,
     onOpenVoiceCallHistory: () -> Unit,
 ) {
-    val toaster = LocalToaster.current
-    val titleState = useEditState<String> {
-        onUpdateTitle(it)
-    }
     var showLuluStatus by rememberSaveable { mutableStateOf(false) }
     val assistantDefaultName = stringResource(R.string.assistant_page_default_assistant)
 
@@ -438,7 +423,6 @@ private fun TopBar(
             }
         },
         title = {
-            val editTitleWarning = stringResource(R.string.chat_page_edit_title_warning)
             val model = settings.getCurrentChatModel()
             val provider = model?.findProvider(providers = settings.providers, checkOverwrite = false)
             Row {
@@ -449,34 +433,23 @@ private fun TopBar(
                     onClick = { showLuluStatus = true },
                 )
                 androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
-                Surface(
-                    onClick = {
-                        if (conversation.messageNodes.isNotEmpty()) {
-                            titleState.open(conversation.title)
-                        } else {
-                            toaster.show(editTitleWarning, type = ToastType.Warning)
-                        }
-                    },
-                    color = Color.Transparent,
-                ) {
-                    Column {
+                Column {
+                    Text(
+                        text = assistant.name.ifBlank { assistantDefaultName },
+                        maxLines = 1,
+                        style = MaterialTheme.typography.bodyMedium,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    if (model != null && provider != null) {
                         Text(
-                            text = assistant.name.ifBlank { assistantDefaultName },
-                            maxLines = 1,
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "${model.displayName} (${provider.name})",
                             overflow = TextOverflow.Ellipsis,
-                        )
-                        if (model != null && provider != null) {
-                            Text(
-                                text = "${model.displayName} (${provider.name})",
-                                overflow = TextOverflow.Ellipsis,
-                                maxLines = 1,
-                                color = LocalContentColor.current.copy(0.65f),
-                                style = MaterialTheme.typography.labelSmall.copy(
-                                    fontSize = 8.sp,
-                                )
+                            maxLines = 1,
+                            color = LocalContentColor.current.copy(0.65f),
+                            style = MaterialTheme.typography.labelSmall.copy(
+                                fontSize = 8.sp,
                             )
-                        }
+                        )
                     }
                 }
             }
@@ -502,42 +475,6 @@ private fun TopBar(
             assistant = assistant,
             snapshot = companionSnapshot,
             onDismissRequest = { showLuluStatus = false },
-        )
-    }
-    titleState.EditStateContent { title, onUpdate ->
-        AlertDialog(
-            onDismissRequest = {
-                titleState.dismiss()
-            },
-            title = {
-                Text(stringResource(R.string.chat_page_edit_title))
-            },
-            text = {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = onUpdate,
-                    modifier = Modifier.fillMaxWidth(),
-                    singleLine = true,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        titleState.confirm()
-                    }
-                ) {
-                    Text(stringResource(R.string.chat_page_save))
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        titleState.dismiss()
-                    }
-                ) {
-                    Text(stringResource(R.string.chat_page_cancel))
-                }
-            }
         )
     }
 }

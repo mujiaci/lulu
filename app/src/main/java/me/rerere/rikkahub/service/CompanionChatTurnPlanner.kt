@@ -55,6 +55,7 @@ object CompanionChatTurnModelPlanner {
         appendLine("状态生成放在行动后，只生成心情、身体状况、精神状况、关系状态和第一人称没说出口；belief/motive/intention 不作为状态栏字段。")
         appendLine("如果用户不回消息，角色的选项池不是只有发消息：还可以等待、先看感知工具、更新状态、安排下一次判断。静默不产生辞海记录；正式日记只在主动调用 write_lulu_journal 且能写出新内容时保存。")
         appendLine("工具是角色的主动行动能力；形成明确意图后可以写正式日记、设闹钟、查短信/日历、看摄像头或控制音乐。仍然要贴合人设和上下文，不要为了调用工具而调用。")
+        appendLine("favorite_user_message 是角色自己的收藏动作：当用户这一句话让角色真心触动、觉得珍贵、能代表关系变化，或以后会想重新看到时，可以主动收藏；日常寒暄和普通指令不要收藏，也不要等用户说‘收藏’才使用。")
         appendLine("必须读取并服从 <persona>：包括角色语言风格、性格、职责和边界。不要把动作写进聊天正文括号里；如果需要动作/状态方向，放进 expressionGuidance，让 UI 状态栏承接。")
         appendLine("无论是否需要工具，都必须输出 innerThought：第一人称、角色本人本轮没说出口的心里话。不要写分析提纲、工具 JSON、字段名或 Seven-layer trace。")
         appendLine("Expression 只负责表达已决定的行动，不决定政策；expressionAffordances 可从 TEXT, KAOMOJI, STICKER, VOICE, STATUS_BAR, LIGHT_REMINDER, LONG_EXPLANATION, SILENT_RECORD 中选择。")

@@ -7,6 +7,36 @@ import org.junit.Test
 
 class CompanionRuntimeReducerTest {
     @Test
+    fun `meaningful state changes are appended to state history without timestamp duplicates`() {
+        val firstState = CompanionState(statusText = "在等你回话", innerThought = "我想再等等。", updatedAt = 100L)
+        val first = reduceCompanionRuntimeState(
+            current = CompanionPersistedState(),
+            mutation = CompanionTurnMutation(assistantId = ASSISTANT_A, state = firstState, nowMillis = 100L),
+        )
+        val sameContent = reduceCompanionRuntimeState(
+            current = first.persistedState,
+            mutation = CompanionTurnMutation(
+                assistantId = ASSISTANT_A,
+                state = firstState.copy(updatedAt = 200L),
+                nowMillis = 200L,
+            ),
+        )
+        val changed = reduceCompanionRuntimeState(
+            current = sameContent.persistedState,
+            mutation = CompanionTurnMutation(
+                assistantId = ASSISTANT_A,
+                state = firstState.copy(statusText = "准备提醒你休息", updatedAt = 300L),
+                nowMillis = 300L,
+            ),
+        )
+
+        assertEquals(1, first.snapshot.stateHistory.size)
+        assertEquals(1, sameContent.snapshot.stateHistory.size)
+        assertEquals(2, changed.snapshot.stateHistory.size)
+        assertEquals("准备提醒你休息", changed.snapshot.stateHistory.last().state.statusText)
+    }
+
+    @Test
     fun `same follow up draft produces stable concern and commitment identity`() {
         val draft = CompanionFollowUpDraft(
             assistantId = ASSISTANT_A,
@@ -33,18 +63,31 @@ class CompanionRuntimeReducerTest {
     }
 
     @Test
-    fun `follow ups at different times keep separate identities`() {
+    fun `rescheduling an existing follow up preserves the same concern and commitment identity`() {
         val first = CompanionFollowUpDraft(
             assistantId = ASSISTANT_A,
-            category = "deadline",
-            reason = "check first deadline",
-            sourceText = "two assignments",
+            category = "wake",
+            reason = "wake the user",
+            sourceText = "明天七点叫我起床",
             dueAt = 500L,
+            sourceConversationId = "conversation-1",
         )
-        val second = first.copy(dueAt = 900L, reason = "check second deadline")
+        val existing = snapshot(commitments = listOf(first.toCommitment(100L)))
+        val second = first.copy(
+            reason = "move the wake time",
+            sourceText = "改到八点",
+            dueAt = 900L,
+            sourceMessageId = "message-2",
+        )
+        val reconciled = reconcileCompanionFollowUpDrafts(
+            drafts = listOf(second),
+            snapshot = existing,
+            latestUserText = "改到八点叫我",
+        ).single()
 
-        assertEquals(false, first.toCommitment(100L).id == second.toCommitment(100L).id)
-        assertEquals(false, first.toConcern(100L).subjectKey == second.toConcern(100L).subjectKey)
+        assertEquals(first.toCommitment(100L).id, reconciled.toCommitment(200L).id)
+        assertEquals(first.toConcern(100L).subjectKey, reconciled.toConcern(200L).subjectKey)
+        assertEquals(900L, reconciled.toCommitment(200L).dueAt)
     }
 
     @Test

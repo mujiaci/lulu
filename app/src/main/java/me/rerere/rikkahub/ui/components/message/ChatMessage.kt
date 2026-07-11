@@ -132,6 +132,8 @@ fun ChatMessage(
     assistant: Assistant? = null,
     luluPresenceDescriptionOverride: String? = null,
     lastMessage: Boolean = false,
+    showSenderHeader: Boolean = true,
+    groupEnd: Boolean = true,
     onFork: () -> Unit,
     onRegenerate: () -> Unit,
     onEdit: () -> Unit,
@@ -174,11 +176,13 @@ fun ChatMessage(
         message.role == MessageRole.ASSISTANT && isFreshMessage(message.createdAt)
     }
     Column(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = if (groupEnd) 8.dp else 0.dp),
         horizontalAlignment = if (message.role == MessageRole.USER) Alignment.End else Alignment.Start,
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
-        if (!message.parts.isEmptyUIMessage()) {
+        if (showSenderHeader && !message.parts.isEmptyUIMessage()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth(),
@@ -231,7 +235,7 @@ fun ChatMessage(
             )
         }
 
-        val showActions = if (lastMessage) {
+        val showActions = groupEnd && if (lastMessage) {
             !loading
         } else {
             message.parts.isEmptyUIMessage().not()
@@ -260,8 +264,10 @@ fun ChatMessage(
             }
         }
 
-        ProvideTextStyle(textStyle) {
-            ChatMessageNerdLine(message = message)
+        if (groupEnd) {
+            ProvideTextStyle(textStyle) {
+                ChatMessageNerdLine(message = message)
+            }
         }
     }
     if (showActionsSheet) {

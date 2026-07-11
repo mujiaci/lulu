@@ -7,11 +7,13 @@ import android.content.Context
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.location.Geocoder
 import android.os.Bundle
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import kotlin.coroutines.resume
+import java.util.Locale
 
 private const val MAX_LAST_KNOWN_LOCATION_AGE_MS = 10 * 60 * 1000L
 
@@ -27,6 +29,8 @@ data class LocationInfo(
     val city: String = "",
     val district: String = "",
     val street: String = "",
+    val placeName: String = "",
+    val addressProvider: String = "none",
     val poiList: List<PoiInfo> = emptyList()
 )
 
@@ -63,14 +67,18 @@ class LocationService(
             val location = resolvedLocation?.location
 
             if (location != null) {
-                // GPS坐标(WGS84)需要先转换为高德坐标(GCJ02)才能正确逆地理编码
-                val amapCoord = amapService.convertToAmapCoord(location.latitude, location.longitude)
-                val lat = amapCoord?.first ?: location.latitude
-                val lng = amapCoord?.second ?: location.longitude
-
-                val address = amapService.reverseGeocode(lat, lng)
-                if (!address.success) {
-                    android.util.Log.w("LocationService", "Reverse geocode failed: ${address.error}")
+                val amapAddress = if (amapApiKey.isNotBlank()) {
+                    val amapCoord = amapService.convertToAmapCoord(location.latitude, location.longitude)
+                    val lat = amapCoord?.first ?: location.latitude
+                    val lng = amapCoord?.second ?: location.longitude
+                    amapService.reverseGeocode(lat, lng).takeIf { it.success }
+                } else {
+                    null
+                }
+                val androidAddress = if (amapAddress == null) {
+                    reverseGeocodeWithAndroid(location.latitude, location.longitude)
+                } else {
+                    null
                 }
                 LocationInfo(
                     latitude = location.latitude,
@@ -80,15 +88,24 @@ class LocationService(
                     timestamp = location.time,
                     source = resolvedLocation.source,
                     forceRefreshRequested = forceRefresh,
-                    address = address.formattedAddress ?: "",
-                    city = address.city ?: address.province ?: "",
-                    district = address.district ?: "",
-                    street = buildString {
-                        append(address.street ?: "")
-                        if (!address.streetNumber.isNullOrBlank()) {
-                            append(address.streetNumber)
+                    address = amapAddress?.formattedAddress ?: androidAddress?.formattedAddress.orEmpty(),
+                    city = amapAddress?.city ?: amapAddress?.province ?: androidAddress?.city.orEmpty(),
+                    district = amapAddress?.district ?: androidAddress?.district.orEmpty(),
+                    street = amapAddress?.let { address ->
+                        buildString {
+                            append(address.street ?: "")
+                            if (!address.streetNumber.isNullOrBlank()) append(address.streetNumber)
                         }
-                    }
+                    } ?: androidAddress?.street.orEmpty(),
+                    placeName = amapAddress?.building
+                        ?: amapAddress?.neighborhood
+                        ?: androidAddress?.placeName
+                        .orEmpty(),
+                    addressProvider = when {
+                        amapAddress != null -> "amap"
+                        androidAddress != null -> "android"
+                        else -> "none"
+                    },
                 )
             } else {
                 throw IllegalStateException("无法获取位置信息")
@@ -239,7 +256,38 @@ class LocationService(
             null
         }
     }
+
+    @Suppress("DEPRECATION")
+    private fun reverseGeocodeWithAndroid(latitude: Double, longitude: Double): LocalAddress? {
+        if (!Geocoder.isPresent()) return null
+        return runCatching {
+            val address = Geocoder(context, Locale.getDefault())
+                .getFromLocation(latitude, longitude, 1)
+                ?.firstOrNull()
+                ?: return null
+            LocalAddress(
+                formattedAddress = address.getAddressLine(0).orEmpty(),
+                city = address.locality ?: address.adminArea.orEmpty(),
+                district = address.subLocality ?: address.subAdminArea.orEmpty(),
+                street = listOfNotNull(address.thoroughfare, address.subThoroughfare)
+                    .filter(String::isNotBlank)
+                    .joinToString(""),
+                placeName = address.featureName
+                    ?: address.premises
+                    ?: address.subLocality
+                    .orEmpty(),
+            )
+        }.getOrNull()
+    }
 }
+
+private data class LocalAddress(
+    val formattedAddress: String,
+    val city: String,
+    val district: String,
+    val street: String,
+    val placeName: String,
+)
 
 private data class ResolvedLocation(
     val location: Location,

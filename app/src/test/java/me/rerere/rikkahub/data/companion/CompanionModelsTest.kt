@@ -78,4 +78,23 @@ class CompanionModelsTest {
         assertEquals(CompanionCommitmentStatus.ACTIVE, decoded.commitments.single().status)
         assertEquals(CompanionActionType.ALARM, decoded.commitments.single().actionPlan.type)
     }
+
+    @Test
+    fun `state history survives serialization`() {
+        val snapshot = CompanionSnapshot(
+            assistantId = "assistant-a",
+            stateHistory = listOf(
+                CompanionStateHistoryEntry(
+                    id = "state-1",
+                    state = CompanionState(statusText = "在等用户", innerThought = "我先不催。", updatedAt = 100L),
+                    recordedAt = 100L,
+                )
+            ),
+        )
+
+        val decoded = json.decodeFromString<CompanionSnapshot>(json.encodeToString(snapshot))
+
+        assertEquals("在等用户", decoded.stateHistory.single().state.statusText)
+        assertEquals(100L, decoded.stateHistory.single().recordedAt)
+    }
 }

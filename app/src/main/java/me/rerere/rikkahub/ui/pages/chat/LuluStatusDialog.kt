@@ -11,10 +11,16 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -23,6 +29,7 @@ import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionConcern
 import me.rerere.rikkahub.data.companion.CompanionConcernStatus
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
+import me.rerere.rikkahub.data.companion.CompanionStateHistoryEntry
 import me.rerere.rikkahub.data.model.Assistant
 import java.time.Instant
 import java.time.ZoneId
@@ -34,6 +41,7 @@ fun LuluStatusDialog(
     snapshot: CompanionSnapshot,
     onDismissRequest: () -> Unit,
 ) {
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val state = snapshot.state
     val activeConcerns = snapshot.concerns
         .filter { it.status == CompanionConcernStatus.ACTIVE }
@@ -65,54 +73,79 @@ fun LuluStatusDialog(
             }
         },
         text = {
-            LazyColumn(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 460.dp),
-                verticalArrangement = Arrangement.spacedBy(14.dp),
-            ) {
-                item {
-                    StatusSection(
-                        title = "没说出口",
-                        text = state.innerThought.ifBlank { "此刻还没有留下明确的心声。" },
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                SecondaryTabRow(selectedTabIndex = selectedTab) {
+                    Tab(
+                        selected = selectedTab == 0,
+                        onClick = { selectedTab = 0 },
+                        text = { Text("现在") },
+                    )
+                    Tab(
+                        selected = selectedTab == 1,
+                        onClick = { selectedTab = 1 },
+                        text = { Text("历史") },
                     )
                 }
-                if (stateChips.isNotEmpty()) {
-                    item {
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            stateChips.forEach { (label, value) ->
-                                StatusChip(label = label, value = value)
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    if (selectedTab == 0) {
+                        item {
+                            StatusSection(
+                                title = "没说出口",
+                                text = state.innerThought.ifBlank { "此刻还没有留下明确的心声。" },
+                            )
+                        }
+                        if (stateChips.isNotEmpty()) {
+                            item {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    stateChips.forEach { (label, value) ->
+                                        StatusChip(label = label, value = value)
+                                    }
+                                }
                             }
                         }
+                        state.selfScene.takeIf(String::isNotBlank)?.let { scene ->
+                            item { StatusSection(title = "此刻", text = scene) }
+                        }
+                        if (activeConcerns.isNotEmpty()) {
+                            item { SectionTitle("正在挂心") }
+                            items(activeConcerns, key = { it.id }) { concern -> ConcernRow(concern) }
+                        }
+                        if (activeCommitments.isNotEmpty()) {
+                            item { SectionTitle("答应你的事") }
+                            items(activeCommitments, key = { it.id }) { commitment -> CommitmentRow(commitment) }
+                        }
+                        item {
+                            val updatedAt = maxOf(snapshot.updatedAt, state.updatedAt)
+                            Text(
+                                text = formatStateTime(updatedAt),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
+                            )
+                        }
+                    } else if (snapshot.stateHistory.isEmpty()) {
+                        item {
+                            Text(
+                                text = "还没有可回看的状态变化。",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    } else {
+                        items(
+                            items = snapshot.stateHistory.asReversed(),
+                            key = { it.id },
+                        ) { entry ->
+                            StateHistoryRow(entry)
+                        }
                     }
-                }
-                state.selfScene.takeIf(String::isNotBlank)?.let { scene ->
-                    item {
-                        StatusSection(title = "此刻", text = scene)
-                    }
-                }
-                if (activeConcerns.isNotEmpty()) {
-                    item { SectionTitle("正在挂心") }
-                    items(activeConcerns, key = { it.id }) { concern ->
-                        ConcernRow(concern)
-                    }
-                }
-                if (activeCommitments.isNotEmpty()) {
-                    item { SectionTitle("答应你的事") }
-                    items(activeCommitments, key = { it.id }) { commitment ->
-                        CommitmentRow(commitment)
-                    }
-                }
-                item {
-                    val updatedAt = maxOf(snapshot.updatedAt, state.updatedAt)
-                    Text(
-                        text = formatStateTime(updatedAt),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f),
-                    )
                 }
             }
         },
@@ -122,6 +155,43 @@ fun LuluStatusDialog(
             }
         },
     )
+}
+
+@Composable
+private fun StateHistoryRow(entry: CompanionStateHistoryEntry) {
+    val state = entry.state
+    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+        Text(
+            text = state.statusText.ifBlank { state.activityMode.ifBlank { "一次状态变化" } },
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
+        state.innerThought.takeIf(String::isNotBlank)?.let { thought ->
+            Text(
+                text = thought,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        val details = listOfNotNull(
+            state.mood.takeIf(String::isNotBlank)?.let { "心情：$it" },
+            state.bodyState.takeIf(String::isNotBlank)?.let { "身体：$it" },
+            state.mindState.takeIf(String::isNotBlank)?.let { "精神：$it" },
+        )
+        if (details.isNotEmpty()) {
+            Text(
+                text = details.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = formatAbsoluteTime(entry.recordedAt),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        HorizontalDivider()
+    }
 }
 
 @Composable

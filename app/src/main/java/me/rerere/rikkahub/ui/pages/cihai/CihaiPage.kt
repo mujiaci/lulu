@@ -19,6 +19,7 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -43,6 +44,7 @@ import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
+import me.rerere.rikkahub.data.companion.CompanionRelationshipState
 import me.rerere.rikkahub.data.companion.CompanionStore
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
@@ -71,11 +73,10 @@ fun CihaiPage(onBack: () -> Unit) {
         ?: fallbackAssistant
     var selectedTab by remember { mutableIntStateOf(0) }
     val sections = visibleCihaiSections()
-    val concernCards = buildCompanionConcernCards(
-        snapshot = companionState.snapshots
-            .firstOrNull { it.assistantId == selectedAssistantId }
-            ?: CompanionSnapshot.empty(selectedAssistantId),
-    )
+    val selectedSnapshot = companionState.snapshots
+        .firstOrNull { it.assistantId == selectedAssistantId }
+        ?: CompanionSnapshot.empty(selectedAssistantId)
+    val concernCards = buildCompanionConcernCards(snapshot = selectedSnapshot)
 
     LaunchedEffect(selectedAssistantId) {
         if (state.selectedAssistantId != selectedAssistantId) {
@@ -177,6 +178,11 @@ fun CihaiPage(onBack: () -> Unit) {
                             }
                         }
                     }
+                    CihaiSection.RELATIONSHIP -> {
+                        item(key = "relationship-overview") {
+                            RelationshipOverview(selectedSnapshot.relationship)
+                        }
+                    }
                     else -> {
                         val entries = entriesForCihaiSection(
                             entries = state.entries,
@@ -217,6 +223,12 @@ internal enum class CihaiSection(
         emptyTitle = "现在没有挂心任务",
         emptyBody = "这里以后只放持续照看的事，比如考试、起床、身体状态、DDL 或学习节奏。",
     ),
+    RELATIONSHIP(
+        label = "关系",
+        entryKind = null,
+        emptyTitle = "关系还在形成",
+        emptyBody = "这里会呈现信任、亲近、履约和边界默契。",
+    ),
     DIARY(
         label = "日记",
         entryKind = CihaiEntryKind.DIARY,
@@ -227,6 +239,7 @@ internal enum class CihaiSection(
 
 internal fun visibleCihaiSections(): List<CihaiSection> = listOf(
     CihaiSection.CONCERNS,
+    CihaiSection.RELATIONSHIP,
     CihaiSection.DIARY,
 )
 
@@ -296,6 +309,91 @@ private fun ConcernCard(card: CompanionConcernCardModel) {
             }
         }
     }
+}
+
+@Composable
+private fun RelationshipOverview(relationship: CompanionRelationshipState) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = relationship.roleLabel.ifBlank { "正在形成彼此舒服的相处方式" },
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                )
+                Text(
+                    text = relationshipSummary(relationship),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        RelationshipDimension("信任", relationship.trust, "愿不愿意把真实想法交给彼此")
+        RelationshipDimension("亲近", relationship.closeness, "相处时自然靠近、分享和惦记的程度")
+        RelationshipDimension("说到做到", relationship.reliability, "答应的事是否能稳定落地")
+        RelationshipDimension("边界默契", relationship.boundaryConfidence, "是否理解哪些方式让彼此舒服")
+        RelationshipDimension(
+            label = "未解开的心结",
+            value = relationship.unresolvedTension,
+            description = "还需要说开、道歉或重新理解的部分；越低越轻松",
+            inverseTone = true,
+        )
+        relationship.lastMeaningfulInteractionAt?.let { time ->
+            Text(
+                text = "最近一次明显影响关系：${formatTime(time)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun RelationshipDimension(
+    label: String,
+    value: Float,
+    description: String,
+    inverseTone: Boolean = false,
+) {
+    val normalized = value.coerceIn(0f, 1f)
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(label, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                Text(
+                    text = "${(normalized * 100).toInt()}%",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (inverseTone && normalized >= 0.5f) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
+                )
+            }
+            LinearProgressIndicator(
+                progress = { normalized },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Text(
+                text = description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+private fun relationshipSummary(relationship: CompanionRelationshipState): String = when {
+    relationship.unresolvedTension >= 0.6f -> "现在有一些没有解开的情绪，角色会更谨慎地靠近和修复。"
+    relationship.trust >= 0.75f && relationship.closeness >= 0.65f -> "彼此已经很熟悉，很多关心和表达可以更自然。"
+    relationship.trust >= 0.6f -> "信任正在稳定形成，角色会逐渐更自然地记住和回应重要的事。"
+    else -> "关系还在慢慢建立，角色会通过尊重边界和兑现承诺来积累信任。"
 }
 
 @Composable

@@ -2,6 +2,7 @@ package me.rerere.rikkahub.data.ai.tools
 
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 
 fun List<Tool>.deduplicateByToolName(): List<Tool> = distinctBy { it.name }
 
@@ -14,6 +15,49 @@ fun List<Tool>.selectRelevantToolsForPrompt(messages: List<UIMessage>): List<Too
 fun List<Tool>.passivePerceptionTools(): List<Tool> = filter { it.name in PASSIVE_PERCEPTION_TOOL_NAMES }
 
 fun List<Tool>.activeModelTools(): List<Tool> = filterNot { it.name in PASSIVE_PERCEPTION_TOOL_NAMES }
+
+fun List<Tool>.selectCompanionToolsForGeneration(
+    messages: List<UIMessage>,
+    preferredToolNames: Collection<String> = emptyList(),
+    maxTools: Int = MAX_GENERATION_TOOLS,
+): List<Tool> {
+    val activeTools = activeModelTools()
+    if (activeTools.size <= maxTools) return activeTools
+
+    val recentText = messages.takeLast(8).joinToString("\n") { it.toText() }.lowercase()
+    val availableByName = activeTools.associateBy { it.name }
+    val selectedNames = linkedSetOf<String>()
+
+    fun add(name: String) {
+        if (name in availableByName) selectedNames += name
+    }
+
+    preferredToolNames.forEach(::add)
+    messages.takeLast(6)
+        .flatMap { message -> message.parts.filterIsInstance<UIMessagePart.Tool>() }
+        .map { it.toolName }
+        .forEach(::add)
+    ALWAYS_AVAILABLE_COMPANION_TOOLS.forEach(::add)
+    TOOL_KEYWORD_GROUPS.forEach { (keywords, toolNames) ->
+        if (keywords.any { keyword -> keyword in recentText }) {
+            toolNames.forEach(::add)
+        }
+    }
+
+    activeTools
+        .asSequence()
+        .map { tool -> tool to tool.relevanceScore(recentText) }
+        .filter { (_, score) -> score > 0 }
+        .sortedByDescending { (_, score) -> score }
+        .map { (tool, _) -> tool.name }
+        .forEach(::add)
+
+    return selectedNames
+        .asSequence()
+        .mapNotNull(availableByName::get)
+        .take(maxTools.coerceAtLeast(preferredToolNames.size))
+        .toList()
+}
 
 fun List<Tool>.withConciseToolDescriptions(): List<Tool> = map { tool ->
     tool.copy(description = conciseToolDescription(tool).take(MAX_ACTIVE_TOOL_DESCRIPTION_LENGTH))
@@ -96,6 +140,20 @@ private fun conciseToolDescription(tool: Tool): String = when (tool.name.removeP
     else -> tool.description.lineSequence().map(String::trim).filter(String::isNotBlank).joinToString(" ")
 }
 
+private fun Tool.relevanceScore(recentText: String): Int {
+    val normalizedName = name.removePrefix("mcp__").lowercase()
+    val nameTokens = normalizedName.split('_', '-', '.', ':').filter { it.length >= 3 }
+    val nameMatches = nameTokens.count { token -> token in recentText }
+    val descriptionWords = description
+        .lowercase()
+        .split(Regex("[^\\p{L}\\p{N}]+"))
+        .filter { it.length >= 4 }
+        .distinct()
+        .take(24)
+    val descriptionMatches = descriptionWords.count { word -> word in recentText }
+    return nameMatches * 4 + descriptionMatches
+}
+
 private val PASSIVE_PERCEPTION_TOOL_NAMES = setOf(
     "get_time_info",
     "get_battery_info",
@@ -104,6 +162,33 @@ private val PASSIVE_PERCEPTION_TOOL_NAMES = setOf(
     "get_location",
     "get_weather",
     "get_notifications",
+)
+
+private val ALWAYS_AVAILABLE_COMPANION_TOOLS = listOf(
+    "set_lulu_expression_state",
+    "favorite_user_message",
+    "write_lulu_journal",
+    "set_alarm",
+    "ask_user",
+)
+
+private val TOOL_KEYWORD_GROUPS = listOf(
+    setOf("考研", "学习计划", "今日计划", "待办", "番茄", "学习任务") to
+        listOf("today_study_plan"),
+    setOf("搜索", "查一下", "查查", "最新", "新闻", "网页", "网站", "链接") to
+        listOf("search_web", "scrape_web"),
+    setOf("闹钟", "提醒", "叫醒", "起床", "几点叫") to
+        listOf("set_alarm", "calendar_tool"),
+    setOf("日历", "日程", "行程", "安排到", "几月几号") to
+        listOf("calendar_tool"),
+    setOf("摄像头", "拍照", "拍一张", "看看桌面", "看看周围", "看看环境") to
+        listOf("camera_capture"),
+    setOf("短信", "验证码") to listOf("read_sms"),
+    setOf("剪贴板", "复制的内容") to listOf("clipboard_tool"),
+    setOf("音乐", "播放歌曲", "暂停音乐", "下一首", "上一首") to listOf("control_music"),
+    setOf("朗读", "语音说", "读给我听", "用声音") to listOf("text_to_speech"),
+    setOf("附近", "周边", "哪里有", "去哪吃") to listOf("explore_nearby"),
+    setOf("写文件", "保存到文件", "生成文件") to listOf("write_files"),
 )
 
 private val STUDY_PLAN_MARKERS = listOf(
@@ -117,3 +202,4 @@ private val STUDY_PLAN_MARKERS = listOf(
 )
 
 private const val MAX_ACTIVE_TOOL_DESCRIPTION_LENGTH = 180
+private const val MAX_GENERATION_TOOLS = 12

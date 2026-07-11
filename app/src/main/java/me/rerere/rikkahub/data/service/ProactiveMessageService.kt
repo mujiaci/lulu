@@ -57,6 +57,7 @@ import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.tools.activeModelTools
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
+import me.rerere.rikkahub.data.ai.tools.selectCompanionToolsForGeneration
 import me.rerere.rikkahub.data.ai.tools.withConciseToolDescriptions
 import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.ai.mcp.McpManager
@@ -989,10 +990,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val allTools = buildAllTools(settings, assistant)
                     .deduplicateByToolName()
                     .selectRelevantToolsForPrompt(historyMessages)
-                val tools = allTools
-                    .activeModelTools()
-                    .withConciseToolDescriptions()
-                    .withHumanLikeToolPrompts()
+                val activeTools = allTools.activeModelTools()
                 val nowMillis = System.currentTimeMillis()
                 val screenInteractive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
                 val passiveFacts = collectCompanionPassivePerceptionFacts(
@@ -1046,7 +1044,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 )
                             },
                         ) + passiveFacts,
-                        availableToolNames = tools.map { it.name }.toSet(),
+                        availableToolNames = activeTools.map { it.name }.toSet(),
                         memoryContext = memoryContext,
                         nowMillis = nowMillis,
                     ),
@@ -1097,7 +1095,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         settings = settings,
                         assistant = assistant,
                         historyMessages = historyMessages,
-                        availableToolNames = tools.map { it.name }.toSet(),
+                        availableToolNames = activeTools.map { it.name }.toSet(),
                         passiveFacts = passiveFacts,
                         memoryContext = memoryContext,
                     )
@@ -1225,6 +1223,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     assistant = assistant,
                     settings = settings,
                 )
+
+                val preferredToolNames = buildList {
+                    executingCommitment?.actionPlan?.toolName?.let(::add)
+                    addAll(executingCommitment?.actionPlan?.preferredToolNames.orEmpty())
+                    addAll(autonomousPlan?.toolNames.orEmpty())
+                }
+                val tools = activeTools
+                    .selectCompanionToolsForGeneration(
+                        messages = historyMessages + userMessage,
+                        preferredToolNames = preferredToolNames,
+                    )
+                    .withConciseToolDescriptions()
+                    .withHumanLikeToolPrompts()
 
                 // 直接调用 AI API 生成消息
                 val providerSetting = model.findProvider(settings.providers)

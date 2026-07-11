@@ -87,6 +87,8 @@ import dev.chrisbanes.haze.hazeSource
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.R
@@ -108,6 +110,7 @@ import me.rerere.rikkahub.utils.plus
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.roundToInt
+import kotlin.math.abs
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatList"
@@ -326,7 +329,7 @@ private fun ChatListNormal(
             state = state,
             contentPadding = PaddingValues(16.dp) + PaddingValues(bottom = 32.dp + innerPadding.calculateBottomPadding()),
             horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier
                 .fillMaxSize()
                 .hazeSource(state = hazeState)
@@ -336,6 +339,8 @@ private fun ChatListNormal(
                 items = displayNodes,
                 key = { index, item -> item.id },
             ) { index, node ->
+                val groupedWithPrevious = displayNodes.getOrNull(index - 1)?.isVisuallyContinuousWith(node) == true
+                val groupedWithNext = displayNodes.getOrNull(index + 1)?.let(node::isVisuallyContinuousWith) == true
                 val latestPresenceDescription = remember(conversation.messageNodes, displayNodes.lastIndex, index) {
                     if (index == displayNodes.lastIndex) {
                         conversation.messageNodes.latestLuluPresenceDescription()
@@ -392,6 +397,8 @@ private fun ChatListNormal(
                             onToolApproval = onToolApproval,
                             onToolAnswer = onToolAnswer,
                             lastMessage = index == displayNodes.lastIndex,
+                            showSenderHeader = !groupedWithPrevious,
+                            groupEnd = !groupedWithNext,
                         )
                     }
                 }
@@ -555,6 +562,17 @@ private fun ChatListNormal(
         }
     }
 }
+
+private fun MessageNode.isVisuallyContinuousWith(other: MessageNode): Boolean {
+    val first = currentMessage
+    val second = other.currentMessage
+    if (first.role != second.role) return false
+    val firstAt = first.createdAt.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+    val secondAt = second.createdAt.toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
+    return abs(secondAt - firstAt) <= CONTINUOUS_MESSAGE_WINDOW_MILLIS
+}
+
+private const val CONTINUOUS_MESSAGE_WINDOW_MILLIS = 10L * 60L * 1_000L
 
 /**
  * 提取包含搜索词的文本片段，确保匹配词在开头可见
