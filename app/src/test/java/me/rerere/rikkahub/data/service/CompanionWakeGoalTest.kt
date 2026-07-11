@@ -1,5 +1,7 @@
 package me.rerere.rikkahub.data.service
 
+import me.rerere.rikkahub.data.companion.CompanionContextFact
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -11,6 +13,8 @@ class CompanionWakeGoalTest {
             shouldCompleteWakeGoal(
                 wakeTargetAt = 1_000L,
                 latestUserMessageAt = 1_100L,
+                latestDeviceActivityAt = null,
+                screenInteractive = false,
                 perceivedUserState = "uncertain",
             )
         )
@@ -22,6 +26,8 @@ class CompanionWakeGoalTest {
             shouldCompleteWakeGoal(
                 wakeTargetAt = 1_000L,
                 latestUserMessageAt = 900L,
+                latestDeviceActivityAt = null,
+                screenInteractive = false,
                 perceivedUserState = "asleep",
             )
         )
@@ -33,9 +39,52 @@ class CompanionWakeGoalTest {
             shouldCompleteWakeGoal(
                 wakeTargetAt = 1_000L,
                 latestUserMessageAt = null,
+                latestDeviceActivityAt = null,
+                screenInteractive = true,
                 perceivedUserState = "awake",
             )
         )
+    }
+
+    @Test
+    fun `wake goal does not trust model awake state while screen is off`() {
+        assertFalse(
+            shouldCompleteWakeGoal(
+                wakeTargetAt = 1_000L,
+                latestUserMessageAt = null,
+                latestDeviceActivityAt = null,
+                screenInteractive = false,
+                perceivedUserState = "awake",
+            )
+        )
+    }
+
+    @Test
+    fun `wake goal completes after foreground app activity following target`() {
+        assertTrue(
+            shouldCompleteWakeGoal(
+                wakeTargetAt = 1_000L,
+                latestUserMessageAt = null,
+                latestDeviceActivityAt = 1_100L,
+                screenInteractive = true,
+                perceivedUserState = "uncertain",
+            )
+        )
+    }
+
+    @Test
+    fun `latest foreground activity is read from passive app usage`() {
+        val activityAt = latestForegroundUsageAt(
+            listOf(
+                CompanionContextFact(
+                    key = "perception.get_app_usage",
+                    value = """{"success":true,"apps":[{"last_used_at_millis":900},{"last_used_at_millis":1200}]}""",
+                    observedAt = 1_300L,
+                )
+            )
+        )
+
+        assertEquals(1_200L, activityAt)
     }
 
     @Test

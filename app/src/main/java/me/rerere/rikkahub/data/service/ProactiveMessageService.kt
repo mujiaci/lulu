@@ -41,6 +41,7 @@ import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.tools.LocalTools
 import me.rerere.rikkahub.data.ai.tools.SystemTools
+import me.rerere.rikkahub.data.ai.tools.createAlarmTool
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
@@ -58,8 +59,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.Settings
@@ -926,6 +929,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         failDurableCommitment(
                             commitment = activeCommitment,
                             summary = "No chat model configured for proactive execution",
+                            assistantName = assistant.name,
                         )
                         executingCommitment = null
                     } else {
@@ -979,6 +983,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     value = screenInteractive.toString(),
                     observedAt = nowMillis,
                 )
+                val latestDeviceActivityAt = latestForegroundUsageAt(passiveFacts)
                 val memoryQuery = listOfNotNull(
                     targetedReason,
                     targetedUserText,
@@ -1033,6 +1038,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         commitment.isWakeGoal() && wakeTargetAt != null -> shouldCompleteWakeGoal(
                             wakeTargetAt = wakeTargetAt,
                             latestUserMessageAt = latestUserMessageAt,
+                            latestDeviceActivityAt = latestDeviceActivityAt,
+                            screenInteractive = screenInteractive,
                             perceivedUserState = null,
                         )
                         commitment.isSleepSupervisionGoal() && wakeTargetAt != null ->
@@ -1224,6 +1231,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         failDurableCommitment(
                             commitment = activeCommitment,
                             summary = "No provider configured for proactive execution",
+                            assistantName = assistant.name,
                         )
                         executingCommitment = null
                     } else {
@@ -1339,6 +1347,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         commitment.isWakeGoal() && wakeTargetAt != null -> !shouldCompleteWakeGoal(
                             wakeTargetAt = wakeTargetAt,
                             latestUserMessageAt = latestUserMessageAt,
+                            latestDeviceActivityAt = latestDeviceActivityAt,
+                            screenInteractive = screenInteractive,
                             perceivedUserState = perceivedUserState,
                         )
                         commitment.isSleepSupervisionGoal() && wakeTargetAt != null ->
@@ -1357,7 +1367,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         val nextDueAt = completedAt + TimeUnit.MINUTES.toMillis(retryMinutes.toLong())
                         if (commitment.isWakeGoal()) {
                             scheduleWakeContinuationAlarm(
-                                tools = tools,
                                 triggerAtMillis = nextDueAt,
                                 assistantName = assistant.name,
                             )
@@ -1430,6 +1439,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                             failDurableCommitment(
                                 commitment = activeCommitment,
                                 summary = (e.message ?: e::class.simpleName ?: "Proactive execution failed").take(500),
+                                assistantName = assistant.name,
                             )
                         }
                     }.onFailure { persistenceError ->
@@ -1448,9 +1458,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     private suspend fun failDurableCommitment(
         commitment: CompanionCommitment,
         summary: String,
+        assistantName: String,
     ) {
         val completedAt = System.currentTimeMillis()
         if (commitment.isWakeGoal() || commitment.isSleepSupervisionGoal()) {
+            val nextDueAt = completedAt + TimeUnit.MINUTES.toMillis(
+                commitment.retryMinutesOrDefault().toLong(),
+            )
+            if (commitment.isWakeGoal()) {
+                scheduleWakeContinuationAlarm(
+                    triggerAtMillis = nextDueAt,
+                    assistantName = assistantName,
+                )
+            }
             companionRuntime.continueCommitment(
                 assistantId = commitment.assistantId,
                 commitmentId = commitment.id,
@@ -1459,9 +1479,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     summary = summary,
                     completedAt = completedAt,
                 ),
-                nextDueAt = completedAt + TimeUnit.MINUTES.toMillis(
-                    commitment.retryMinutesOrDefault().toLong(),
-                ),
+                nextDueAt = nextDueAt,
             )
             scheduleNextDurableCommitment()
             return
@@ -1487,11 +1505,10 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     }
 
     private suspend fun scheduleWakeContinuationAlarm(
-        tools: List<Tool>,
         triggerAtMillis: Long,
         assistantName: String,
     ) {
-        val alarmTool = tools.firstOrNull { it.name == "set_alarm" } ?: return
+        val alarmTool = createAlarmTool(this)
         val target = Instant.ofEpochMilli(triggerAtMillis).atZone(ZoneId.systemDefault())
         runCatching {
             alarmTool.execute(
@@ -2112,9 +2129,28 @@ internal fun composeProactiveGenerationMessages(
 internal fun shouldCompleteWakeGoal(
     wakeTargetAt: Long,
     latestUserMessageAt: Long?,
+    latestDeviceActivityAt: Long?,
+    screenInteractive: Boolean,
     perceivedUserState: String?,
 ): Boolean = latestUserMessageAt?.let { it >= wakeTargetAt } == true ||
-    perceivedUserState.equals("awake", ignoreCase = true)
+    latestDeviceActivityAt?.let { it >= wakeTargetAt } == true ||
+    (screenInteractive && perceivedUserState.equals("awake", ignoreCase = true))
+
+internal fun latestForegroundUsageAt(facts: List<CompanionContextFact>): Long? = facts
+    .asSequence()
+    .filter { it.key == "perception.get_app_usage" }
+    .mapNotNull { fact ->
+        runCatching {
+            Json.parseToJsonElement(fact.value)
+                .jsonObject["apps"]
+                ?.jsonArray
+                ?.mapNotNull { app ->
+                    app.jsonObject["last_used_at_millis"]?.jsonPrimitive?.longOrNull
+                }
+                ?.maxOrNull()
+        }.getOrNull()
+    }
+    .maxOrNull()
 
 internal fun shouldCompleteSleepSupervision(
     wakeTargetAt: Long,

@@ -71,6 +71,7 @@ fun createAppUsageTool(context: Context): Tool = Tool(
                         put("package_name", stat.packageName)
                         put("usage_minutes", (stat.totalTimeInForeground / 60000).toInt())
                         put("last_used", dateFormat.format(Date(stat.lastTimeUsed)))
+                        put("last_used_at_millis", stat.lastTimeUsed)
                     })
                 }
             }
