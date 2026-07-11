@@ -116,7 +116,7 @@ object CompanionCommitmentReducer {
             outputReference = lastActionResult.outputReference?.trim()?.takeIf(String::isNotBlank),
         ),
         attemptCount = attemptCount.coerceAtLeast(0),
-    )
+    ).sanitizedHumanFacingText()
 
     private fun CompanionCommitmentStatus.allowedNextStatuses(): Set<CompanionCommitmentStatus> = when (this) {
         CompanionCommitmentStatus.PROPOSED -> setOf(

@@ -84,6 +84,23 @@ class CompanionCommitmentReducerTest {
         assertEquals(CompanionCommitmentStatus.ACTIVE, result.single { it.id == "new" }.status)
     }
 
+    @Test
+    fun `technical planner details never enter commitment state`() {
+        val result = CompanionCommitmentReducer.apply(
+            current = emptyList(),
+            changes = listOf(
+                CompanionCommitmentChange.Upsert(
+                    commitment(
+                        promise = "我会晚点再来看看。\nget_app_usage suggested args={}",
+                    ),
+                ),
+            ),
+            nowMillis = 20L,
+        )
+
+        assertEquals("我会晚点再来看看。", result.single().promise)
+    }
+
     private fun transition(
         commitments: List<CompanionCommitment>,
         status: CompanionCommitmentStatus,
@@ -107,11 +124,12 @@ class CompanionCommitmentReducerTest {
         subjectKey: String = "wake:08:00",
         dueAt: Long = 100L,
         status: CompanionCommitmentStatus = CompanionCommitmentStatus.ACTIVE,
+        promise: String = "早上叫醒用户",
     ): CompanionCommitment = CompanionCommitment(
         id = id,
         assistantId = assistantId,
         subjectKey = subjectKey,
-        promise = "早上叫醒用户",
+        promise = promise,
         dueAt = dueAt,
         status = status,
         actionPlan = CompanionActionPlan(type = CompanionActionType.ALARM, toolName = "set_alarm"),
