@@ -9,6 +9,27 @@ import org.junit.Test
 
 class ExamStudyPlanTest {
     @Test
+    fun sichuanUniversityTargetUsesASafetyMarginInsteadOfTheHistoricalMinimum() {
+        assertEquals(385, ExamStudyPlan.scuSafeTargetScore)
+        assertEquals(70, ExamStudyPlan.politicsTargetScore)
+        assertEquals(75, ExamStudyPlan.englishTargetScore)
+        assertEquals(120, ExamStudyPlan.professionalFoundationTargetScore)
+        assertEquals(120, ExamStudyPlan.professionalComprehensiveTargetScore)
+        assertEquals(
+            ExamStudyPlan.scuSafeTargetScore,
+            ExamStudyPlan.politicsTargetScore +
+                ExamStudyPlan.englishTargetScore +
+                ExamStudyPlan.professionalFoundationTargetScore +
+                ExamStudyPlan.professionalComprehensiveTargetScore,
+        )
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("四川大学法律硕士（非法学）"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("2024 年法律（非法学）350"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("计划 68 人"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("复试科目为法理学"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("不是官方预测线"))
+    }
+
+    @Test
     fun tomorrowPlanReadsTheNextCalendarDay() {
         val tomorrow = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 2).plusDays(1))
 

@@ -16,6 +16,11 @@ object ExamStudyPlan {
     const val professionalExamMinutes: Int = 180
     const val professionalPaperScore: Int = 150
     const val professionalSubjectiveScore: Int = 90
+    const val scuSafeTargetScore: Int = 385
+    const val politicsTargetScore: Int = 70
+    const val englishTargetScore: Int = 75
+    const val professionalFoundationTargetScore: Int = 120
+    const val professionalComprehensiveTargetScore: Int = 120
     const val weeklyRestDayCount: Int = 1
     val currentWeekRestDate: LocalDate = LocalDate.of(2026, 7, 7)
     val vocabularyDailyOptions: List<Int> = listOf(dailyVocabularyTarget)
@@ -49,6 +54,8 @@ object ExamStudyPlan {
         - 这是考研计划，优先追求可执行、稳定、可持续，不用漂亮但空泛的日程。
         - 用户容易畏难；当她想逃避，或身体不舒服导致“不想学习”时，不要立刻判断为完全不能学。非明显生病或疼痛加重时，先安排不背单词 20 个（1 组）作为低阻力启动，因为她有时学习一点反而会清醒。
         - 专业课优先级最高。法理学已经听课和做题一遍，现在重点是背诵、框架、错题回看，不要重新从零听大量课程。
+        - 唯一目标院校是四川大学法律硕士（非法学）。近三年学校基本线存在波动：2023 年法律 345、2024 年法律（非法学）350、2025 年法律 335，且学校明确学院可二次提高。不能按刚过线设计；备考安全目标定为 $scuSafeTargetScore 分：政治 $politicsTargetScore、英语一 $englishTargetScore、专业基础 $professionalFoundationTargetScore、专业综合 $professionalComprehensiveTargetScore。该分数是计划目标，不是官方预测线。
+        - 2026 官方招生目录显示法律（非法学）计划 68 人，其中非全日制 20 人、拟推免 24 人，复试科目为法理学。目录人数会随推免完成和生源调整，因此不能把计划人数直接等同于统考全日制最终录取人数；初试必须尽量建立 30 分以上安全垫。
         - 刑法学、民法、宪法学、法制史需要从一轮听课和基础题开始。专业课听课默认使用众合法硕课程；安排时写成“听众合法硕刑法课程”“听众合法硕民法课程”等。
         - 专业课总课时校准：$professionalCourseHoursSummary。四科合计约 297 小时 16 分钟，不能按章节数或页数乐观估时。
         - 章节账本必须写清：法理学 $legalTheoryChapterCount 章、刑法学 $criminalLawChapterCount 章、民法 $civilLawChapterCount 章、宪法学 $constitutionalLawChapterCount 章、法制史 $legalHistoryChapterCount 章。月计划、周计划、日计划必须能看出章节范围、听课估时、背诵轮次和题目/真题入口。
