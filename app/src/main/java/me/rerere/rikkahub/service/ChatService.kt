@@ -82,22 +82,12 @@ import me.rerere.rikkahub.data.ai.tools.withHumanLikeToolPrompts
 import me.rerere.rikkahub.data.files.SkillManager
 import me.rerere.rikkahub.plugin.loader.PluginLoader
 import me.rerere.rikkahub.plugin.provider.PluginToolProvider
-import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.buildPromptInjectionPlannerContext
-import me.rerere.rikkahub.data.ai.transformers.CompanionPresenceContractTransformer
-import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
-import me.rerere.rikkahub.data.ai.transformers.LuluExpressionOutputTransformer
-import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
-import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
-import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
-import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
+import me.rerere.rikkahub.data.ai.transformers.companionInputTransformers
 import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
+import me.rerere.rikkahub.data.ai.transformers.companionOutputTransformers
 import me.rerere.rikkahub.data.ai.transformers.sanitizeLuluVisibleExpression
-import me.rerere.rikkahub.data.ai.transformers.StudyStateTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
-import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
-import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
-import me.rerere.rikkahub.data.ai.transformers.VoiceMessageTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findModelById
@@ -242,28 +232,6 @@ private fun String.isVoiceCallInternalInstruction(): Boolean {
         text.contains("不要输出动作") &&
         text.contains("不要加标签")
     return hasVoiceCallContext && hasOutputRule
-}
-
-private val inputTransformers by lazy {
-    listOf(
-        TimeReminderTransformer,
-        PromptInjectionTransformer,
-        CompanionPresenceContractTransformer,
-        StudyStateTransformer,
-        PlaceholderTransformer,
-        DocumentAsPromptTransformer,
-        OcrTransformer,
-        VoiceMessageTransformer,
-    )
-}
-
-private val outputTransformers by lazy {
-    listOf(
-        ThinkTagTransformer,
-        Base64ImageToLocalFileTransformer,
-        RegexOutputTransformer,
-        LuluExpressionOutputTransformer,
-    )
 }
 
 class ChatService(
@@ -685,10 +653,10 @@ class ChatService(
             assistant = assistant,
             conversationSystemPrompt = conversation.customSystemPrompt,
             inputTransformers = buildList {
-                addAll(inputTransformers)
+                addAll(companionInputTransformers)
                 add(templateTransformer)
             },
-            outputTransformers = outputTransformers,
+            outputTransformers = companionOutputTransformers,
             tools = availableTools,
             pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
             apiUsageSource = ApiUsageSource.PHONE,
@@ -941,10 +909,10 @@ class ChatService(
                 assistant = assistant,
                 conversationSystemPrompt = conversation.customSystemPrompt,
                 inputTransformers = buildList {
-                    addAll(inputTransformers)
+                    addAll(companionInputTransformers)
                     add(templateTransformer)
                 },
-                outputTransformers = outputTransformers,
+                outputTransformers = companionOutputTransformers,
                 tools = availableTools,
                 pluginPromptInjections = pluginToolProvider.getPluginPromptInjections(),
             ).onCompletion {

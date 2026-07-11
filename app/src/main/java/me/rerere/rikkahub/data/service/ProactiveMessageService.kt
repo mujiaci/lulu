@@ -32,21 +32,11 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.ai.ui.canResumeToolExecution
 import me.rerere.ai.ui.handleMessageChunk
 import me.rerere.ai.ui.limitContext
-import me.rerere.rikkahub.data.ai.transformers.InputMessageTransformer
-import me.rerere.rikkahub.data.ai.transformers.OutputMessageTransformer
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
-import me.rerere.rikkahub.data.ai.transformers.TimeReminderTransformer
-import me.rerere.rikkahub.data.ai.transformers.PromptInjectionTransformer
-import me.rerere.rikkahub.data.ai.transformers.PlaceholderTransformer
-import me.rerere.rikkahub.data.ai.transformers.DocumentAsPromptTransformer
-import me.rerere.rikkahub.data.ai.transformers.OcrTransformer
-import me.rerere.rikkahub.data.ai.transformers.ThinkTagTransformer
-import me.rerere.rikkahub.data.ai.transformers.Base64ImageToLocalFileTransformer
 import me.rerere.rikkahub.data.ai.transformers.buildPromptInjectionPlannerContext
-import me.rerere.rikkahub.data.ai.transformers.CompanionPresenceContractTransformer
+import me.rerere.rikkahub.data.ai.transformers.companionInputTransformers
 import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
-import me.rerere.rikkahub.data.ai.transformers.LuluExpressionOutputTransformer
-import me.rerere.rikkahub.data.ai.transformers.RegexOutputTransformer
+import me.rerere.rikkahub.data.ai.transformers.companionOutputTransformers
 import me.rerere.rikkahub.data.ai.transformers.transforms
 import me.rerere.rikkahub.data.ai.transformers.onGenerationFinish
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -794,28 +784,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         private const val MAX_SCHEDULER_CANDIDATES = 50
     }
 
-    // 输入转换器（与 ChatService 保持一致）
-    private val inputTransformers by lazy {
-        listOf(
-            TimeReminderTransformer,
-            PromptInjectionTransformer,
-            CompanionPresenceContractTransformer,
-            PlaceholderTransformer,
-            DocumentAsPromptTransformer,
-            OcrTransformer,
-        )
-    }
-
-    // 输出转换器（与 ChatService 保持一致）
-    private val outputTransformers by lazy {
-        listOf(
-            ThinkTagTransformer,
-            Base64ImageToLocalFileTransformer,
-            RegexOutputTransformer,
-            LuluExpressionOutputTransformer,
-        )
-    }
-
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "=== TriggerService onStartCommand ===")
         val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
@@ -1227,7 +1195,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     historyMessages = fixedHistoryMessages,
                     currentContext = userMessage,
                 ).transforms(
-                    transformers = inputTransformers + templateTransformer,
+                    transformers = companionInputTransformers + templateTransformer,
                     context = this@ProactiveMessageTriggerService,
                     model = model,
                     assistant = assistant,
@@ -1974,7 +1942,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
             // 应用输出转换器
             val processedMessage = listOf(aiMessage).transforms(
-                transformers = outputTransformers,
+                transformers = companionOutputTransformers,
                 context = this@ProactiveMessageTriggerService,
                 model = model,
                 assistant = assistant,
@@ -2002,7 +1970,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 // 最终更新 session 状态（用 id 匹配就地更新）
                 val finishedAt = now.toLocalDateTime(TimeZone.currentSystemDefault())
                 messages = messages.onGenerationFinish(
-                    transformers = outputTransformers,
+                    transformers = companionOutputTransformers,
                     context = this@ProactiveMessageTriggerService,
                     model = model,
                     assistant = assistant,
