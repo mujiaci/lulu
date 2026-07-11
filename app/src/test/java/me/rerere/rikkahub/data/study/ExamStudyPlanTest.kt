@@ -30,6 +30,21 @@ class ExamStudyPlanTest {
     }
 
     @Test
+    fun scoreMilestonesApproachTheSichuanUniversitySafetyTargetGradually() {
+        val september = ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n")
+        val october = ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n")
+        val november = ExamStudyPlan.monthlyPlans.single { it.month == "2026-11" }.tasks.joinToString("\n")
+        val december = ExamStudyPlan.monthlyPlans.single { it.month == "2026-12" }.tasks.joinToString("\n")
+
+        assertTrue(september.contains("100-105 分"))
+        assertTrue(october.contains("110-115 分"))
+        assertTrue(november.contains("118-122 分"))
+        assertTrue(november.contains("375 分区间"))
+        assertTrue(december.contains("385 分安全目标"))
+        assertTrue(december.contains("各守住 120 分左右"))
+    }
+
+    @Test
     fun tomorrowPlanReadsTheNextCalendarDay() {
         val tomorrow = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 2).plusDays(1))
 
