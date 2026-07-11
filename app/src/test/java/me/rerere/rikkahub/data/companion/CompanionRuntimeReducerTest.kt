@@ -267,6 +267,27 @@ class CompanionRuntimeReducerTest {
 
         val fulfilled = reduced.snapshot.commitments.single()
         assertEquals(CompanionCommitmentStatus.FULFILLED, fulfilled.status)
+        assertEquals(0, fulfilled.attemptCount)
+        assertEquals(300L, fulfilled.resolvedAt)
+    }
+
+    @Test
+    fun `user evidence fulfills a wake retry before its next scheduled attempt`() {
+        val retryScheduled = commitment(
+            status = CompanionCommitmentStatus.RETRY_SCHEDULED,
+            attemptCount = 1,
+        ).copy(dueAt = 500L)
+
+        val reduced = fulfillCompanionCommitmentFromEvidence(
+            current = persisted(snapshot(commitments = listOf(retryScheduled))),
+            assistantId = ASSISTANT_A,
+            commitmentId = retryScheduled.id,
+            summary = "User replied before the next wake retry",
+            completedAt = 300L,
+        )
+
+        val fulfilled = reduced.snapshot.commitments.single()
+        assertEquals(CompanionCommitmentStatus.FULFILLED, fulfilled.status)
         assertEquals(1, fulfilled.attemptCount)
         assertEquals(300L, fulfilled.resolvedAt)
     }

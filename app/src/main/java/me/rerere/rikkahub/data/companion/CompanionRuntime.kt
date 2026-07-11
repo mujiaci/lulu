@@ -682,26 +682,54 @@ fun fulfillCompanionCommitmentFromEvidence(
     completedAt: Long,
     outputReference: String? = null,
 ): CompanionRuntimeReduction {
-    val existing = current.snapshotOrEmpty(assistantId).commitments.firstOrNull {
+    val snapshot = current.snapshotOrEmpty(assistantId)
+    val existing = snapshot.commitments.firstOrNull {
         it.assistantId == assistantId && it.id == commitmentId
-    } ?: return current.unchangedReduction(current.snapshotOrEmpty(assistantId))
+    } ?: return current.unchangedReduction(snapshot)
     val executingState = when (existing.status) {
         CompanionCommitmentStatus.EXECUTING -> current
         CompanionCommitmentStatus.ACTIVE,
         CompanionCommitmentStatus.DUE,
         CompanionCommitmentStatus.RETRY_SCHEDULED -> {
-            val started = beginCompanionCommitment(
-                current = current,
-                assistantId = assistantId,
-                commitmentId = commitmentId,
+            val transitions = buildList {
+                if (existing.status != CompanionCommitmentStatus.DUE) {
+                    add(
+                        CompanionCommitmentChange.Transition(
+                            assistantId = assistantId,
+                            commitmentId = commitmentId,
+                            status = CompanionCommitmentStatus.DUE,
+                            reason = "External evidence resolved the commitment",
+                        ),
+                    )
+                }
+                add(
+                    CompanionCommitmentChange.Transition(
+                        assistantId = assistantId,
+                        commitmentId = commitmentId,
+                        status = CompanionCommitmentStatus.EXECUTING,
+                        reason = "Applying external completion evidence",
+                    ),
+                )
+            }
+            val transitioned = CompanionCommitmentReducer.apply(
+                current = snapshot.commitments,
+                changes = transitions,
                 nowMillis = completedAt,
             )
-            if (started.affectedCommitment == null) {
-                return current.unchangedReduction(current.snapshotOrEmpty(assistantId))
-            }
-            started.persistedState
+            val executing = transitioned.firstOrNull { it.id == commitmentId }
+                ?.takeIf { it.status == CompanionCommitmentStatus.EXECUTING }
+                ?: return current.unchangedReduction(snapshot)
+            current.withUpdatedSnapshot(
+                snapshot = snapshot.copy(
+                    commitments = transitioned.map {
+                        if (it.id == commitmentId) executing.copy(updatedAt = completedAt) else it
+                    },
+                    updatedAt = maxOf(snapshot.updatedAt, completedAt),
+                ),
+                affectedCommitmentId = commitmentId,
+            ).persistedState
         }
-        else -> return current.unchangedReduction(current.snapshotOrEmpty(assistantId))
+        else -> return current.unchangedReduction(snapshot)
     }
     return finishCompanionCommitment(
         current = executingState,
