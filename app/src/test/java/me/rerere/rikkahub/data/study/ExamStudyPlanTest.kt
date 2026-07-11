@@ -98,9 +98,9 @@ class ExamStudyPlanTest {
         val july = ExamStudyPlan.monthlyPlans.single { it.month == "2026-07" }
         val text = july.tasks.joinToString("\n")
 
-        assertTrue(text.contains("法理学不重听"))
-        assertTrue(text.contains("第一轮背诵"))
-        assertTrue(text.contains("不是只看目录"))
+        assertTrue(text.contains("法理第 1 章欠账优先补齐"))
+        assertTrue(text.contains("每天 45-60 分钟滚动闭卷"))
+        assertTrue(text.contains("规范表述"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("不能长期停留在“看错题、搞目录”"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("正式背诵 30-40 分钟"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("至少安排约 2 小时有效学习"))
@@ -126,7 +126,7 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("一本学完再学下一本"))
         assertTrue(habit.contains("整本书顺序推进"))
         assertTrue(habit.contains("倍速听课"))
-        assertTrue(habit.contains("不再宣称 9 月底前必然完成"))
+        assertTrue(habit.contains("全部新课必须在 9 月 14 日前完成"))
         assertTrue(habit.contains("不能压缩课后消化、做题、错题、框架和背诵痕迹"))
         assertTrue(habit.contains("法理背诵复线"))
         assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
@@ -136,13 +136,13 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("不要拆成 4-5 个碎片"))
         assertTrue(subject.contains("不单独安排预习目录"))
         assertFalse(subject.contains("课前 5 分钟看考试分析目录"))
-        assertTrue(july.contains("7 月新学主线只放刑法"))
+        assertTrue(july.contains("7 月 31 日前完成"))
         assertFalse(july.contains("民法第 1 章连续听完"))
-        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("刑法第 17-25 章"))
-        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("启动民法第 1 章"))
-        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("民法为唯一新课主线"))
-        assertTrue(week.contains("第 2-6 章是合并题组"))
-        assertTrue(week.contains("民法第 1 章不在刑法主线期间启动"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("9 月 14 日"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("9 月 15-30 日"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("不开常规新课"))
+        assertTrue(week.contains("第 2-6 章合并题"))
+        assertTrue(week.contains("第 3-6 章课程后"))
         assertTrue(julySix?.title.orEmpty().contains("连续主块"))
         assertFalse(julySix?.tasks.orEmpty().any { it.title.contains("听众合法硕民法课程") })
         assertTrue(julyNine?.title.orEmpty().contains("刑法1补闭环"))
@@ -171,24 +171,22 @@ class ExamStudyPlanTest {
         assertEquals(40, ExamStudyPlan.chapterPracticeQuestionsPerSet)
         assertTrue(text.contains("一张按约 40 道估算"))
         assertTrue(text.contains("7 月 8 日先做 15-20 道启动"))
-        assertTrue(week.tasks.joinToString("\n").contains("已经全部完成"))
+        assertTrue(week.tasks.joinToString("\n").contains("第 1 章已闭环"))
         assertFalse(julyThirteen?.tasks.orEmpty().joinToString("\n") { it.title }.contains("刑法第 1 章"))
     }
 
     @Test
     fun criminalLawCombinedPracticeWaitsUntilChaptersTwoThroughSixCoursesFinish() {
-        val beforePractice = (12..25).joinToString("\n") { day ->
-            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, day))!!.tasks.joinToString("\n") { it.title }
-        }
-        val firstPracticeDay = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 26))!!
+        val julyFourteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 14))!!
             .tasks.joinToString("\n") { it.title }
-        val secondPracticeDay = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 27))!!
+        val julySixteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 16))!!
             .tasks.joinToString("\n") { it.title }
+        val week = ExamStudyPlan.julyWeeks.single { it.id == "2026-07-w2" }.tasks.joinToString("\n")
 
-        assertFalse(beforePractice.contains("合并题第1块"))
-        assertTrue(beforePractice.contains("第 6 章"))
-        assertTrue(firstPracticeDay.contains("确认第 3-6 章课程全部听完后"))
-        assertTrue(secondPracticeDay.contains("合并题"))
+        assertTrue(julyFourteen.contains("合并题：仍不开始"))
+        assertTrue(julySixteen.contains("确认刑法第 3-6 章课程全部完成"))
+        assertTrue(julySixteen.contains("第 2-6 章合并题"))
+        assertTrue(week.indexOf("第 3-6 章课程后") < week.indexOf("统一做第 2-6 章合并题"))
     }
 
     @Test
@@ -340,7 +338,7 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun downstreamPlanUsesProgressGatesAndStopsLongCoursesBeforeFinalSprint() {
+    fun downstreamPlanLeavesAFullRevisionRunwayBeforeFinalSprint() {
         val october = ExamStudyPlan.postJulyWeeks
             .filter { it.id.startsWith("2026-10") }
             .flatMap { it.tasks }
@@ -350,11 +348,30 @@ class ExamStudyPlanTest {
             .flatMap { it.tasks }
             .joinToString("\n")
 
-        assertTrue(october.contains("民法为唯一新课主线"))
-        assertTrue(october.contains("民法整本验收通过才启动宪法"))
-        assertFalse(october.contains("全科新课验收"))
-        assertTrue(november.contains("11 月 14 日做长课截止审计"))
-        assertTrue(november.contains("不再追完整长课"))
+        assertTrue(october.contains("不安排常规新课"))
+        assertTrue(october.contains("第二轮"))
+        assertFalse(october.contains("听课"))
+        assertTrue(november.contains("套卷"))
+        assertTrue(november.contains("答题纸"))
+    }
+
+    @Test
+    fun hardCourseDeadlinesProtectThreeMonthsForRecitationAndOutput() {
+        val july = ExamStudyPlan.monthlyPlans.single { it.month == "2026-07" }.tasks.joinToString("\n")
+        val august = ExamStudyPlan.monthlyPlans.single { it.month == "2026-08" }.tasks.joinToString("\n")
+        val september = ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n")
+        val october = ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n")
+        val december = ExamStudyPlan.monthlyPlans.single { it.month == "2026-12" }.tasks.joinToString("\n")
+
+        assertTrue(july.contains("7 月 31 日"))
+        assertTrue(august.contains("8 月 20 日"))
+        assertTrue(august.contains("8 月 31 日"))
+        assertTrue(september.contains("9 月 14 日"))
+        assertTrue(september.contains("9 月 15 日后"))
+        assertTrue(october.contains("第二轮"))
+        assertFalse(october.contains("常规新课主线"))
+        assertTrue(december.contains("全真模拟"))
+        assertTrue(december.contains("不新增资料或课程"))
     }
 
     @Test
