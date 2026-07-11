@@ -69,31 +69,28 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun closedChapterDaySchedulesChapterPracticeAndCorrection() {
-        val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))
+    fun combinedPracticeDaySchedulesPracticeOnlyAfterCourseGate() {
+        val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 26))
         val titles = plan?.tasks.orEmpty().joinToString("\n") { it.title }
 
-        assertTrue(titles.contains("刑法第 1 章：整章章节题"))
-        assertTrue(titles.contains("约 40 道"))
+        assertTrue(titles.contains("刑法第 2-6 章合并题"))
+        assertTrue(titles.contains("确认第 3-6 章课程全部听完后"))
         assertTrue(titles.contains("错题"))
-        assertTrue(titles.contains("第一轮关键词背诵"))
+        assertTrue(titles.contains("不得做题"))
     }
 
     @Test
-    fun unfinishedNewChaptersOnlyReviewHeardKeywords() {
+    fun unfinishedNewChaptersDoNotUnlockCombinedPracticeEarly() {
         val text = listOf(
             ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 23)),
             ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 26)),
             ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 30)),
         ).flatMap { it?.tasks.orEmpty() }.joinToString("\n") { it.title }
 
-        assertTrue(text.contains("未确认整章闭环前不算第一轮背诵"))
-        assertTrue(text.contains("未闭环章节不算第一轮"))
-        assertTrue(text.contains("没闭环就不挑题"))
-        assertFalse(text.contains("刑法第 2 章第一轮关键词"))
-        assertFalse(text.contains("刑法第 2-3 章第一轮"))
-        assertFalse(text.contains("刑法第 3-4 章第一轮关键词"))
-        assertFalse(text.contains("刑法第 1-2 章已闭环范围"))
+        assertTrue(text.contains("第 6 章"))
+        assertTrue(text.contains("课程全部听完"))
+        assertTrue(text.contains("验收未过"))
+        assertFalse(text.contains("刑法第 7 章：听课"))
     }
 
     @Test
@@ -129,7 +126,7 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("一本学完再学下一本"))
         assertTrue(habit.contains("整本书顺序推进"))
         assertTrue(habit.contains("倍速听课"))
-        assertTrue(habit.contains("9 月底前基本收完"))
+        assertTrue(habit.contains("不再宣称 9 月底前必然完成"))
         assertTrue(habit.contains("不能压缩课后消化、做题、错题、框架和背诵痕迹"))
         assertTrue(habit.contains("法理学背诵可以作为复线"))
         assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
@@ -141,9 +138,9 @@ class ExamStudyPlanTest {
         assertFalse(subject.contains("课前 5 分钟看考试分析目录"))
         assertTrue(july.contains("7 月新学主线只放刑法"))
         assertFalse(july.contains("民法第 1 章连续听完"))
-        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("9 月 15 日前完成民法"))
-        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("法制史第 1-7 章"))
-        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("不再把新课当主线"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("刑法第 17-25 章"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-09" }.tasks.joinToString("\n").contains("启动民法第 1 章"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("民法为唯一新课主线"))
         assertTrue(week.contains("刑法主线 + 法理背诵复线"))
         assertTrue(week.contains("民法第 1 章不在刑法主线期间启动"))
         assertTrue(julySix?.title.orEmpty().contains("连续主块"))
@@ -160,7 +157,7 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun chapterPracticeUsesFortyQuestionSetsInsteadOfTinyChunks() {
+    fun completedFirstChapterPracticeIsNotScheduledAgainAfterProgressCorrection() {
         val week = ExamStudyPlan.julyWeeks.single { it.id == "2026-07-w2" }
         val julyEight = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 8))
         val julyThirteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))
@@ -173,10 +170,25 @@ class ExamStudyPlanTest {
 
         assertEquals(40, ExamStudyPlan.chapterPracticeQuestionsPerSet)
         assertTrue(text.contains("一张按约 40 道估算"))
-        assertTrue(text.contains("本周完成文运/众合章节题 1 张约 40 道"))
         assertTrue(text.contains("7 月 8 日先做 15-20 道启动"))
-        assertTrue(text.contains("7 月 13 日补完剩余 20-25 道"))
-        assertFalse(week.tasks.joinToString("\n").contains("本周集中做文运/众合章节题 10-15 题"))
+        assertTrue(week.tasks.joinToString("\n").contains("已经全部完成"))
+        assertFalse(julyThirteen?.tasks.orEmpty().joinToString("\n") { it.title }.contains("刑法第 1 章"))
+    }
+
+    @Test
+    fun criminalLawCombinedPracticeWaitsUntilChaptersTwoThroughSixCoursesFinish() {
+        val beforePractice = (12..25).joinToString("\n") { day ->
+            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, day))!!.tasks.joinToString("\n") { it.title }
+        }
+        val firstPracticeDay = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 26))!!
+            .tasks.joinToString("\n") { it.title }
+        val secondPracticeDay = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 27))!!
+            .tasks.joinToString("\n") { it.title }
+
+        assertFalse(beforePractice.contains("合并题第1块"))
+        assertTrue(beforePractice.contains("第 6 章"))
+        assertTrue(firstPracticeDay.contains("确认第 3-6 章课程全部听完后"))
+        assertTrue(secondPracticeDay.contains("合并题"))
     }
 
     @Test
@@ -263,28 +275,31 @@ class ExamStudyPlanTest {
         assertTrue(july11.contains("法理第 1 章"))
         assertTrue(july11.contains("刑法第 1 章框架图欠账"))
         assertTrue(july11.contains("状态允许再选做"))
-        assertTrue(july12.contains("法理第 2 章"))
-        assertTrue(july12.contains("合成完整一张"))
-        assertTrue(july13.contains("法理第 3 章"))
-        assertTrue(july13.contains("第 1-3 章连续验收"))
+        assertTrue(july12.contains("法理学第 1 章"))
+        assertTrue(july12.contains("刑法第 3 章"))
+        assertTrue(july13.contains("法理学第 2 章"))
+        assertTrue(july13.contains("合并题继续冻结"))
         assertFalse(july13.contains("法理第 4 章"))
         assertFalse(july13.contains("法理第 8 章"))
-        assertTrue(july15.contains("法理学第 4 章"))
+        assertTrue(july15.contains("法理第 1-3 章"))
     }
 
     @Test
     fun julyLegalTheoryReviewAdvancesInChapterOrder() {
         val expectedChapters = mapOf(
-            15 to "法理学第 4 章",
-            16 to "法理学第 5 章",
-            17 to "法理学第 6 章",
-            19 to "法理第 7 章",
-            20 to "法理第 8 章",
-            22 to "法理学第 9 章",
-            23 to "法理第 10 章",
-            24 to "法理学第 11 章",
-            26 to "法理学第 12 章",
-            27 to "法理学第 13 章",
+            12 to "法理学第 1 章",
+            13 to "法理学第 2 章",
+            14 to "法理学第 3 章",
+            16 to "法理学第 4 章",
+            17 to "法理学第 5 章",
+            18 to "法理学第 6 章",
+            20 to "法理学第 7 章",
+            22 to "法理学第 8 章",
+            23 to "法理学第 9 章",
+            24 to "法理学第 10 章",
+            25 to "法理学第 11 章",
+            27 to "法理学第 12 章",
+            29 to "法理学第 13 章",
         )
 
         expectedChapters.forEach { (day, chapterText) ->
