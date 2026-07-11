@@ -237,7 +237,7 @@ object StarWishRules {
         }
         val lockedVideos = visibleVideos.filter { it.id !in starWishState.unlockedVideoIds }
         if (lockedVideos.isNotEmpty()) {
-            if (studyState.inventory.epicFragments < VIDEO_FRAGMENTS_PER_UNLOCK) {
+            if (studyState.inventory.videoFragments < VIDEO_FRAGMENTS_PER_UNLOCK) {
                 return StarWishVideoUnlockResult(starWishState, studyState, null, consumedFragment = false)
             }
             val lockedVideo = lockedVideos[random.nextInt(lockedVideos.size)]
@@ -247,7 +247,7 @@ object StarWishRules {
                 ),
                 studyState = studyState.copy(
                     inventory = studyState.inventory.copy(
-                        epicFragments = (studyState.inventory.epicFragments - VIDEO_FRAGMENTS_PER_UNLOCK).coerceAtLeast(0),
+                        videoFragments = (studyState.inventory.videoFragments - VIDEO_FRAGMENTS_PER_UNLOCK).coerceAtLeast(0),
                     ),
                     stats = studyState.stats.copy(
                         videoRewardsRedeemed = studyState.stats.videoRewardsRedeemed + 1,
@@ -320,7 +320,7 @@ object StarWishRules {
     }
 
     fun chapterCredits(studyState: StudyState): Int {
-        return studyState.inventory.universalRareFragments / RARE_FRAGMENTS_PER_CHAPTER
+        return studyState.inventory.theaterFragments / RARE_FRAGMENTS_PER_CHAPTER
     }
 
     fun defaultTheaterGuide(seed: StarWishTheaterSeed): StarWishTheaterGuide = StarWishTheaterGuide(

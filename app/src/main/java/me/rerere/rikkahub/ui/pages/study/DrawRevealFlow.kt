@@ -6,6 +6,7 @@ import me.rerere.rikkahub.data.study.StudyRarity
 enum class DrawRevealPhase {
     RainbowOpeningVideo,
     EpicOpeningVideo,
+    RareOpeningVideo,
     Card,
     RewardVideo,
     Summary,
@@ -26,6 +27,7 @@ object DrawRevealFlow {
             phase = when {
                 results.any { it.rarity == StudyRarity.Rainbow } -> DrawRevealPhase.RainbowOpeningVideo
                 results.any { it.rarity == StudyRarity.Epic } -> DrawRevealPhase.EpicOpeningVideo
+                results.any { it.rarity == StudyRarity.Rare } -> DrawRevealPhase.RareOpeningVideo
                 else -> DrawRevealPhase.Card
             },
             lastIndex = results.lastIndex,
@@ -57,8 +59,12 @@ object DrawRevealFlow {
         return summary(state)
     }
 
+    fun pendingRewardVideoIndexes(videoIndexes: Set<Int>, playedIndexes: Set<Int>): List<Int> =
+        (videoIndexes - playedIndexes).sorted()
+
     private val openingVideoPhases = setOf(
         DrawRevealPhase.RainbowOpeningVideo,
         DrawRevealPhase.EpicOpeningVideo,
+        DrawRevealPhase.RareOpeningVideo,
     )
 }

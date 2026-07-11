@@ -262,7 +262,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                 StarWishSection.Theaters -> {
                     item {
                         TheaterWalletCard(
-                            rareFragments = studyState.inventory.universalRareFragments,
+                            rareFragments = studyState.inventory.theaterFragments,
                             onAdd = { showAddTheater = true },
                         )
                     }
@@ -271,13 +271,13 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         val chapters = state.theaterChapters[theater.title].orEmpty()
                             .filterNot { it.isPromptPlaceholder(theater) }
                             .size
-                        val canCreate = studyState.inventory.universalRareFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER
+                        val canCreate = studyState.inventory.theaterFragments >= StarWishRules.RARE_FRAGMENTS_PER_CHAPTER
                         val hasChapter = chapters > 0
                         StarWishListRow(
                             title = theater.title,
-                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 1 枚紫色碎片续写" else "候选剧场 · 花 1 枚紫色碎片生成第一章",
+                            subtitle = if (hasChapter) "已生成 $chapters 章 · 再花 1 枚剧场碎片续写" else "候选剧场 · 花 1 枚剧场碎片生成第一章",
                             unlocked = canCreate || hasChapter,
-                            progress = (studyState.inventory.universalRareFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
+                            progress = (studyState.inventory.theaterFragments.coerceAtMost(StarWishRules.RARE_FRAGMENTS_PER_CHAPTER)) / StarWishRules.RARE_FRAGMENTS_PER_CHAPTER.toFloat(),
                             icon = HugeIcons.BookOpen02,
                             onClick = {
                                 if (canCreate || hasChapter) {
@@ -295,7 +295,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                     val unlockedCount = videos.count { it.id in state.unlockedVideoIds }
                     item {
                         VideoRewardCard(
-                            epicFragments = studyState.inventory.epicFragments,
+                            epicFragments = studyState.inventory.videoFragments,
                             unlocked = unlockedCount,
                             total = videos.size,
                             onUnlock = vm::unlockNextVideoOrPlayRandom,
@@ -306,7 +306,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
                         item {
                             StarWishEmptyCard(
                                 title = "还没有视频",
-                                subtitle = "先上传 AI 生成的视频；它会以灰色锁定状态进入视频柜，使用金色碎片后解锁。",
+                                subtitle = "先上传 AI 生成的视频；它会以灰色锁定状态进入视频柜，使用视频碎片后解锁。",
                                 icon = HugeIcons.Play,
                                 onClick = { videoPickerLauncher.launch("video/*") },
                             )
@@ -381,7 +381,7 @@ fun StarWishPage(vm: StarWishVM = koinViewModel()) {
     if (showAddTheater) {
         AddTheaterDialog(
             dialogTitle = "添加小剧场",
-            description = "添加后会出现在小剧场列表里；未花紫色碎片生成章节前，它仍然只是候选。",
+            description = "添加后会出现在小剧场列表里；未花剧场碎片生成章节前，它仍然只是候选。",
             promptLabel = "剧情提示词",
             promptRequired = true,
             onDismiss = { showAddTheater = false },
@@ -456,13 +456,13 @@ fun StarWishTheaterPage(
             TheaterDetailContent(
                 theater = theater,
                 credits = StarWishRules.chapterCredits(studyState),
-                rareFragments = studyState.inventory.universalRareFragments,
+                rareFragments = studyState.inventory.theaterFragments,
                 chapters = state.theaterChapters[theater.title].orEmpty(),
                 isGenerating = isGeneratingChapter,
                 error = chapterError,
                 modifier = Modifier.padding(padding).padding(horizontal = 16.dp, vertical = 14.dp),
                 costPerChapter = StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
-                fragmentLabel = "紫色碎片",
+                fragmentLabel = "剧场碎片",
                 onCreateChapter = { influence -> vm.createNextChapter(theater.title, influence) },
                 onDeleteChapter = { chapterId -> vm.deleteChapter(theater.title, chapterId) },
             )
@@ -576,7 +576,7 @@ private fun TheaterWalletCard(
                 }
             }
             Column(Modifier.weight(1f)) {
-                Text("紫色碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Text("剧场碎片 $rareFragments", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Text("可用于小剧场章节，也可以在考研 App 兑换一次抖音时间。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             TextButton(onClick = onAdd) { Text("添加") }
@@ -798,12 +798,12 @@ private fun VideoRewardCard(
                 }
                 Column(Modifier.weight(1f)) {
                     Text("视频收藏柜", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    Text("金色碎片 $epicFragments 枚 · 已解锁 $unlocked/$total", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("视频碎片 $epicFragments 枚 · 已解锁 $unlocked/$total", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
             Surface(color = StarWishColors.mistBlue.copy(alpha = 0.72f), shape = RoundedCornerShape(14.dp)) {
                 Text(
-                    "上传 AI 生成的视频后，它会先以灰色锁定状态进入收藏柜。每消耗 1 枚金色碎片，按列表顺序解锁下一个视频并自动播放；全部解锁后会随机播放已解锁视频。",
+                    "上传 AI 生成的视频后，它会先以灰色锁定状态进入收藏柜。每消耗 1 枚视频碎片，优先随机解锁一个未解锁视频并自动播放；全部解锁后会随机播放已解锁视频。",
                     modifier = Modifier.padding(12.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = StarWishColors.inkBlue,
@@ -860,7 +860,7 @@ private fun StarWishVideoRow(
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(video.title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (unlocked) "已解锁 · 可反复播放" else "未解锁 · 使用金色碎片后点亮",
+                    if (unlocked) "已解锁 · 可反复播放" else "未解锁 · 使用视频碎片后点亮",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -941,7 +941,7 @@ private fun TheaterDetailContent(
     error: String?,
     modifier: Modifier = Modifier,
     costPerChapter: Int = StarWishRules.RARE_FRAGMENTS_PER_CHAPTER,
-    fragmentLabel: String = "紫色碎片",
+    fragmentLabel: String = "剧场碎片",
     onCreateChapter: (String) -> Unit,
     onDeleteChapter: (String) -> Unit,
 ) {

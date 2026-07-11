@@ -30,6 +30,9 @@ import me.rerere.rikkahub.data.study.StudyState
 import me.rerere.rikkahub.data.study.StudyStore
 import me.rerere.rikkahub.data.study.SuperMomentChoice
 import me.rerere.rikkahub.data.starwish.StarWishVideoItem
+import me.rerere.rikkahub.data.starwish.StarWishRules
+import me.rerere.rikkahub.data.starwish.StarWishStore
+import me.rerere.rikkahub.data.study.StudyFragmentType
 import me.rerere.rikkahub.data.study.StudyEntertainmentReward
 import java.time.LocalDate
 import java.time.LocalTime
@@ -37,6 +40,7 @@ import kotlin.random.Random
 
 class StudyVM(
     private val store: StudyStore,
+    private val starWishStore: StarWishStore,
     private val settingsStore: SettingsStore,
     private val providerManager: ProviderManager,
     private val apiUsageStore: ApiUsageStore,
@@ -168,19 +172,31 @@ class StudyVM(
         viewModelScope.launch {
             var revealItems: List<StudyDrawReveal> = emptyList()
             var message: String? = null
+            var updatedStarWish = starWishStore.state.value
             store.update { current ->
                 val result = StudyRules.draw(current, count, Random.Default)
                 if (result.results.isEmpty()) {
                     message = "夸夸值或抽卡券不够"
                     return@update result.state
                 }
-                revealItems = result.results.map(::StudyDrawReveal)
-                result.state
+                var updatedStudy = result.state
+                revealItems = result.results.map { drawResult ->
+                    if (drawResult.fragmentType != StudyFragmentType.Video) {
+                        StudyDrawReveal(drawResult)
+                    } else {
+                        val unlock = StarWishRules.unlockNextVideo(updatedStarWish, updatedStudy, Random.Default)
+                        updatedStarWish = unlock.starWishState
+                        updatedStudy = unlock.studyState
+                        StudyDrawReveal(drawResult, unlock.video)
+                    }
+                }
+                updatedStudy
             }
             message?.let {
                 _effects.tryEmit(StudyEffect.Message(it))
                 return@launch
             }
+            starWishStore.update { updatedStarWish }
             _effects.tryEmit(StudyEffect.DrawResults(revealItems))
         }
     }
@@ -219,12 +235,6 @@ class StudyVM(
 
     fun applyUniversalNormal(key: String) = reduce {
         val result = StudyRules.useUniversalNormalFragment(it, key)
-        emitReward(result.reward.title)
-        result.state
-    }
-
-    fun applyUniversalEpic() = reduce {
-        val result = StudyRules.useUniversalEpicFragment(it)
         emitReward(result.reward.title)
         result.state
     }

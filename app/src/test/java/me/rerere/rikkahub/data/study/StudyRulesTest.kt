@@ -501,13 +501,13 @@ class StudyRulesTest {
     @Test
     fun `draw pool has purple gold and rainbow entertainment fragments`() {
         val state = StudyState(wallet = StudyWallet(singleDrawTickets = 3))
-        val purple = StudyRules.draw(state, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.95))).state
-        val gold = StudyRules.draw(purple, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.98))).state
+        val purple = StudyRules.draw(state, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.95), ints = mutableListOf(0))).state
+        val gold = StudyRules.draw(purple, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.98), ints = mutableListOf(1))).state
         val rainbow = StudyRules.draw(gold, count = 1, random = FixedDrawRandom(doubles = mutableListOf(0.995))).state
 
-        assertEquals(1, purple.inventory.universalRareFragments)
-        assertEquals(1, gold.inventory.epicFragments)
-        assertEquals(1, rainbow.inventory.rainbowFragments)
+        assertEquals(1, purple.inventory.douyinFragments)
+        assertEquals(1, gold.inventory.videoFragments)
+        assertEquals(1, rainbow.inventory.animeFragments)
     }
 
     @Test
@@ -533,9 +533,9 @@ class StudyRulesTest {
     fun `entertainment rewards consume their matching fragment`() {
         val state = StudyState(
             inventory = StudyInventory(
-                universalRareFragments = 1,
-                epicFragments = 1,
-                rainbowFragments = 1,
+                douyinFragments = 1,
+                gameFragments = 1,
+                animeFragments = 1,
             ),
         )
 
@@ -543,9 +543,9 @@ class StudyRulesTest {
         val game = StudyRules.redeemEntertainment(douyin.state, StudyEntertainmentReward.Game)
         val anime = StudyRules.redeemEntertainment(game.state, StudyEntertainmentReward.Anime)
 
-        assertEquals(0, anime.state.inventory.universalRareFragments)
-        assertEquals(0, anime.state.inventory.epicFragments)
-        assertEquals(0, anime.state.inventory.rainbowFragments)
+        assertEquals(0, anime.state.inventory.douyinFragments)
+        assertEquals(0, anime.state.inventory.gameFragments)
+        assertEquals(0, anime.state.inventory.animeFragments)
         assertEquals("抖音时间已兑换", douyin.reward.title)
         assertEquals("游戏时间已兑换", game.reward.title)
         assertEquals("动漫时间已兑换", anime.reward.title)

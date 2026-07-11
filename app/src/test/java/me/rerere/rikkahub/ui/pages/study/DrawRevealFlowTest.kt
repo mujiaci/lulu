@@ -63,12 +63,12 @@ class DrawRevealFlowTest {
     }
 
     @Test
-    fun drawWithoutEpicOrRainbowStartsOnFirstCard() {
+    fun drawWithRareStartsWithPurpleOpeningVideo() {
         val results = listOf(draw(StudyRarity.Normal), draw(StudyRarity.Rare))
 
         val start = DrawRevealFlow.start(results)
 
-        assertEquals(DrawRevealPhase.Card, start.phase)
+        assertEquals(DrawRevealPhase.RareOpeningVideo, start.phase)
         assertEquals(0, start.index)
     }
 

@@ -311,6 +311,8 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("音乐"))
         assertTrue(habit.contains("手势舞"))
         assertTrue(habit.contains("第八套广播体操"))
+        assertTrue(habit.contains("70%"))
+        assertTrue(habit.contains("30%"))
         assertTrue(habit.contains("天气热"))
         assertTrue(habit.contains("少量多次"))
         assertTrue(habit.contains("补充精力"))

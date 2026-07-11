@@ -32,6 +32,7 @@ class StarWishRulesTest {
         val openingUris = setOf(
             "raw:star_wish_rainbow_draw",
             "raw:star_wish_epic_draw",
+            "raw:star_wish_rare_draw",
         )
 
         assertTrue(StarWishRules.builtInVideos.none { video ->
@@ -44,13 +45,13 @@ class StarWishRulesTest {
         val starWishState = StarWishState(
             customVideos = listOf(video("a"), video("b")),
         )
-        val studyState = StudyState(inventory = StudyInventory(epicFragments = 1))
+        val studyState = StudyState(inventory = StudyInventory(videoFragments = 1))
 
         val unlock = StarWishRules.unlockNextVideo(starWishState, studyState, FixedIntRandom(1))
 
         assertEquals("b", unlock.video?.id)
         assertEquals(setOf("b"), unlock.starWishState.unlockedVideoIds)
-        assertEquals(0, unlock.studyState.inventory.epicFragments)
+        assertEquals(0, unlock.studyState.inventory.videoFragments)
         assertTrue(unlock.consumedFragment)
     }
 
@@ -60,13 +61,13 @@ class StarWishRulesTest {
             customVideos = listOf(video("a"), video("b")),
             unlockedVideoIds = setOf("a"),
         )
-        val studyState = StudyState(inventory = StudyInventory(epicFragments = 1))
+        val studyState = StudyState(inventory = StudyInventory(videoFragments = 1))
 
         val unlock = StarWishRules.unlockNextVideo(starWishState, studyState, FixedIntRandom(0))
 
         assertEquals("b", unlock.video?.id)
         assertEquals(setOf("a", "b"), unlock.starWishState.unlockedVideoIds)
-        assertEquals(0, unlock.studyState.inventory.epicFragments)
+        assertEquals(0, unlock.studyState.inventory.videoFragments)
         assertTrue(unlock.consumedFragment)
     }
 
@@ -76,13 +77,13 @@ class StarWishRulesTest {
             customVideos = listOf(video("a"), video("b")),
             unlockedVideoIds = setOf("a", "b"),
         )
-        val studyState = StudyState(inventory = StudyInventory(epicFragments = 0))
+        val studyState = StudyState(inventory = StudyInventory(videoFragments = 0))
 
         val replay = StarWishRules.unlockNextVideo(starWishState, studyState, FixedIntRandom(1))
 
         assertEquals("b", replay.video?.id)
         assertEquals(starWishState.unlockedVideoIds, replay.starWishState.unlockedVideoIds)
-        assertEquals(0, replay.studyState.inventory.epicFragments)
+        assertEquals(0, replay.studyState.inventory.videoFragments)
         assertTrue(!replay.consumedFragment)
     }
 

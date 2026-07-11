@@ -173,6 +173,7 @@ private enum class DailyDashboardView(val label: String) {
 
 private const val DEFAULT_RAINBOW_DRAW_VIDEO_URI = "raw:star_wish_rainbow_draw"
 private const val DEFAULT_EPIC_DRAW_VIDEO_URI = "raw:star_wish_epic_draw"
+private const val DEFAULT_RARE_DRAW_VIDEO_URI = "raw:star_wish_rare_draw"
 
 @Composable
 fun StudyPage(vm: StudyVM = koinViewModel()) {
@@ -1254,17 +1255,22 @@ private fun DrawResultCelebration(
     val best = drawResults.maxByOrNull { it.rarity.weight }?.rarity ?: StudyRarity.Normal
     var revealState by remember(results) { mutableStateOf(DrawRevealFlow.start(drawResults)) }
     var playedRewardVideoIndexes by remember(results) { mutableStateOf(emptySet<Int>()) }
+    var skipAllRequested by remember(results) { mutableStateOf(false) }
     val currentReveal = results.getOrNull(revealState.index)
     val current = currentReveal?.result
     val hasOpeningVideo = remember(drawResults) {
-        drawResults.any { it.rarity == StudyRarity.Rainbow || it.rarity == StudyRarity.Epic }
+        drawResults.any {
+            it.rarity == StudyRarity.Rainbow || it.rarity == StudyRarity.Epic || it.rarity == StudyRarity.Rare
+        }
     }
     val openingVideoUri = when (revealState.phase) {
         DrawRevealPhase.RainbowOpeningVideo -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
         DrawRevealPhase.EpicOpeningVideo -> DEFAULT_EPIC_DRAW_VIDEO_URI
+        DrawRevealPhase.RareOpeningVideo -> DEFAULT_RARE_DRAW_VIDEO_URI
         else -> when {
             drawResults.any { it.rarity == StudyRarity.Rainbow } -> DEFAULT_RAINBOW_DRAW_VIDEO_URI
             drawResults.any { it.rarity == StudyRarity.Epic } -> DEFAULT_EPIC_DRAW_VIDEO_URI
+            drawResults.any { it.rarity == StudyRarity.Rare } -> DEFAULT_RARE_DRAW_VIDEO_URI
             else -> null
         }
     }
@@ -1298,6 +1304,7 @@ private fun DrawResultCelebration(
             ?.index
     }
     fun skipAll() {
+        skipAllRequested = true
         val nextRewardVideoIndex = nextPendingRewardVideoIndex()
         revealState = if (nextRewardVideoIndex != null) {
             revealState.copy(index = nextRewardVideoIndex, phase = DrawRevealPhase.RewardVideo)
@@ -1305,14 +1312,29 @@ private fun DrawResultCelebration(
             DrawRevealFlow.skip(revealState, drawResults)
         }
     }
+    fun finishRewardVideo() {
+        playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
+        val remaining = results.indices.firstOrNull { index ->
+            results[index].video != null && index !in playedRewardVideoIndexes
+        }
+        revealState = if (skipAllRequested && remaining != null) {
+            revealState.copy(index = remaining, phase = DrawRevealPhase.RewardVideo)
+        } else if (skipAllRequested) {
+            DrawRevealFlow.summary(revealState)
+        } else {
+            revealState.copy(phase = DrawRevealPhase.Card)
+        }
+    }
     fun closeCurrentVideo() {
+        if (revealState.phase == DrawRevealPhase.RewardVideo) {
+            finishRewardVideo()
+            return
+        }
         revealState = when (revealState.phase) {
             DrawRevealPhase.RainbowOpeningVideo -> DrawRevealFlow.videoFinished(revealState, drawResults)
             DrawRevealPhase.EpicOpeningVideo -> DrawRevealFlow.videoFinished(revealState, drawResults)
-            DrawRevealPhase.RewardVideo -> {
-                playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
-                revealState.copy(phase = DrawRevealPhase.Card)
-            }
+            DrawRevealPhase.RareOpeningVideo -> DrawRevealFlow.videoFinished(revealState, drawResults)
+            DrawRevealPhase.RewardVideo -> revealState
             else -> DrawRevealFlow.skip(revealState, drawResults)
         }
     }
@@ -1350,10 +1372,12 @@ private fun DrawResultCelebration(
                 DrawOpeningVideoLayer(
                     videoUri = openingVideoUri,
                     shouldPlay = revealState.phase == DrawRevealPhase.RainbowOpeningVideo ||
-                        revealState.phase == DrawRevealPhase.EpicOpeningVideo,
+                        revealState.phase == DrawRevealPhase.EpicOpeningVideo ||
+                        revealState.phase == DrawRevealPhase.RareOpeningVideo,
                     onFinished = {
                         if (revealState.phase == DrawRevealPhase.RainbowOpeningVideo ||
-                            revealState.phase == DrawRevealPhase.EpicOpeningVideo
+                            revealState.phase == DrawRevealPhase.EpicOpeningVideo ||
+                            revealState.phase == DrawRevealPhase.RareOpeningVideo
                         ) {
                             revealState = DrawRevealFlow.videoFinished(revealState, drawResults)
                         }
@@ -1361,7 +1385,8 @@ private fun DrawResultCelebration(
                     modifier = Modifier.fillMaxSize(),
                 )
                 if (revealState.phase == DrawRevealPhase.RainbowOpeningVideo ||
-                    revealState.phase == DrawRevealPhase.EpicOpeningVideo
+                    revealState.phase == DrawRevealPhase.EpicOpeningVideo ||
+                    revealState.phase == DrawRevealPhase.RareOpeningVideo
                 ) {
                     Box(
                         modifier = Modifier
@@ -1375,8 +1400,7 @@ private fun DrawResultCelebration(
                     videoUri = rewardVideoUri,
                     playbackKey = "${revealState.index}:reward",
                     onFinished = {
-                        playedRewardVideoIndexes = playedRewardVideoIndexes + revealState.index
-                        revealState = revealState.copy(phase = DrawRevealPhase.Card)
+                        finishRewardVideo()
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -1400,6 +1424,7 @@ private fun DrawResultCelebration(
             }
             if (revealState.phase != DrawRevealPhase.RainbowOpeningVideo &&
                 revealState.phase != DrawRevealPhase.EpicOpeningVideo &&
+                revealState.phase != DrawRevealPhase.RareOpeningVideo &&
                 revealState.phase != DrawRevealPhase.RewardVideo
             ) {
                 Column(
@@ -1886,7 +1911,7 @@ private fun GachaCard(
                     Icon(HugeIcons.AiMagic, null, tint = Color.White)
                     Column {
                         Text("奖励抽卡", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = Color.White)
-                        Text("普通 93% · 紫色 4% · 金色 2% · 彩色 1%", color = Color.White.copy(alpha = 0.84f))
+                        Text("紫：抖音/剧场各半 · 金：游戏/视频各半 · 彩：动漫", color = Color.White.copy(alpha = 0.84f))
                     }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1960,20 +1985,32 @@ private fun CollectionCard(
             }
         }
         EntertainmentRewardRow(
-            label = "紫色碎片",
-            count = inventory.universalRareFragments,
+            label = "抖音碎片",
+            count = inventory.douyinFragments,
             color = StudyColors.purple,
-            actions = listOf("刷抖音" to onRedeemDouyin, "小剧场" to onOpenStarWish),
+            actions = listOf("刷抖音" to onRedeemDouyin),
         )
         EntertainmentRewardRow(
-            label = "金色碎片",
-            count = inventory.epicFragments,
+            label = "剧场碎片",
+            count = inventory.theaterFragments,
+            color = StudyColors.purple,
+            actions = listOf("小剧场" to onOpenStarWish),
+        )
+        EntertainmentRewardRow(
+            label = "游戏碎片",
+            count = inventory.gameFragments,
             color = StudyColors.goldText,
-            actions = listOf("玩游戏" to onRedeemGame, "AI 视频" to onOpenStarWish),
+            actions = listOf("玩游戏" to onRedeemGame),
         )
         EntertainmentRewardRow(
-            label = "彩色碎片",
-            count = inventory.rainbowFragments,
+            label = "视频碎片",
+            count = inventory.videoFragments,
+            color = StudyColors.goldText,
+            actions = listOf("视频馆" to onOpenStarWish),
+        )
+        EntertainmentRewardRow(
+            label = "动漫碎片",
+            count = inventory.animeFragments,
             color = Color(0xFF23C8B8),
             actions = listOf("看动漫" to onRedeemAnime),
         )
@@ -2110,19 +2147,19 @@ private fun CollectionProgressList(
         }
         CollectionSection.Theaters -> {
             Text("小剧场进度", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-            Text("紫色碎片可用于抖音或小剧场。去星愿馆选择任意小剧场，花 1 枚生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("剧场碎片专门用于小剧场。去星愿馆选择任意小剧场，花 1 枚生成或续写 1 章。", color = MaterialTheme.colorScheme.onSurfaceVariant)
             CollectionProgressRow(
-                title = "当前紫色碎片",
-                detail = "${inventory.universalRareFragments} 个 · 每 1 个可兑换 1 章",
-                progress = inventory.universalRareFragments.coerceAtMost(1).toFloat(),
-                unlocked = inventory.universalRareFragments >= 1,
+                title = "当前剧场碎片",
+                detail = "${inventory.theaterFragments} 个 · 每 1 个可兑换 1 章",
+                progress = inventory.theaterFragments.coerceAtMost(1).toFloat(),
+                unlocked = inventory.theaterFragments >= 1,
             )
             StudyRules.theaterNames.forEach { theater ->
                 CollectionProgressRow(
                     title = theater,
                     detail = "候选剧情",
                     progress = 0f,
-                    unlocked = inventory.universalRareFragments >= 1,
+                    unlocked = inventory.theaterFragments >= 1,
                 )
             }
         }
@@ -2385,9 +2422,9 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "普通碎片合计 93%，紫色碎片 4%，金色碎片 2%，彩色碎片 1%。",
+                "普通碎片合计 93%，紫色 4%（抖音/剧场各半），金色 2%（游戏/视频各半），彩色动漫碎片 1%。",
                 "每套画卷需要 10 个专属碎片；通用普通碎片仍可补任意未满画卷，但现在主要靠少量抽卡、盲盒和阶段奖励获得。",
-                "紫色碎片可兑换抖音时间，或在星愿馆生成、续写 1 章小剧场。",
+                "抖音碎片只兑换抖音时间；剧场碎片只用于生成或续写小剧场。",
             ),
         )
         GuideBlock(
@@ -2420,7 +2457,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "签到、待办、番茄钟、盲盒、惩罚、抽卡、超神、等级、成就、商店都已接入本地状态。",
                 "收藏已按 20 套画卷、每套 10 个专属碎片展示。",
-                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；紫色碎片同时承担抖音和小剧场奖励。",
+                "通用普通碎片可以自动补最佳目标，也可以在收藏里指定补某个部件；娱乐碎片均按用途独立保存。",
                 "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
                 "更深的角色主动督学、画卷提示词自动带入、星愿馆视频收藏柜可以作为后续增强。",

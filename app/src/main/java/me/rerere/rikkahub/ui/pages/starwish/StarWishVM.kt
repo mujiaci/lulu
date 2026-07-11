@@ -143,7 +143,7 @@ class StarWishVM(
             store.update { current ->
                 current.copy(customVideos = current.customVideos + item)
             }
-            _videoMessage.tryEmit("已加入视频柜，使用金色碎片后可解锁")
+            _videoMessage.tryEmit("已加入视频柜，使用视频碎片后可解锁")
         }
     }
 
@@ -156,7 +156,7 @@ class StarWishVM(
             var result = StarWishRules.unlockNextVideo(currentStarWish, studyState.value, Random.Default)
             val video = result.video
             if (video == null) {
-                _videoMessage.tryEmit(if (visibleVideos.isEmpty()) "先上传或内置视频后再解锁" else "还需要 1 枚金色碎片")
+                _videoMessage.tryEmit(if (visibleVideos.isEmpty()) "先上传或内置视频后再解锁" else "还需要 1 枚视频碎片")
                 return@launch
             }
             if (result.consumedFragment) {
@@ -165,13 +165,13 @@ class StarWishVM(
                     result.studyState
                 }
                 if (!result.consumedFragment || result.video == null) {
-                    _videoMessage.tryEmit("还需要 1 枚金色碎片")
+                    _videoMessage.tryEmit("还需要 1 枚视频碎片")
                     return@launch
                 }
                 store.update { result.starWishState }
                 _videoMessage.tryEmit("已解锁：${result.video!!.title}")
             } else if (hasLockedVideo) {
-                _videoMessage.tryEmit("还需要 1 枚金色碎片")
+                _videoMessage.tryEmit("还需要 1 枚视频碎片")
                 return@launch
             }
             _videoPlayback.emit(result.video ?: video)
@@ -210,7 +210,7 @@ class StarWishVM(
                 _chapterError.value = null
                 val seed = StarWishRules.allTheaters(state.value.customTheaters).firstOrNull { it.title == theater } ?: return@launch
                 val study = studyState.value
-                if (study.inventory.universalRareFragments < StarWishRules.RARE_FRAGMENTS_PER_CHAPTER) return@launch
+                if (study.inventory.theaterFragments < StarWishRules.RARE_FRAGMENTS_PER_CHAPTER) return@launch
                 val chapters = state.value.theaterChapters[theater].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
                 val guide = state.value.theaterGuides[theater] ?: StarWishRules.defaultTheaterGuide(seed)
                 val nextChapter = chapters.size + 1
@@ -218,7 +218,7 @@ class StarWishVM(
                 studyStore.update { current ->
                     current.copy(
                         inventory = current.inventory.copy(
-                            universalRareFragments = (current.inventory.universalRareFragments - StarWishRules.RARE_FRAGMENTS_PER_CHAPTER).coerceAtLeast(0),
+                            theaterFragments = (current.inventory.theaterFragments - StarWishRules.RARE_FRAGMENTS_PER_CHAPTER).coerceAtLeast(0),
                         ),
                     )
                 }

@@ -64,16 +64,16 @@ object StudyRules {
         StudyLevel(1, 80, "启程", StudyReward(universalNormalFragments = 1, title = "通用普通碎片 x1")),
         StudyLevel(2, 200, "稳定", StudyReward(universalNormalFragments = 1, title = "通用普通碎片 x1")),
         StudyLevel(3, 400, "微光", StudyReward(universalNormalFragments = 2, title = "通用普通碎片 x2")),
-        StudyLevel(4, 800, "靠近", StudyReward(universalRareFragments = 1, title = "紫色碎片 x1")),
+        StudyLevel(4, 800, "靠近", StudyReward(douyinFragments = 1, title = "抖音碎片 x1")),
         StudyLevel(5, 1_500, "热望", StudyReward(singleDrawTickets = 2, title = "单抽券 x2")),
-        StudyLevel(6, 2_500, "长跑", StudyReward(universalRareFragments = 1, title = "紫色碎片 x1")),
+        StudyLevel(6, 2_500, "长跑", StudyReward(theaterFragments = 1, title = "剧场碎片 x1")),
         StudyLevel(7, 4_000, "星火", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
-        StudyLevel(8, 6_500, "破晓", StudyReward(universalEpicFragments = 1, title = "通用金色碎片 x1")),
+        StudyLevel(8, 6_500, "破晓", StudyReward(gameFragments = 1, title = "游戏碎片 x1")),
         StudyLevel(9, 10_000, "执灯", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
-        StudyLevel(10, 15_000, "织梦者", StudyReward(universalEpicFragments = 1, title = "通用金色碎片 x1 + 称号「织梦者」")),
-        StudyLevel(11, 22_000, "星桥", StudyReward(universalRareFragments = 3, title = "紫色碎片 x3")),
+        StudyLevel(10, 15_000, "织梦者", StudyReward(videoFragments = 1, title = "视频碎片 x1 + 称号「织梦者」")),
+        StudyLevel(11, 22_000, "星桥", StudyReward(theaterFragments = 3, title = "剧场碎片 x3")),
         StudyLevel(12, 32_000, "远航", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
-        StudyLevel(13, 45_000, "回响", StudyReward(universalEpicFragments = 2, title = "通用金色碎片 x2")),
+        StudyLevel(13, 45_000, "回响", StudyReward(videoFragments = 2, title = "视频碎片 x2")),
         StudyLevel(14, 60_000, "满愿", StudyReward(title = "任意完整画卷一套")),
         StudyLevel(15, 80_000, "星穹彼岸", StudyReward(title = "称号「星穹彼岸」")),
     )
@@ -87,8 +87,8 @@ object StudyRules {
         StudyAchievement("perfect_7", "连续全清7天", "连续7天待办全清", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
         StudyAchievement("deep_work_10h", "坐稳书桌", "累计学习时长10小时", StudyReward(kudos = 100, title = "夸夸值 100")),
         StudyAchievement("time_traveler", "时光旅人", "累计学习时长50小时", StudyReward(kudos = 200, title = "夸夸值 200")),
-        StudyAchievement("first_outfit", "第一画卷", "解锁第一套普通画卷", StudyReward(universalRareFragments = 1, title = "紫色碎片 x1")),
-        StudyAchievement("outfit_collector", "画卷收藏家", "解锁任意3套普通画卷", StudyReward(universalRareFragments = 2, title = "紫色碎片 x2")),
+        StudyAchievement("first_outfit", "第一画卷", "解锁第一套普通画卷", StudyReward(douyinFragments = 1, title = "抖音碎片 x1")),
+        StudyAchievement("outfit_collector", "画卷收藏家", "解锁任意3套普通画卷", StudyReward(theaterFragments = 2, title = "剧场碎片 x2")),
         StudyAchievement("theater_open", "剧场开幕", "攒够一次小剧场章节兑换", StudyReward(singleDrawTickets = 2, title = "单抽券 x2")),
         StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 80, title = "夸夸值 80")),
         StudyAchievement("epic_touch", "金光亮起", "获得第一枚金色碎片", StudyReward(singleDrawTickets = 1, kudos = 80, title = "单抽券 x1 + 夸夸值 80")),
@@ -119,7 +119,7 @@ object StudyRules {
         val reward = StudyReward(kudos = 100_000, title = "内部测试资源 +100000")
         return state.copy(
             wallet = state.wallet.add(reward),
-            inventory = state.inventory.copy(epicFragments = state.inventory.epicFragments + 2),
+            inventory = state.inventory.copy(videoFragments = state.inventory.videoFragments + 2),
             internalTestGrantVersion = INTERNAL_TEST_GRANT_VERSION,
             recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "内部测试资源", "夸夸值 100000 · 金色碎片 x2"),
         )
@@ -451,13 +451,13 @@ object StudyRules {
                 "time_traveler" -> state.stats.totalStudyMinutes >= 3_000
                 "first_outfit" -> state.stats.unlockedOutfitSets >= 1
                 "outfit_collector" -> state.stats.unlockedOutfitSets >= 3
-                "theater_open" -> state.inventory.universalRareFragments >= 1 || state.stats.unlockedTheaters >= 1
+                "theater_open" -> state.inventory.theaterFragments >= 1 || state.stats.unlockedTheaters >= 1
                 "lucky_drawer" -> state.inventory.normalFragments.values.sum() +
                     state.inventory.universalNormalFragments +
-                    state.inventory.universalRareFragments +
-                    state.inventory.epicFragments +
-                    state.inventory.rainbowFragments >= 20
-                "epic_touch" -> state.inventory.epicFragments >= 1
+                    state.inventory.douyinFragments + state.inventory.theaterFragments +
+                    state.inventory.gameFragments + state.inventory.videoFragments +
+                    state.inventory.animeFragments >= 20
+                "epic_touch" -> state.inventory.gameFragments + state.inventory.videoFragments >= 1
                 "mcdonalds_arrival" -> state.stats.videoRewardsRedeemed >= 1
                 else -> false
             }
@@ -549,20 +549,28 @@ object StudyRules {
         rewardType: StudyEntertainmentReward,
     ): StudyActionResult {
         val available = when (rewardType) {
-            StudyEntertainmentReward.Douyin -> state.inventory.universalRareFragments
-            StudyEntertainmentReward.Game -> state.inventory.epicFragments
-            StudyEntertainmentReward.Anime -> state.inventory.rainbowFragments
+            StudyEntertainmentReward.Douyin -> state.inventory.douyinFragments
+            StudyEntertainmentReward.Theater -> state.inventory.theaterFragments
+            StudyEntertainmentReward.Game -> state.inventory.gameFragments
+            StudyEntertainmentReward.Video -> state.inventory.videoFragments
+            StudyEntertainmentReward.Anime -> state.inventory.animeFragments
         }
         if (available < 1) return StudyActionResult(state)
         val inventory = when (rewardType) {
             StudyEntertainmentReward.Douyin -> state.inventory.copy(
-                universalRareFragments = state.inventory.universalRareFragments - 1,
+                douyinFragments = state.inventory.douyinFragments - 1,
+            )
+            StudyEntertainmentReward.Theater -> state.inventory.copy(
+                theaterFragments = state.inventory.theaterFragments - 1,
             )
             StudyEntertainmentReward.Game -> state.inventory.copy(
-                epicFragments = state.inventory.epicFragments - 1,
+                gameFragments = state.inventory.gameFragments - 1,
+            )
+            StudyEntertainmentReward.Video -> state.inventory.copy(
+                videoFragments = state.inventory.videoFragments - 1,
             )
             StudyEntertainmentReward.Anime -> state.inventory.copy(
-                rainbowFragments = state.inventory.rainbowFragments - 1,
+                animeFragments = state.inventory.animeFragments - 1,
             )
         }
         val rewardTitle = "${rewardType.label}时间已兑换"
@@ -611,20 +619,6 @@ object StudyRules {
                 recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "使用通用普通碎片", normalTitle(key)),
             ),
             reward = StudyReward(title = "已补到 ${normalTitle(key)}"),
-        )
-    }
-
-    fun useUniversalEpicFragment(state: StudyState): StudyActionResult {
-        if (state.inventory.universalEpicFragments <= 0) return StudyActionResult(state)
-        return StudyActionResult(
-            state = state.copy(
-                inventory = state.inventory.copy(
-                    universalEpicFragments = state.inventory.universalEpicFragments - 1,
-                    epicFragments = state.inventory.epicFragments + 1,
-                ),
-                recentEvents = state.recentEvents.addEvent(StudyEventType.Fragment, "使用通用金色碎片", "金色碎片 +1"),
-            ),
-            reward = StudyReward(title = "金色碎片 +1"),
         )
     }
 
@@ -690,11 +684,17 @@ object StudyRules {
                 val part = outfitParts[random.nextInt(outfitParts.size)]
                 StudyDrawResult(StudyRarity.Normal, "normal:$outfit:$part", "$outfit-$part 碎片")
             }
-            roll < 0.97 -> {
-                StudyDrawResult(StudyRarity.Rare, "rare:entertainment", "紫色碎片（抖音 / 小剧场）")
+            roll < 0.97 -> if (random.nextInt(2) == 0) {
+                StudyDrawResult(StudyRarity.Rare, "rare:douyin", "抖音碎片", StudyFragmentType.Douyin)
+            } else {
+                StudyDrawResult(StudyRarity.Rare, "rare:theater", "剧场碎片", StudyFragmentType.Theater)
             }
-            roll < 0.99 -> StudyDrawResult(StudyRarity.Epic, "epic:entertainment", "金色碎片（游戏 / AI 视频）")
-            else -> StudyDrawResult(StudyRarity.Rainbow, "rainbow:anime", "彩色碎片（动漫）")
+            roll < 0.99 -> if (random.nextInt(2) == 0) {
+                StudyDrawResult(StudyRarity.Epic, "epic:game", "游戏碎片", StudyFragmentType.Game)
+            } else {
+                StudyDrawResult(StudyRarity.Epic, "epic:video", "视频碎片", StudyFragmentType.Video)
+            }
+            else -> StudyDrawResult(StudyRarity.Rainbow, "rainbow:anime", "动漫碎片", StudyFragmentType.Anime)
         }
     }
 
@@ -717,8 +717,11 @@ private operator fun StudyReward.plus(other: StudyReward): StudyReward {
         singleDrawTickets = singleDrawTickets + other.singleDrawTickets,
         tenDrawTickets = tenDrawTickets + other.tenDrawTickets,
         universalNormalFragments = universalNormalFragments + other.universalNormalFragments,
-        universalRareFragments = universalRareFragments + other.universalRareFragments,
-        universalEpicFragments = universalEpicFragments + other.universalEpicFragments,
+        douyinFragments = douyinFragments + other.douyinFragments,
+        theaterFragments = theaterFragments + other.theaterFragments,
+        gameFragments = gameFragments + other.gameFragments,
+        videoFragments = videoFragments + other.videoFragments,
+        animeFragments = animeFragments + other.animeFragments,
         title = title,
     )
 }
@@ -736,8 +739,11 @@ private fun StudyWallet.add(reward: StudyReward): StudyWallet {
 private fun StudyInventory.addReward(reward: StudyReward): StudyInventory {
     return copy(
         universalNormalFragments = universalNormalFragments + reward.universalNormalFragments,
-        universalRareFragments = universalRareFragments + reward.universalRareFragments,
-        universalEpicFragments = universalEpicFragments + reward.universalEpicFragments,
+        douyinFragments = douyinFragments + reward.douyinFragments,
+        theaterFragments = theaterFragments + reward.theaterFragments,
+        gameFragments = gameFragments + reward.gameFragments,
+        videoFragments = videoFragments + reward.videoFragments,
+        animeFragments = animeFragments + reward.animeFragments,
     )
 }
 
@@ -773,27 +779,42 @@ private fun StudyInventory.addDrawResult(result: StudyDrawResult): StudyInventor
                 copy(normalFragments = normalFragments.plusCount(result.fragmentKey, 1))
             }
         }
-        StudyRarity.Rare -> copy(universalRareFragments = universalRareFragments + 1)
-        StudyRarity.Epic -> copy(epicFragments = epicFragments + 1)
-        StudyRarity.Rainbow -> copy(rainbowFragments = rainbowFragments + 1)
+        StudyRarity.Rare, StudyRarity.Epic, StudyRarity.Rainbow -> when (result.fragmentType) {
+            StudyFragmentType.Douyin -> copy(douyinFragments = douyinFragments + 1)
+            StudyFragmentType.Theater -> copy(theaterFragments = theaterFragments + 1)
+            StudyFragmentType.Game -> copy(gameFragments = gameFragments + 1)
+            StudyFragmentType.Video -> copy(videoFragments = videoFragments + 1)
+            StudyFragmentType.Anime -> copy(animeFragments = animeFragments + 1)
+            null -> this
+        }
     }
 }
 
 internal fun StudyState.migrateLegacyEntertainmentFragments(): StudyState {
-    val legacy = inventory.legacySpecialStoryFragments.coerceAtLeast(0)
-    if (legacy == 0) return this
+    if (
+        inventory.legacySpecialStoryFragments == 0 &&
+        inventory.universalRareFragments == 0 &&
+        inventory.universalEpicFragments == 0 &&
+        inventory.epicFragments == 0 &&
+        inventory.rainbowFragments == 0
+    ) return this
     return copy(
         inventory = inventory.copy(
-            epicFragments = inventory.epicFragments + legacy,
+            epicFragments = 0,
+            rainbowFragments = 0,
             legacySpecialStoryFragments = 0,
+            universalRareFragments = 0,
+            universalEpicFragments = 0,
         ),
     )
 }
 
 private fun StudyEntertainmentReward.fragmentLabel(): String = when (this) {
-    StudyEntertainmentReward.Douyin -> "紫色"
-    StudyEntertainmentReward.Game -> "金色"
-    StudyEntertainmentReward.Anime -> "彩色"
+    StudyEntertainmentReward.Douyin -> "抖音"
+    StudyEntertainmentReward.Theater -> "剧场"
+    StudyEntertainmentReward.Game -> "游戏"
+    StudyEntertainmentReward.Video -> "视频"
+    StudyEntertainmentReward.Anime -> "动漫"
 }
 
 private fun StudyInventory.refreshUnlockStats(): Pair<StudyInventory, Pair<Int, Int>> {
@@ -832,8 +853,8 @@ private fun List<StudyEvent>.addEvent(type: StudyEventType, title: String, detai
 private fun StudyShopItemType.toShopItem(id: String): StudyShopItem {
     return when (this) {
         StudyShopItemType.UniversalNormalFragment -> StudyShopItem(id, this, "通用普通碎片 x1", 120)
-        StudyShopItemType.UniversalRareFragment -> StudyShopItem(id, this, "紫色碎片 x1", 160)
-        StudyShopItemType.UniversalEpicFragment -> StudyShopItem(id, this, "通用金色碎片 x1", 400)
+        StudyShopItemType.UniversalRareFragment -> StudyShopItem(id, this, "剧场碎片 x1", 160)
+        StudyShopItemType.UniversalEpicFragment -> StudyShopItem(id, this, "视频碎片 x1", 400)
         StudyShopItemType.SingleDrawTicket -> StudyShopItem(id, this, "单抽券 x1", 80)
     }
 }
@@ -841,8 +862,8 @@ private fun StudyShopItemType.toShopItem(id: String): StudyShopItem {
 private fun StudyShopItem.toReward(): StudyReward {
     return when (type) {
         StudyShopItemType.UniversalNormalFragment -> StudyReward(universalNormalFragments = 1, title = title)
-        StudyShopItemType.UniversalRareFragment -> StudyReward(universalRareFragments = 1, title = title)
-        StudyShopItemType.UniversalEpicFragment -> StudyReward(universalEpicFragments = 1, title = title)
+        StudyShopItemType.UniversalRareFragment -> StudyReward(theaterFragments = 1, title = title)
+        StudyShopItemType.UniversalEpicFragment -> StudyReward(videoFragments = 1, title = title)
         StudyShopItemType.SingleDrawTicket -> StudyReward(singleDrawTickets = 1, title = title)
     }
 }

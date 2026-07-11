@@ -6,7 +6,7 @@ import org.junit.Test
 
 class StudyStorePersistenceTest {
     @Test
-    fun `safe decoder preserves local study wallet inventory and stats across schema changes`() {
+    fun `safe decoder preserves explicit entertainment fragments and ignores obsolete balances`() {
         val raw = """
             {
               "today": "2026-07-03",
@@ -19,6 +19,12 @@ class StudyStorePersistenceTest {
                 "universalNormalFragments": 4,
                 "universalRareFragments": 1,
                 "universalEpicFragments": 1,
+                "rainbowFragments": 9,
+                "douyinFragments": 1,
+                "theaterFragments": 2,
+                "gameFragments": 3,
+                "videoFragments": 4,
+                "animeFragments": 5,
                 "unlockedOutfits": [],
                 "unlockedTheaters": [],
                 "unopenedMysteryBoxes": []
@@ -28,12 +34,16 @@ class StudyStorePersistenceTest {
             }
         """.trimIndent()
 
-        val decoded = decodeStudyStateOrNull(raw)?.migrateLegacyEntertainmentFragments()
+        val decoded = decodeStudyStateOrNull(raw)
 
         requireNotNull(decoded)
         assertEquals(345, decoded.wallet.kudos)
         assertEquals(3, decoded.inventory.normalFragments.getValue("normal:星穹图书馆:专属碎片"))
-        assertEquals(3, decoded.inventory.epicFragments)
+        assertEquals(1, decoded.inventory.douyinFragments)
+        assertEquals(2, decoded.inventory.theaterFragments)
+        assertEquals(3, decoded.inventory.gameFragments)
+        assertEquals(4, decoded.inventory.videoFragments)
+        assertEquals(5, decoded.inventory.animeFragments)
         assertEquals(6, decoded.stats.totalPomodoros)
         assertEquals(8, decoded.stats.totalTasksCompleted)
         assertEquals(150, decoded.stats.totalStudyMinutes)

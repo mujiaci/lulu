@@ -61,6 +61,11 @@ enum class StudyTaskSource {
 data class StudyInventory(
     val normalFragments: Map<String, Int> = emptyMap(),
     val rareFragments: Map<String, Int> = emptyMap(),
+    val douyinFragments: Int = 0,
+    val theaterFragments: Int = 0,
+    val gameFragments: Int = 0,
+    val videoFragments: Int = 0,
+    val animeFragments: Int = 0,
     val epicFragments: Int = 0,
     val rainbowFragments: Int = 0,
     @SerialName("specialStoryFragments")
@@ -124,6 +129,11 @@ data class StudyReward(
     val singleDrawTickets: Int = 0,
     val tenDrawTickets: Int = 0,
     val universalNormalFragments: Int = 0,
+    val douyinFragments: Int = 0,
+    val theaterFragments: Int = 0,
+    val gameFragments: Int = 0,
+    val videoFragments: Int = 0,
+    val animeFragments: Int = 0,
     val universalRareFragments: Int = 0,
     val universalEpicFragments: Int = 0,
     val title: String = "",
@@ -157,6 +167,7 @@ data class StudyDrawResult(
     val rarity: StudyRarity,
     val fragmentKey: String,
     val title: String,
+    val fragmentType: StudyFragmentType? = null,
 )
 
 @Serializable
@@ -167,9 +178,20 @@ enum class StudyRarity(val label: String) {
     Rainbow("彩色"),
 }
 
+@Serializable
+enum class StudyFragmentType(val label: String, val rarity: StudyRarity) {
+    Douyin("抖音碎片", StudyRarity.Rare),
+    Theater("剧场碎片", StudyRarity.Rare),
+    Game("游戏碎片", StudyRarity.Epic),
+    Video("视频碎片", StudyRarity.Epic),
+    Anime("动漫碎片", StudyRarity.Rainbow),
+}
+
 enum class StudyEntertainmentReward(val label: String) {
     Douyin("抖音"),
+    Theater("小剧场"),
     Game("游戏"),
+    Video("视频"),
     Anime("动漫"),
 }
 
