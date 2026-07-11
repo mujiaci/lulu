@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
@@ -28,6 +29,17 @@ class CompanionStore(
     private val json: Json = JsonInstant,
 ) {
     private val stateKey = stringPreferencesKey("state")
+
+    init {
+        scope.launch {
+            context.companionRuntimeDataStore.edit { preferences ->
+                val raw = preferences[stateKey] ?: return@edit
+                val normalized = decodeState(raw)
+                val encoded = json.encodeToString(normalized)
+                if (encoded != raw) preferences[stateKey] = encoded
+            }
+        }
+    }
 
     val state: StateFlow<CompanionPersistedState> = context.companionRuntimeDataStore.data
         .map { preferences -> decodeState(preferences[stateKey]) }
@@ -65,6 +77,21 @@ class CompanionStore(
 
     suspend fun clearAssistant(assistantId: String) {
         update { state -> state.withoutAssistant(assistantId) }
+    }
+
+    suspend fun deleteConcernSubjects(assistantId: String, subjectKeys: Set<String>) {
+        val normalizedKeys = subjectKeys.map(::normalizeCompanionSubjectKey).filter(String::isNotBlank).toSet()
+        if (assistantId.isBlank() || normalizedKeys.isEmpty()) return
+        updateSnapshot(assistantId) { snapshot ->
+            snapshot.copy(
+                concerns = snapshot.concerns.filterNot { concern ->
+                    normalizeCompanionSubjectKey(concern.subjectKey) in normalizedKeys
+                },
+                commitments = snapshot.commitments.filterNot { commitment ->
+                    normalizeCompanionSubjectKey(commitment.subjectKey) in normalizedKeys
+                },
+            )
+        }
     }
 
     private fun decodeState(raw: String?): CompanionPersistedState {
@@ -152,7 +179,7 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
         .takeLast(MAX_RELATIONSHIP_HISTORY_PER_ASSISTANT),
     concerns = concerns
         .filter { it.assistantId == assistantId && it.id.isNotBlank() }
-        .distinctBy { it.id }
+        .mergeSemanticConcernDuplicates()
         .sortedWith(
             compareBy<CompanionConcern> { it.status.isTerminal() }
                 .thenByDescending { it.importance }
@@ -162,7 +189,7 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
         .take(MAX_CONCERNS_PER_ASSISTANT),
     commitments = commitments
         .filter { it.assistantId == assistantId && it.id.isNotBlank() }
-        .distinctBy { it.id }
+        .mergeSemanticCommitmentDuplicates()
         .sortedWith(
             compareBy<CompanionCommitment> { it.status.isTerminal() }
                 .thenBy { it.dueAt }
@@ -189,6 +216,42 @@ private fun CompanionCommitmentStatus.isTerminal(): Boolean = this in setOf(
     CompanionCommitmentStatus.CANCELLED,
     CompanionCommitmentStatus.SUPERSEDED,
 )
+
+private fun List<CompanionConcern>.mergeSemanticConcernDuplicates(): List<CompanionConcern> =
+    map { concern -> concern.copy(subjectKey = normalizeCompanionSubjectKey(concern.subjectKey)) }
+        .groupBy { concern -> concern.assistantId to concern.subjectKey }
+        .values
+        .map { duplicates ->
+            val selected = duplicates.maxWith(
+                compareBy<CompanionConcern> { !it.status.isTerminal() }
+                    .thenBy { it.lastUpdatedAt }
+                    .thenBy { it.createdAt },
+            )
+            selected.copy(
+                status = when {
+                    duplicates.any { it.status == CompanionConcernStatus.ACTIVE } -> CompanionConcernStatus.ACTIVE
+                    duplicates.any { it.status == CompanionConcernStatus.PAUSED } -> CompanionConcernStatus.PAUSED
+                    else -> selected.status
+                },
+                importance = duplicates.maxOf { it.importance },
+                nextPerceptionAt = duplicates.mapNotNull { it.nextPerceptionAt }.minOrNull(),
+                sourceMessageIds = duplicates.flatMap { it.sourceMessageIds }.filter(String::isNotBlank).distinct(),
+                createdAt = duplicates.minOf { it.createdAt },
+                lastUpdatedAt = duplicates.maxOf { it.lastUpdatedAt },
+            )
+        }
+
+private fun List<CompanionCommitment>.mergeSemanticCommitmentDuplicates(): List<CompanionCommitment> =
+    map { commitment -> commitment.copy(subjectKey = normalizeCompanionSubjectKey(commitment.subjectKey)) }
+        .groupBy { commitment -> commitment.assistantId to commitment.subjectKey }
+        .values
+        .map { duplicates ->
+            duplicates.maxWith(
+                compareBy<CompanionCommitment> { !it.status.isTerminal() }
+                    .thenBy { it.updatedAt }
+                    .thenBy { it.createdAt },
+            )
+        }
 
 private fun Float.normalizedDimension(): Float = coerceIn(0f, 1f)
 

@@ -133,11 +133,20 @@ object CompanionConcernReducer {
     }
 }
 
-fun normalizeCompanionSubjectKey(value: String): String = value
-    .trim()
-    .lowercase()
-    .replace(Regex("\\s+"), " ")
-    .replace(Regex("\\s*([:/|])\\s*")) { match -> match.groupValues[1] }
-    .take(MAX_COMPANION_SUBJECT_KEY_LENGTH)
+fun normalizeCompanionSubjectKey(value: String): String {
+    val normalized = value
+        .trim()
+        .lowercase()
+        .replace(Regex("\\s+"), " ")
+        .replace(Regex("\\s*([:/|])\\s*")) { match -> match.groupValues[1] }
+    val semanticText = normalized.replace(':', ' ')
+    return when {
+        listOf("wake", "起床", "叫醒", "闹钟").any { it in semanticText } -> "wake"
+        listOf("sleep", "睡觉", "入睡", "休息提醒").any { it in semanticText } -> "sleep"
+        normalized.startsWith("care:") || normalized.startsWith("reminder:") ->
+            "schedule:${normalized.substringAfter(':')}"
+        else -> normalized
+    }.take(MAX_COMPANION_SUBJECT_KEY_LENGTH)
+}
 
 private const val MAX_COMPANION_SUBJECT_KEY_LENGTH = 240

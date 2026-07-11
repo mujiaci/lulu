@@ -162,4 +162,54 @@ class CompanionStateNormalizationTest {
         assertEquals(normalized.state.statusText, normalized.stateHistory.single().state.statusText)
         assertEquals(normalized.state.selfScene, normalized.stateHistory.single().state.selfScene)
     }
+
+    @Test
+    fun `normalization migrates semantic wake duplicates into one stored concern and commitment`() {
+        val snapshot = CompanionSnapshot(
+            assistantId = "assistant-a",
+            concerns = listOf(
+                CompanionConcern(
+                    id = "wake-time",
+                    assistantId = "assistant-a",
+                    subjectKey = "wake:07:30",
+                    event = "七点半叫醒",
+                    goal = "确认起床",
+                    lastUpdatedAt = 10L,
+                ),
+                CompanionConcern(
+                    id = "wake-label",
+                    assistantId = "assistant-a",
+                    subjectKey = "schedule:叫醒",
+                    event = "继续叫醒",
+                    goal = "确认起床",
+                    lastUpdatedAt = 20L,
+                ),
+            ),
+            commitments = listOf(
+                CompanionCommitment(
+                    id = "commitment-time",
+                    assistantId = "assistant-a",
+                    subjectKey = "wake:07:30",
+                    promise = "七点半叫醒",
+                    dueAt = 100L,
+                    status = CompanionCommitmentStatus.ACTIVE,
+                ),
+                CompanionCommitment(
+                    id = "commitment-label",
+                    assistantId = "assistant-a",
+                    subjectKey = "schedule:叫醒",
+                    promise = "继续叫醒",
+                    dueAt = 100L,
+                    status = CompanionCommitmentStatus.ACTIVE,
+                ),
+            ),
+        )
+
+        val normalized = CompanionPersistedState(snapshots = listOf(snapshot))
+            .normalizedCompanionState()
+            .snapshots.single()
+
+        assertEquals(listOf("wake"), normalized.concerns.map { it.subjectKey })
+        assertEquals(listOf("wake"), normalized.commitments.map { it.subjectKey })
+    }
 }

@@ -14,6 +14,7 @@ import kotlin.math.abs
 
 data class CompanionConcernCardModel(
     val id: String,
+    val subjectKeys: Set<String>,
     val title: String,
     val nextPerceptionText: String,
     val statusText: String,
@@ -157,6 +158,7 @@ private fun CompanionConcern.toCardModel(
     return SortableConcernCard(
         card = CompanionConcernCardModel(
             id = "concern:$id",
+            subjectKeys = listOfNotNull(subjectKey, commitment?.subjectKey).toSet(),
             title = commitment.concernTitle(),
             nextPerceptionText = targetAt.toPerceptionText(nowMillis),
             statusText = when {
@@ -183,6 +185,7 @@ private fun CompanionCommitment.toCardModel(nowMillis: Long): SortableConcernCar
     return SortableConcernCard(
         card = CompanionConcernCardModel(
             id = "commitment:$id",
+            subjectKeys = setOf(subjectKey),
             title = concernTitle(),
             nextPerceptionText = dueAt.toPerceptionText(nowMillis),
             statusText = when (status) {

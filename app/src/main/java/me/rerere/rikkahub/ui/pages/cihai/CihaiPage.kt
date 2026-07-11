@@ -175,7 +175,17 @@ fun CihaiPage(onBack: () -> Unit) {
                                 )
                             }
                             items(concernCards, key = { it.id }) { card ->
-                                ConcernCard(card)
+                                ConcernCard(
+                                    card = card,
+                                    onDelete = {
+                                        scope.launch {
+                                            companionStore.deleteConcernSubjects(
+                                                assistantId = selectedAssistantId,
+                                                subjectKeys = card.subjectKeys,
+                                            )
+                                        }
+                                    },
+                                )
                             }
                         }
                     }
@@ -259,7 +269,7 @@ internal fun entriesForCihaiSection(
 }
 
 @Composable
-private fun ConcernCard(card: CompanionConcernCardModel) {
+private fun ConcernCard(card: CompanionConcernCardModel, onDelete: () -> Unit) {
     Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -286,6 +296,9 @@ private fun ConcernCard(card: CompanionConcernCardModel) {
                         color = MaterialTheme.colorScheme.onSecondaryContainer,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                     )
+                }
+                IconButton(onClick = onDelete) {
+                    Icon(HugeIcons.Delete01, contentDescription = "删除挂心事件")
                 }
             }
             Text(
