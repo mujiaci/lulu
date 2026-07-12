@@ -158,10 +158,10 @@ class ExamStudyPlanTest {
         val text = july.tasks.joinToString("\n")
 
         assertTrue(text.contains("法理第 1 章从 7 月 13 日起"))
-        assertTrue(text.contains("法理第 1 章每天 30-40 分钟"))
+        assertTrue(text.contains("每天安排 30-40 分钟"))
         assertTrue(text.contains("规范表述"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("不能长期停留在“看错题、搞目录”"))
-        assertTrue(ExamStudyPlan.studyHabitReference.contains("正式背诵 30-40 分钟"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("30-40 分钟正式背诵"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("3 小时现在是健康状态的最低基线"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("单纯看框架不算"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("标题写 3.5 小时不能只排 2 小时"))
@@ -189,9 +189,9 @@ class ExamStudyPlanTest {
 
         assertTrue(habit.contains("一本学完再学下一本"))
         assertTrue(habit.contains("整本书顺序推进"))
-        assertTrue(habit.contains("倍速听课"))
+        assertTrue(habit.contains("四倍速播放课程"))
         assertTrue(habit.contains("9 月 14 日只是冲刺假设"))
-        assertTrue(habit.contains("不能压缩课后消化、做题、错题、框架和背诵痕迹"))
+        assertTrue(habit.contains("不能压缩课后消化、做题、错题、正式框架图和背诵痕迹"))
         assertTrue(habit.contains("法理背诵复线"))
         assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
         assertTrue(habit.contains("刑法主线期间不把民法作为新开副线"))
@@ -234,8 +234,11 @@ class ExamStudyPlanTest {
         ).joinToString("\n")
 
         assertEquals(40, ExamStudyPlan.chapterPracticeQuestionsPerSet)
-        assertTrue(text.contains("一张按约 40 道估算"))
-        assertTrue(week.tasks.joinToString("\n").contains("第 1 章已闭环"))
+        assertTrue(text.contains("配套题一套按约 40 道估算"))
+        assertTrue(
+            ExamStudyPlan.julyWeeks.single { it.id == "2026-07-w2" }
+                .tasks.joinToString("\n").contains("第 1 章已正式闭环"),
+        )
         assertFalse(julyThirteen?.tasks.orEmpty().joinToString("\n") { it.title }.contains("刑法第 1 章"))
     }
 
@@ -338,7 +341,9 @@ class ExamStudyPlanTest {
         assertEquals(360, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 3)))
         assertEquals(390, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 10)))
         assertEquals(420, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 17)))
-        assertEquals(450, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 10, 1)))
+        assertEquals(450, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 9, 16)))
+        assertEquals(510, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 10, 1)))
+        assertEquals(480, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 12, 10)))
         assertEquals(0, ExamStudyPlan.plannedStudyMinutes(restDay))
         assertTrue(ExamStudyPlan.todaySchedule(firstRampDay).first().detail.contains("约 210 分钟"))
         assertFalse(ExamStudyPlan.studyHabitReference.contains("每天约 3 小时总有效学习"))
@@ -434,7 +439,7 @@ class ExamStudyPlanTest {
             .flatMap { it.tasks }
             .joinToString("\n")
 
-        assertTrue(october.contains("不安排常规新课"))
+        assertTrue(ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n").contains("不开常规新课"))
         assertTrue(october.contains("第二轮"))
         assertFalse(october.contains("听课"))
         assertTrue(november.contains("套卷"))
@@ -474,8 +479,8 @@ class ExamStudyPlanTest {
         assertTrue(augustCivil.contains("按刑法→民法→宪法→法制史顺序继续当前未完成科目的众合法硕课程"))
         assertTrue(augustConstitution.contains("按刑法→民法→宪法→法制史顺序继续当前未完成科目的众合法硕课程"))
         assertTrue(septemberHistory.contains("按刑法→民法→宪法→法制史顺序继续当前未完成科目的众合法硕课程"))
-        assertTrue(septemberRevision.contains("顺序新课"))
-        assertTrue(septemberRevision.contains("继续当前唯一新课主线"))
+        assertTrue(septemberRevision.contains("新课主线"))
+        assertTrue(septemberRevision.contains("按刑法→民法→宪法→法制史顺序继续当前未完成科目的众合法硕课程"))
     }
 
     @Test
@@ -518,7 +523,7 @@ class ExamStudyPlanTest {
         assertTrue(prompt.contains("不背单词 120 个"))
         assertTrue(prompt.contains("写论文 50分钟"))
         assertTrue(prompt.contains("9点起床，23点睡觉"))
-        assertTrue(prompt.contains("这一章没有结束前不要单独安排题目"))
+        assertTrue(prompt.contains("这一章没有结束前不要单独安排课后题"))
         assertTrue(prompt.contains("单纯看框架不算"))
         assertTrue(prompt.contains("法理章节必须按顺序连续推进"))
     }
@@ -611,8 +616,8 @@ class ExamStudyPlanTest {
     fun highScorePlanKeepsEnglishCoreAndPoliticsSeparateFromVocabulary() {
         val julyThirteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 13))!!
         val julyTasks = julyThirteen.tasks.map { it.title }
-        val septemberSixteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 9, 16))!!
-        val septemberTasks = septemberSixteen.tasks
+        val septemberFifteen = ExamStudyPlan.todayPlan(LocalDate.of(2026, 9, 15))!!
+        val septemberTasks = septemberFifteen.tasks
 
         assertTrue(julyTasks.any { it.contains("不背单词 120 个") })
         assertTrue(julyTasks.any { it.contains("长难句") || it.contains("真题阅读") })
@@ -620,5 +625,120 @@ class ExamStudyPlanTest {
         assertTrue(septemberTasks.any { it.kind == StudyPlanTaskKind.English && !it.title.contains("不背单词") })
         assertTrue(septemberTasks.any { it.kind == StudyPlanTaskKind.Politics })
         assertTrue(ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 19))!!.tasks.isEmpty())
+    }
+
+    @Test
+    fun professionalTrainingChainIncludesMultipleQuestionLayersAndThreeRecitationRounds() {
+        val text = buildString {
+            appendLine(ExamStudyPlan.subjectExecutionReference)
+            ExamStudyPlan.monthlyPlans.forEach { appendLine(it.tasks.joinToString("\n")) }
+            ExamStudyPlan.weeklyPlans.forEach { appendLine(it.tasks.joinToString("\n")) }
+        }
+
+        assertEquals(2, ExamStudyPlan.professionalMinimumPracticeSetsPerClosedUnit)
+        assertEquals(2, ExamStudyPlan.professionalMistakeRedoRounds)
+        assertTrue(text.contains("听课配套题"))
+        assertTrue(text.contains("独立额外题源"))
+        assertTrue(text.contains("错题二刷"))
+        assertTrue(text.contains("三刷"))
+        assertTrue(text.contains("分科历年真题"))
+        assertTrue(text.contains("模拟"))
+        assertTrue(text.contains("第一轮"))
+        assertTrue(text.contains("第二轮"))
+        assertTrue(text.contains("第三轮"))
+    }
+
+    @Test
+    fun englishWeeklyRotationCoversReadingGrammarSmallThreeAndBothEssays() {
+        val septemberEnglish = (14..19)
+            .flatMap { day -> ExamStudyPlan.todayPlan(LocalDate.of(2026, 9, day))!!.tasks }
+            .filter { it.kind == StudyPlanTaskKind.English && !it.title.contains("不背单词") }
+            .map { it.title }
+
+        assertEquals(3, ExamStudyPlan.englishReadingPassCount)
+        assertTrue(septemberEnglish.count { it.contains("阅读") } >= 3)
+        assertTrue(septemberEnglish.any { it.contains("语法") || it.contains("长难句") })
+        assertTrue(septemberEnglish.any { it.contains("完形") })
+        assertTrue(septemberEnglish.any { it.contains("新题型") })
+        assertTrue(septemberEnglish.any { it.contains("翻译") })
+        assertTrue(septemberEnglish.any { it.contains("小作文") && it.contains("大作文") })
+
+        val october = ExamStudyPlan.monthlyPlans.single { it.month == "2026-10" }.tasks.joinToString("\n")
+        assertTrue(october.contains("小作文"))
+        assertTrue(october.contains("大作文"))
+        assertTrue(october.contains("批改"))
+        assertTrue(october.contains("重写"))
+    }
+
+    @Test
+    fun politicsQuestionVolumeCanActuallyReachAFirstAndSecondPass() {
+        val septemberPolitics = (15..19)
+            .flatMap { day -> ExamStudyPlan.todayPlan(LocalDate.of(2026, 9, day))!!.tasks }
+            .filter { it.kind == StudyPlanTaskKind.Politics }
+        val octoberPolitics = (5..10)
+            .flatMap { day -> ExamStudyPlan.todayPlan(LocalDate.of(2026, 10, day))!!.tasks }
+            .filter { it.kind == StudyPlanTaskKind.Politics }
+        val text = ExamStudyPlan.monthlyPlans
+            .filter { it.month >= "2026-09" }
+            .flatMap { it.tasks }
+            .joinToString("\n")
+
+        assertEquals(1000, ExamStudyPlan.politicsFirstPassQuestionTarget)
+        assertEquals(4, septemberPolitics.size)
+        assertTrue(septemberPolitics.all { it.title.contains("25-30 道") })
+        assertEquals(6, octoberPolitics.size)
+        assertTrue(octoberPolitics.all { it.title.contains("30-35 道") })
+        assertTrue(text.contains("1000 题一刷"))
+        assertTrue(text.contains("错题二刷"))
+        assertTrue(text.contains("历年真题"))
+        assertTrue(text.contains("肖八"))
+        assertTrue(text.contains("肖四"))
+        assertTrue(text.contains("整卷"))
+    }
+
+    @Test
+    fun fullPaperDaysReceiveFullMinutesWithoutOverlappingBlocks() {
+        val englishSchedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 12, 2))
+        val professionalSchedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 12, 4))
+        val politicsSchedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 12, 5))
+
+        assertEquals(180, durationMinutes(englishSchedule.single { it.title == "英语主训练" }.time))
+        assertEquals(180, durationMinutes(professionalSchedule.single { it.title == "正式闭环" }.time))
+        assertEquals(180, durationMinutes(politicsSchedule.single { it.title == "政治" }.time))
+        assertNoScheduleOverlap(ExamStudyPlan.todaySchedule(LocalDate.of(2026, 10, 6)))
+        assertNoScheduleOverlap(englishSchedule)
+        assertNoScheduleOverlap(professionalSchedule)
+        assertNoScheduleOverlap(politicsSchedule)
+    }
+
+    @Test
+    fun practiceOnlyDaysDoNotDuplicateTheSameTaskAcrossMainAndClosureBlocks() {
+        val schedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 13))
+        val text = schedule.joinToString("\n") { it.detail }
+
+        assertEquals(1, Regex("刑法第 2 章独立题组").findAll(text).count())
+        assertEquals(1, Regex("刑法第 2 章正式框架图").findAll(text).count())
+    }
+
+    @Test
+    fun weeklyReviewTitleDoesNotEraseTheDailyNewCourseMainLine() {
+        val schedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 9, 10))
+        val main = schedule.first { it.title == "专业课主块" || it.title == "主线推进" }.detail
+
+        assertTrue(main.contains("按刑法→民法→宪法→法制史顺序"))
+        assertFalse(main.startsWith("只处理复盘和漏项"))
+    }
+
+    private fun durationMinutes(timeRange: String): Int {
+        val (start, end) = timeRange.split("-").map { LocalTime.parse(it) }
+        return java.time.Duration.between(start, end).toMinutes().toInt()
+    }
+
+    private fun assertNoScheduleOverlap(blocks: List<StudyScheduleBlock>) {
+        blocks.zipWithNext().forEach { (current, next) ->
+            val currentEnd = LocalTime.parse(current.time.substringAfter("-"))
+            val nextStart = LocalTime.parse(next.time.substringBefore("-"))
+            assertTrue("${current.time} overlaps ${next.time}", !currentEnd.isAfter(nextStart))
+        }
     }
 }
