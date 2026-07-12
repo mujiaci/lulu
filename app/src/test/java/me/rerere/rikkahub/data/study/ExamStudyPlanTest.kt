@@ -185,7 +185,7 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("一本学完再学下一本"))
         assertTrue(habit.contains("整本书顺序推进"))
         assertTrue(habit.contains("倍速听课"))
-        assertTrue(habit.contains("9 月中旬是尽快结束常规新课的压力线"))
+        assertTrue(habit.contains("9 月 14 日只是冲刺假设"))
         assertTrue(habit.contains("不能压缩课后消化、做题、错题、框架和背诵痕迹"))
         assertTrue(habit.contains("法理背诵复线"))
         assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
@@ -204,7 +204,7 @@ class ExamStudyPlanTest {
         assertTrue(week.contains("第 5-7 章"))
         assertTrue(julySix?.title.orEmpty().contains("连续主块"))
         assertFalse(julySix?.tasks.orEmpty().any { it.title.contains("听众合法硕民法课程") })
-        assertTrue(julyThirteen?.title.orEmpty().contains("3 小时基线"))
+        assertTrue(julyThirteen?.title.orEmpty().contains("3.5 小时起步"))
         assertTrue(julyThirteenTasks.contains("刑法第 2 章独立题组"))
         assertTrue(julyThirteenTasks.contains("法理第 1 章正式闭卷背诵"))
         assertTrue(julyThirteenTasks.contains("英语"))
@@ -321,16 +321,21 @@ class ExamStudyPlanTest {
 
     @Test
     fun dailyLoadUsesThreeHoursAsBaselineAndThenGrows() {
-        val startupDay = LocalDate.of(2026, 7, 13)
-        val recoveryDay = LocalDate.of(2026, 7, 15)
-        val stableDay = LocalDate.of(2026, 7, 20)
+        val firstRampDay = LocalDate.of(2026, 7, 13)
+        val sameWeekDay = LocalDate.of(2026, 7, 15)
+        val secondRampWeek = LocalDate.of(2026, 7, 20)
         val restDay = LocalDate.of(2026, 7, 19)
 
-        assertEquals(180, ExamStudyPlan.plannedStudyMinutes(startupDay))
-        assertEquals(180, ExamStudyPlan.plannedStudyMinutes(recoveryDay))
-        assertEquals(210, ExamStudyPlan.plannedStudyMinutes(stableDay))
+        assertEquals(210, ExamStudyPlan.plannedStudyMinutes(firstRampDay))
+        assertEquals(210, ExamStudyPlan.plannedStudyMinutes(sameWeekDay))
+        assertEquals(270, ExamStudyPlan.plannedStudyMinutes(secondRampWeek))
+        assertEquals(330, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 7, 27)))
+        assertEquals(360, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 3)))
+        assertEquals(390, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 10)))
+        assertEquals(420, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 17)))
+        assertEquals(450, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 10, 1)))
         assertEquals(0, ExamStudyPlan.plannedStudyMinutes(restDay))
-        assertTrue(ExamStudyPlan.todaySchedule(startupDay).first().detail.contains("约 180 分钟"))
+        assertTrue(ExamStudyPlan.todaySchedule(firstRampDay).first().detail.contains("约 210 分钟"))
         assertFalse(ExamStudyPlan.studyHabitReference.contains("每天约 3 小时总有效学习"))
     }
 

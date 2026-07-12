@@ -78,10 +78,11 @@ object ExamStudyPlan {
         - 题型权重决定计划节奏：选择题 60 分需要每章标选择题陷阱、易混点和错因；主观题 90 分不能等到 10 月才开始，7-8 月每个闭环章节都要从考试分析抽出定义、构成要件、答题骨架和 1-2 句规范表述，但暂不提前做完整 3 小时套卷。
         - 用户会严格按计划执行，计划不能留下“到时候再说”的空档。背诵是难点，必须尽早开始：7 月起每天有最小背诵输出，8 月背诵成为日常主线，9 月中后即使一轮有尾巴也要启动二轮，11 月进入三轮限时输出。
         - 最近七天用户平均每天约 2 小时，但昨天已完成 3 小时；3 小时现在是健康状态的最低基线，不是上限。不能因为过去的恢复日记录继续把正常日压在 2 小时以内。
-        - 负荷参考：真正不适时恢复约 $recoveryStudyMinutes 分钟；健康基线日约 $baselineStudyMinutes 分钟；连续 5-7 天完成率和睡眠稳定后升到 $growthStudyMinutes-$expansionStudyMinutes 分钟；阶段加码日可短暂超过 4 小时，第二天回到基线，不连续硬顶。
+        - 负荷参考：真正不适时恢复约 $recoveryStudyMinutes 分钟；本周健康日约 210 分钟；7 月 20 日周约 270 分钟；7 月 27 日周约 330 分钟；8 月 3 日周约 360 分钟；8 月 10 日周约 390 分钟；8 月 17 日起约 420 分钟，9 月后再视完成率升到 7-8 小时。每周日休息，任何一周完成率或睡眠崩掉就停在原档，不硬升。
+        - 这些是有效学习分钟，不含吃饭、广播体操和休息；播放器四倍速但实际按约二倍速计账，必须把暂停、笔记、理解、题目和背诵算进去。
         - 日总量是所有科目合计，不是专业课之外再叠加英语和背诵。英语阅读必须占预算；政治启动后也必须从当天预算中切分，不能无限叠加。
         - 刑法学按 $criminalLawChapterCount 章、教材约 $criminalLawTextbookPages 页估算；第 1 章 $criminalLawChapterOnePages 页但课程约 6 小时。30-50 分钟只能算一个入口切片，不算学完一章。
-        - 用户可以倍速听课。倍速只压缩“听课输入时间”，不能压缩课后消化、做题、错题、正式框架图和背诵痕迹；默认用能听懂的 1.25-1.5 倍速，复杂章节随时降速、暂停或回放。9 月中旬是尽快结束常规新课的压力线，但每本书必须按真实课时和闭环痕迹推进，不能靠跳章、挤掉复线或熬夜维持旧日期。
+        - 用户可以四倍速播放课程，但按暂停、笔记和理解后的约二倍速计账。倍速只压缩“听课输入时间”，不能压缩课后消化、做题、错题、正式框架图和背诵痕迹。9 月 14 日只是冲刺假设，9 月 30 日是更可靠的新课压力线；不能靠跳章、挤掉复线或熬夜维持旧日期。
         - 排刑法、民法新章时，默认先拆成 60-90 分钟听课切片；关键词/不懂点/小框架是课程后的自动随手整理，不单独占任务。整章听完后，再安排章节题、错题和第一轮背诵；需要正式框架图时另列明确任务。恢复日可缩成 30-60 分钟入口切片，但不要把一章压成一个短任务。
         - 用户明确要求“一本学完再学下一本”。这里的“学完一本”指这本书的新课一轮完成：听课账本完整、每章有关键词/小框架、闭环章有章节题和错题主错因、第一轮背诵账本启动；不是等三轮背诵全部结束。新课按整本书顺序推进：刑法主线期间不把民法作为新开副线；刑法没有完成新课一轮前不启动民法，民法没有完成新课一轮前不启动宪法，宪法没有完成新课一轮前不启动法制史；法理背诵、刑法/民法错题和背诵可以作为复线回炉。
         - 用户不喜欢把一章学完后的做题、错题收集和正式框架图拆成很多天零散塞一点。课程结束后的随手整理默认自动完成，不单列；同一组题目和正式框架图优先一次性或半天内集中完成；确实要拆时，只拆成 2 个大块，不要拆成 4-5 个碎片散落到每天。
@@ -140,13 +141,13 @@ object ExamStudyPlan {
             "日负荷：健康日以 180 分钟为最低基线，本周增长到 210 分钟的日子安排在课程收口日；真正不适才启用恢复档，每周保留 1 天完整休息",
         )),
         MonthlyStudyPlan("2026-08", "刑法收口后启动民法", listOf(
-            "专业课新课：8 月 1 日承接刑法阶段复盘，刑法未完成就继续唯一主线；完成后次日才启动民法。健康日维持 210-240 分钟总量，其中专业课主块 90-110 分钟并轮换正式闭环，8 月 20 日和 31 日按真实课时重算",
+            "专业课新课：8 月 1 日承接刑法阶段复盘，刑法未完成就继续唯一主线；完成后次日才启动民法。健康日按 330-420 分钟总量爬坡，其中专业课主块和续段合计至少 180 分钟，并轮换正式闭环，8 月 20 日和 31 日按真实课时重算",
             "专业课背诵：法理第 1-6 章完成第一轮目录树、关键词和规范表述；刑法已闭环章节每周至少 2 次抽背，背不出就回到考试分析，不用熟悉感冒充掌握",
             "英语：120 个单词不断线；每周 3 篇真题阅读精读、2 次长难句/翻译、1 次错因复盘。阅读必须留下题干定位、原文证据、错因和摘句",
             "政治：仍不进入每日主线；月底只确认 9 月启动用的一套强化课/讲义和一本选择题册，不重复购课",
         )),
         MonthlyStudyPlan("2026-09", "新课收口与背诵输出并行", listOf(
-            "9 月 1-14 日：按刑法→民法→宪法→法制史顺序继续当前唯一新课主线；9 月 14 日做压力线复盘，不靠跳章伪造完成",
+            "9 月 1-14 日：按刑法→民法→宪法→法制史顺序继续当前唯一新课主线；9 月 14 日做冲刺假设复盘，不靠跳章伪造完成",
             "9 月 15-30 日：力争收口常规新课；法理第 7-13 章完成第一轮并启动较早章节二轮，刑民题目和错题回炉，综合课框架串联；每周至少 2 次主观题闭卷输出并订正",
             "英语：每周 3-4 篇真题阅读，其中至少 2 篇单篇限时；完形/新题型/翻译各按周轮换 1 个小块，单词继续滚动，周末汇总阅读错因",
             "政治：9 月 15 日起每周 3 次，每次 30-40 分钟；完成强化课/核心考案小节后立刻做 10-15 道选择题并写 1 条错因，不只听课",
@@ -182,6 +183,7 @@ object ExamStudyPlan {
             "法理第 1 章正式闭卷背诵仍欠账，因熬夜没有当晚硬补，从 7 月 13 日起拆块回收",
         )),
         WeeklyStudyPlan("2026-07-w3", "刑法 2-7 章闭环 + 法理 1 背诵 + 英语双线", "2026-07-13 至 2026-07-19", listOf(
+            "负荷：6 个学习日，日均约 3.5 小时，周目标约 21 小时；7 月 19 日完整休息，不把休息日补成欠账",
             "刑法：7 月 13 日先集中完成第 2 章独立题组和正式框架图；随后按顺序完成第 5-7 章课程（当前到第 5 章）；第 3-7 章合并题等课程全部结束后集中完成，条件不满足就先补课程",
             "法理：第 1 章每天 30-40 分钟正式闭卷背诵，至少完成 3 次口头复述和 1 次闭卷验收；不跳到第 2 章，不把看目录当背会",
             "英语：6 个学习日每天 120 个单词；至少 3 次真题阅读小段/精读、2 次长难句、1 次周复盘；每篇阅读留下题干定位、原文证据和错因痕迹",
@@ -189,12 +191,14 @@ object ExamStudyPlan {
             "周验收：第 2 章题组和框架完成；第 5-7 章课程实际分钟可核对；法理第 1 章至少留下 3 次正式背诵痕迹；英语至少留下 6 个主训练痕迹",
         )),
         WeeklyStudyPlan("2026-07-w4", "刑法第 8 章起顺序推进 + 法理 2 + 英语阅读起步", "2026-07-20 至 2026-07-26", listOf(
+            "负荷：6 个学习日，日均约 4.5 小时，周目标约 27 小时；若完成率低于 80%，下一周不加量",
             "刑法：先验收第 2 章和第 3-7 章组合闭环，再从第 8 章起按课程账本每天推进 90-110 分钟；本周至少留下 3 个 30-40 分钟章节闭环块，不跨章跳跃",
             "法理：第 1 章验收通过后启动第 2 章第一轮，安排 3 个 25-30 分钟闭卷块；未通过就继续第 1 章，不按日期跳章",
             "英语：每天 120 个单词；3 次真题阅读精读、2 次长难句/翻译，周六完成本月第一篇不计时完整阅读并写题干定位、证据和错因",
             "政治：仍不正式启动；7 月 26 日为完整休息日",
         )),
         WeeklyStudyPlan("2026-07-w5", "刑法阶段验收 + 法理连续背诵 + 英语月复盘", "2026-07-27 至 2026-07-31", listOf(
+            "负荷：按 5-5.5 小时/日进入增长档；7 月 31 日用实际听课分钟和闭环痕迹重算，不用章节数自我欺骗",
             "刑法：继续当前未完成章节课程主块；月底按课程分钟、章节题、主错因、正式框架图和第一轮关键词逐项验收并重算完成日",
             "法理：完成当前连续章节的第一轮闭卷验收，明确 8 月从哪一章继续；不把未背章节写成已完成",
             "英语：每天 120 个单词，完成 2 次长难句、1 次阅读小段、1 篇不计时完整阅读复盘；统计词汇剩余池和阅读/语法错因",
@@ -204,21 +208,25 @@ object ExamStudyPlan {
 
     val postJulyWeeks = listOf(
         WeeklyStudyPlan("2026-08-w1", "刑法收口与民法条件启动", "2026-08-01 至 2026-08-07", listOf(
+            "负荷：约 5.5-6 小时/日，周日休息；课程输入、闭环、英语和法理都从总预算中分配",
             "专业课：承接 7 月复盘，刑法未完成就继续课程/题组/框架；完成后次日才启动民法。法理安排 3 次 25-30 分钟闭卷背诵",
             "英语：120 个单词每日不断线，3 篇真题阅读精读、2 次长难句/翻译、1 次错因复盘",
             "政治：不启动；周日完整休息",
         )),
         WeeklyStudyPlan("2026-08-w2", "唯一新课主线连续推进", "2026-08-08 至 2026-08-14", listOf(
+            "负荷：约 6-6.5 小时/日，周目标约 36-39 小时；达到 80% 完成率才进入下一档",
             "专业课：继续当前唯一科目的众合法硕课程，至少 4 个 90-120 分钟主块和 2 个正式闭环块；已结束章节留下题目、主错因、正式框架图和关键词",
             "背诵：法理连续章节 3 次闭卷，刑法已学章节 2 次抽背；英语完成 3 篇阅读 + 2 次长难句/翻译",
             "政治：不启动；周日完整休息",
         )),
         WeeklyStudyPlan("2026-08-w3", "8 月 20 日阶段验收", "2026-08-15 至 2026-08-20", listOf(
+            "负荷：约 6.5 小时/日；8 月 20 日必须按真实课程分钟、题组和框架重算，不达标就顺延压力线",
             "专业课：按已听分钟、题组、主错因、正式框架图和背诵痕迹验收当前科目，重算完成日；至少做 1 次主观题答题骨架输出",
             "英语：2-3 篇阅读精读、2 次长难句/翻译，统计定位/语法错因；法理和已学刑法抽背不断线",
             "政治：不启动，正常日总量连续稳定后仅增加 20-30 分钟，不取消休息日",
         )),
         WeeklyStudyPlan("2026-08-w4", "8 月收口与 9 月重排", "2026-08-21 至 2026-08-31", listOf(
+            "负荷：约 7 小时/日，周日休息；9 月 14 日只作冲刺假设，9 月 30 日作为更可靠压力线",
             "专业课：继续唯一新课科目，完成后按刑法→民法→宪法→法制史切换；8 月 31 日写清真实章节和剩余课时",
             "背诵：法理第 1-6 章第一轮验收，刑法已闭环章抽背 2 次；英语每周 3 篇阅读、2 次长难句/翻译和 1 次周复盘",
             "政治：只确认 9 月 15 日使用的一套主课和一本选择题册，不把找资料算学习",
@@ -227,7 +235,7 @@ object ExamStudyPlan {
             "专业课：继续唯一新课主线，至少 4 个课程主块、2 个闭环块、1 次主观题闭卷输出；法理第一轮继续顺序推进",
             "英语：3 篇阅读，其中 1 篇单篇限时；长难句/翻译 2 次，小三门 1 次入门；政治暂不启动",
         )),
-        WeeklyStudyPlan("2026-09-w2", "9 月 14 日新课压力线复盘", "2026-09-08 至 2026-09-14", listOf(
+        WeeklyStudyPlan("2026-09-w2", "9 月 14 日冲刺假设复盘", "2026-09-08 至 2026-09-14", listOf(
             "专业课：按真实课时核对全部新课完成度，完成 2 次主观题闭卷输出；未完成部分按分值和课时重排，不跳章",
             "英语：3-4 篇阅读、1 次翻译或新题型、1 次错因复盘；政治材料就位但不提前刷题",
         )),
@@ -295,13 +303,13 @@ object ExamStudyPlan {
         restDaily("2026-07-10", "头晕停学记录：当天任务全部未完成，欠账重新分配"),
         daily("2026-07-11", "头晕后恢复：欠账第1段", "7 月 10 日法理欠账：只背法理第 1 章 20-25 分钟，闭卷复述目录树和最卡关键词，不跨到后续章节", "7 月 10 日刑法第 1 章框架图欠账：先画犯罪论入口与构成要件主干 20-25 分钟，只完成上半张", "刑法学第 2 章状态允许再选做：不头晕时听众合法硕刑法课程 45-60 分钟，只留 3-5 个关键词和 1 个不懂点；仍不舒服就取消", "法理连续性检查：今天不安排第 2 章及以后内容，第 1 章完成后再继续", dailyLongSentenceTaskTitle, "饭后洗漱 + 手势舞一首歌，晚上不因欠账继续熬夜"),
         daily("2026-07-12", "今日完成：刑法3-4课程", "已完成：听众合法硕刑法第 3、4 章课程，今天有效学习约 3 小时", dailyVocabularyTaskTitle, "今晚按时收尾，饭后轻活动并优先修复睡眠；法理背诵和正式框架图都不补夜"),
-        daily("2026-07-13", "3 小时基线：刑法2章闭环 + 法理1背诵 + 英语阅读", "刑法第 2 章独立题组：完成 60 分钟，给错题标一个主错因；今天不要求清完整组，但必须留下题量记录", "刑法第 2 章正式框架图：主干、层级、构成要件、易混点和题目锚点，35 分钟", "法理第 1 章正式闭卷背诵 30 分钟：合上考试分析复述目录树、关键词和 1-2 句规范表述", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "饭后广播体操 10-15 分钟；23:30 前收尾，今晚不熬夜"),
-        daily("2026-07-14", "3 小时基线：刑法5课程 + 3-4框架 + 英语阅读", "听众合法硕刑法第 5 章课程 75-80 分钟；按实际分钟推进，第 5 章未结束不跳第 6 章", "刑法第 3-4 章正式框架图 30 分钟：补主干、易混点和题目锚点", "法理第 1 章正式闭卷背诵 30 分钟，卡住只看 10 秒提示再继续", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "第八套广播体操半套，23:30 前收尾"),
-        daily("2026-07-15", "3 小时基线：刑法5课程 + 2章框架收口 + 英语长难句", "听众合法硕刑法第 5 章课程 80-90 分钟，记录实际听课分钟和剩余小节", "刑法第 2 章正式框架图收口 35 分钟；若昨日未完成，今天优先补完，不另开新闭环", "法理第 1 章闭卷背诵 30 分钟，复述目录树并补 2 句规范表述", dailyVocabularyTaskTitle, dailyLongSentenceTaskTitle, "广播体操或轻走 15 分钟；不因未清题组熬夜"),
+        daily("2026-07-13", "3.5 小时起步：刑法2章闭环 + 法理1背诵 + 英语阅读", "刑法第 2 章独立题组：完成 75 分钟，给错题标一个主错因；今天至少留下题量记录", "刑法第 2 章正式框架图：主干、层级、构成要件、易混点和题目锚点，40 分钟", "法理第 1 章正式闭卷背诵 35 分钟：合上考试分析复述目录树、关键词和 1-2 句规范表述", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "饭后广播体操 10-15 分钟；23:30 前收尾，今晚不熬夜"),
+        daily("2026-07-14", "3.5 小时起步：刑法5课程 + 3-4框架 + 英语阅读", "听众合法硕刑法第 5 章课程 90 分钟；按实际分钟推进，第 5 章未结束不跳第 6 章", "刑法第 3-4 章正式框架图 35 分钟：补主干、易混点和题目锚点", "法理第 1 章正式闭卷背诵 30 分钟，卡住只看 10 秒提示再继续", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "第八套广播体操半套，23:30 前收尾"),
+        daily("2026-07-15", "3.5 小时起步：刑法5课程 + 2章框架收口 + 英语长难句", "听众合法硕刑法第 5 章课程 90 分钟，记录实际听课分钟和剩余小节", "刑法第 2 章正式框架图收口 35 分钟；若昨日未完成，今天优先补完，不另开新闭环", "法理第 1 章闭卷背诵 30 分钟，复述目录树并补 2 句规范表述", dailyVocabularyTaskTitle, dailyLongSentenceTaskTitle, "广播体操或轻走 15 分钟；不因未清题组熬夜"),
     ).associateBy { it.date } + listOf(
-        daily("2026-07-16", "3 小时基线：刑法6-7课程 + 法理1背诵 + 英语阅读", "继续听众合法硕刑法第 6-7 章课程 90 分钟；未完成第 7 章时不做第 3-7 章合并题", "补齐刑法第 3-4 章正式框架图 25-30 分钟", "法理第 1 章闭卷回背 30 分钟，只处理上次卡点并写下 1 条规范表述", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "广播体操或散步后按时休息"),
-        daily("2026-07-17", "增长日：刑法3-7题组 + 连接框架 + 英语", "确认第 3-7 章课程全部结束后，完成合并题第一大块 70 分钟并标主错因；未结束就补第 7 章课程", "正式连接框架图完成主干、章节连接和易混点 35 分钟", "法理第 1 章闭卷回忆 30 分钟", dailyVocabularyTaskTitle, dailyLongSentenceTaskTitle, "不熬夜硬清，剩余题目顺延"),
-        daily("2026-07-18", "3 小时基线：题组收口 + 法理验收 + 英语周复盘", "第 3-7 章合并题继续 70 分钟并整理主错因；若课程未收口则继续第 7 章，不提前刷合并题", "补齐第 3-7 章正式连接框架图 30 分钟", "法理第 1 章闭卷验收 30 分钟：口头复述后写下 3 个最不稳点", dailyVocabularyTaskTitle, dailyEnglishReviewTaskTitle, "广播体操 10 分钟，23:00 后不再学习"),
+        daily("2026-07-16", "3.5 小时起步：刑法6-7课程 + 法理1背诵 + 英语阅读", "继续听众合法硕刑法第 6-7 章课程 90 分钟；未完成第 7 章时不做第 3-7 章合并题", "补齐刑法第 3-4 章正式框架图 30 分钟", "法理第 1 章闭卷回背 30 分钟，只处理上次卡点并写下 1 条规范表述", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "广播体操或散步后按时休息"),
+        daily("2026-07-17", "4 小时增长日：刑法3-7题组 + 连接框架 + 英语", "确认第 3-7 章课程全部结束后，完成合并题第一大块 80 分钟并标主错因；未结束就补第 7 章课程", "正式连接框架图完成主干、章节连接和易混点 40 分钟", "法理第 1 章闭卷回忆 30 分钟", dailyVocabularyTaskTitle, dailyLongSentenceTaskTitle, "不熬夜硬清，剩余题目顺延"),
+        daily("2026-07-18", "3.5 小时起步：题组收口 + 法理验收 + 英语周复盘", "第 3-7 章合并题继续 75 分钟并整理主错因；若课程未收口则继续第 7 章，不提前刷合并题", "补齐第 3-7 章正式连接框架图 35 分钟", "法理第 1 章闭卷验收 30 分钟：口头复述后写下 3 个最不稳点", dailyVocabularyTaskTitle, dailyEnglishReviewTaskTitle, "广播体操 10 分钟，23:00 后不再学习"),
         restDaily("2026-07-19", "周日完整休息/缓冲日：不安排学习任务"),
         daily("2026-07-20", "刑法8章课程 + 法理2入口 + 英语长难句", "确认第 2 章和第 3-7 章闭环已完成后，听众合法硕刑法第 8 章课程 90-100 分钟；否则补最近闭环", "法理第 2 章第一轮闭卷背诵 25 分钟", dailyVocabularyTaskTitle, dailyLongSentenceTaskTitle, "晚上按时结束"),
         daily("2026-07-21", "刑法课程 + 最近闭环 + 英语阅读", "继续当前听众合法硕刑法课程 90 分钟，不跨章跳跃；课后随手整理包含在课程内", "从最近结束章节完成一项正式闭环：题目、主错因或框架图，30 分钟", "法理第 2 章闭卷回忆 25 分钟", dailyVocabularyTaskTitle, dailyEnglishReadingTaskTitle, "整理本周卡点清单 10 分钟即可", "天气和身体合适时轻打羽毛球 20-30 分钟，不作为硬任务"),
@@ -375,7 +383,7 @@ object ExamStudyPlan {
         val mainTask = if (activeBook == "全科回炉") {
             "主线块：按本周主题完成背诵、错题、真题或主观题闭卷输出，不再开常规新课；做完必须订正到具体章节和规范表述"
         } else {
-            "新课主线：$activeCourse，连续推进 90-120 分钟；上一章结束再进入下一章，课后随手整理包含在本任务内，不另生成任务"
+            "新课主线：$activeCourse，按当周有效学习预算安排主块和续段，课程输入目标至少 120-180 分钟；上一章结束再进入下一章，课后随手整理包含在本任务内，不另生成任务"
         }
         val tasks = buildList {
             add("本周计划：${week.title}（${week.dateRange}）")
@@ -406,14 +414,22 @@ object ExamStudyPlan {
         if (isRestDay(date)) return 0
         return when {
             date <= LocalDate.of(2026, 7, 12) -> baselineStudyMinutes
-            date <= LocalDate.of(2026, 7, 19) && date.dayOfWeek == DayOfWeek.FRIDAY -> growthStudyMinutes
-            date <= LocalDate.of(2026, 7, 19) -> baselineStudyMinutes
-            date <= LocalDate.of(2026, 8, 2) && date.dayOfWeek in setOf(DayOfWeek.MONDAY, DayOfWeek.WEDNESDAY, DayOfWeek.FRIDAY) ->
-                growthStudyMinutes
-            date <= LocalDate.of(2026, 8, 9) -> growthStudyMinutes
-            date.dayOfWeek == DayOfWeek.SATURDAY -> growthStudyMinutes
-            else -> expansionStudyMinutes
+            date <= LocalDate.of(2026, 7, 19) -> 210
+            date <= LocalDate.of(2026, 7, 26) -> 270
+            date <= LocalDate.of(2026, 8, 2) -> 330
+            date <= LocalDate.of(2026, 8, 9) -> 360
+            date <= LocalDate.of(2026, 8, 16) -> 390
+            date <= LocalDate.of(2026, 9, 30) -> 420
+            date <= LocalDate.of(2026, 11, 30) -> 450
+            date <= LocalDate.of(2026, 12, 14) -> 420
+            else -> 300
         }
+    }
+
+    private fun timeRange(start: LocalTime, minutes: Int): String {
+        val formatter = DateTimeFormatter.ofPattern("HH:mm")
+        val end = start.plusMinutes(minutes.toLong())
+        return "${start.format(formatter)}-${end.format(formatter)}"
     }
 
     fun todaySchedule(date: LocalDate = LocalDate.now()): List<StudyScheduleBlock> {
@@ -491,36 +507,74 @@ object ExamStudyPlan {
             else -> null
         }
         val studyBudget = plannedStudyMinutes(date)
-        val mainTime = when {
-            studyBudget <= baselineStudyMinutes -> "10:00-11:15"
-            studyBudget <= growthStudyMinutes -> "10:00-11:30"
-            else -> "10:00-11:45"
-        }
-        val closureTime = when {
-            studyBudget <= baselineStudyMinutes -> "14:30-15:00"
-            studyBudget <= growthStudyMinutes -> "14:30-15:05"
-            else -> "14:30-15:10"
-        }
-        val vocabularyTime = if (studyBudget >= expansionStudyMinutes) "18:40-19:10" else "18:45-19:10"
-        val englishCoreTime = when {
-            studyBudget <= baselineStudyMinutes -> "19:20-19:50"
-            studyBudget <= growthStudyMinutes -> "19:20-19:55"
-            else -> "19:20-20:00"
-        }
-        val recitationTime = if (studyBudget <= baselineStudyMinutes) "20:00-20:20" else "20:05-20:30"
         val includeClosure = closureTasks.isNotEmpty() || hasLesson
-        val includePolitics = politicsTasks.isNotEmpty() && studyBudget >= growthStudyMinutes
-        val includeRecitation = eveningOutput != null && !includePolitics
+        val includePolitics = politicsTasks.isNotEmpty() && studyBudget >= 360
+        val includeRecitation = eveningOutput != null
+        val startupMinutes = 10
+        val vocabularyTotalMinutes = when {
+            studyBudget >= 420 -> 40
+            studyBudget >= 270 -> 35
+            else -> 30
+        }
+        val englishMinutes = when {
+            studyBudget >= 420 -> 60
+            studyBudget >= 330 -> 50
+            studyBudget >= 270 -> 45
+            else -> 30
+        }
+        val politicsMinutes = if (includePolitics) 40 else 0
+        val recitationMinutes = if (includeRecitation) {
+            when {
+                studyBudget >= 420 -> 75
+                studyBudget >= 330 -> 60
+                studyBudget >= 270 -> 45
+                else -> 30
+            }
+        } else 0
+        val closureMinutes = if (includeClosure) {
+            when {
+                studyBudget >= 420 -> 60
+                studyBudget >= 330 -> 45
+                studyBudget >= 270 -> 40
+                else -> 30
+            }
+        } else 0
+        val professionalMinutes = (studyBudget - startupMinutes - vocabularyTotalMinutes - englishMinutes -
+            politicsMinutes - recitationMinutes - closureMinutes).coerceAtLeast(60)
+        val firstProfessionalMinutes = professionalMinutes.coerceAtMost(if (studyBudget >= 360) 120 else 90)
+        val secondProfessionalMinutes = (professionalMinutes - firstProfessionalMinutes).coerceAtLeast(0)
+        val vocabularyLaterMinutes = (vocabularyTotalMinutes - startupMinutes).coerceAtLeast(10)
+        val firstProfessionalStart = LocalTime.of(10, 0)
+        val secondProfessionalStart = LocalTime.of(14, 0)
+        val secondProfessionalEnd = secondProfessionalStart.plusMinutes(secondProfessionalMinutes.toLong())
+        val closureStart = if (secondProfessionalMinutes >= 20) {
+            secondProfessionalEnd.plusMinutes(10)
+        } else {
+            LocalTime.of(14, 30)
+        }
+        val vocabularyStart = LocalTime.of(18, 45)
+        val englishStart = vocabularyStart.plusMinutes(vocabularyLaterMinutes.toLong() + 10)
+        val politicsStart = englishStart.plusMinutes(englishMinutes.toLong() + 10)
+        val recitationStart = politicsStart.plusMinutes(if (includePolitics) politicsMinutes.toLong() + 10 else 0)
 
         return buildList {
-            add(StudyScheduleBlock("09:30-09:40", "今日负荷", "今天按约 $studyBudget 分钟安排；做完这些就收口，清单里超出预算的内容不算欠债。"))
+            add(StudyScheduleBlock("09:30-09:40", "今日负荷", "今天按约 $studyBudget 分钟有效学习安排；这是逐周爬坡目标，不是把所有任务无限叠加。具体开始时间由你自己控制。"))
             add(StudyScheduleBlock("09:45-09:55", "单词启动", "先做不背单词 20 个（1 组）。如果有畏难、想逃避或身体发沉，先用这一组把状态点亮，再进专业课主块。"))
-            add(StudyScheduleBlock(mainTime, if (hasLesson) "连续主块" else "主线推进", "$mainInput；只推进到本时间块结束，关键词、卡点或小框架随手记录，不另起任务。"))
+            add(StudyScheduleBlock(timeRange(firstProfessionalStart, firstProfessionalMinutes), if (hasLesson) "专业课主块" else "主线推进", "$mainInput；完成本块规定分钟，记录实际听课/题目分钟，不把课后闭环偷算成看课。"))
             add(StudyScheduleBlock("12:00-14:00", "午饭 + 午休", "吃饭和休息不计入学习时长；午休 20-40 分钟，避免下午断电。"))
+            if (secondProfessionalMinutes >= 20) {
+                add(
+                    StudyScheduleBlock(
+                        timeRange(secondProfessionalStart, secondProfessionalMinutes),
+                        "专业课续段",
+                        "继续同一科目或同一题组，不跨章；如果上午课程未收口，优先补课程，不另开新书。",
+                    ),
+                )
+            }
             if (includeClosure && closureTasks.isNotEmpty()) {
                 add(
                     StudyScheduleBlock(
-                        closureTime,
+                        timeRange(closureStart, closureMinutes),
                         "正式闭环",
                         closureTasks.first(),
                     ),
@@ -528,7 +582,7 @@ object ExamStudyPlan {
             } else if (includeClosure && hasLesson) {
                 add(
                     StudyScheduleBlock(
-                        closureTime,
+                        timeRange(closureStart, closureMinutes),
                         "课程续段",
                         "继续上午同一课程切片，不切换新章节；课后随手记录仍包含在课程内。",
                     ),
@@ -537,7 +591,7 @@ object ExamStudyPlan {
             if (vocabularyTasks.isNotEmpty()) {
                 add(
                     StudyScheduleBlock(
-                        vocabularyTime,
+                        timeRange(vocabularyStart, vocabularyLaterMinutes),
                         "英语单词",
                         "完成 ${vocabularyTasks.joinToString("；")}; 早上的 20 个已经算入 6 组中的 1 组，晚间完成剩余 5 组并只标记错词。",
                     ),
@@ -546,7 +600,7 @@ object ExamStudyPlan {
             if (englishCoreTasks.isNotEmpty()) {
                 add(
                     StudyScheduleBlock(
-                        englishCoreTime,
+                        timeRange(englishStart, englishMinutes),
                         "英语主训练",
                         englishCoreTasks.joinToString("；"),
                     ),
@@ -555,14 +609,14 @@ object ExamStudyPlan {
             if (includePolitics) {
                 add(
                     StudyScheduleBlock(
-                        "16:00-16:30",
+                        timeRange(politicsStart, politicsMinutes),
                         "政治",
                         politicsTasks.joinToString("；"),
                     ),
                 )
             }
             if (includeRecitation) {
-                add(StudyScheduleBlock(recitationTime, "背诵输出", eveningOutput!!))
+                add(StudyScheduleBlock(timeRange(recitationStart, recitationMinutes), "背诵输出", eveningOutput!!))
             }
             add(StudyScheduleBlock("20:30-20:50", "音乐轻活动", "离开桌面 10-20 分钟；开窗站一会儿，配音乐做手势舞、转肩转腰、原地踏步或天气舒服时散步。"))
             add(StudyScheduleBlock("23:15-23:30", "强制收尾", "勾选待办，写明天第一步后离开学习桌；不再补课、不刷经验帖，目标 01:30 前入睡，不能继续拖到 02:00。"))
@@ -722,7 +776,8 @@ object ExamStudyPlan {
             appendLine("- 专业课高分验收：每个闭环章节必须留下课程分钟、题目完成量、主错因、正式框架图、第一轮关键词和规范表述；9 月起每周至少 1 次主观题闭卷，10 月至少 2 次，11 月使用答题纸和套卷。")
             appendLine("- 政治在 $politicsStartDateText 起启动：每周 3 次 30-40 分钟，强化课/核心考案 20-25 分钟后立即做 1000 题或同等选择题 10-15 道并写 1 条错因；10 月每周 4-5 次，11 月肖八，12 月肖四。7-8 月不要把政治新课叠加到专业课上。")
             appendLine("- 法理章节必须按顺序连续推进。当前较早章节尚未完成或验收时，先拆分欠账并回收，不得跳到更后章节；缓冲日只复盘已经接触过的章节。")
-            appendLine("- 最近七天平均约 2 小时、昨天已完成 3 小时；健康日按至少 $baselineStudyMinutes 分钟安排，不把 3 小时当上限。真正不适时才降到恢复档 $recoveryStudyMinutes 分钟；连续 5-7 天完成率和睡眠稳定后升到 $growthStudyMinutes-$expansionStudyMinutes 分钟。")
+            appendLine("- 最近七天平均约 2 小时、昨天已完成 3 小时；本周健康日按约 210 分钟，之后逐周爬到 270、330、360、390、420 分钟，不能把 4 小时当 8 月上限。真正不适时才降到恢复档 $recoveryStudyMinutes 分钟；每周日休息，完成率或睡眠崩掉就停档或降档。")
+            appendLine("- 课程播放器虽然可四倍速，但按约二倍速计入有效分钟：暂停、记笔记、理解、题目、框架和背诵都要算时间。9 月 14 日只是冲刺假设，9 月 30 日才是更可靠的新课压力线；7 月 31 日和 8 月 20 日必须按真实课程分钟重算。")
             appendLine("- 任务超出今日预算时，保留最重要的专业课闭环和英语阅读，其余明确顺延；不要为了清空列表压缩休息或延长到熬夜。")
             appendLine("- 当前作息通常 02:00-10:00，不能纵容继续推迟：默认学习收尾不晚于 23:30，先把入睡提前到 01:30，再逐步提前；用户明确身体不适时才临时降档。")
             appendLine("- 专业课要按倍数考虑：听课后还要做题、错题总结、框架和三轮背诵；不要把听完课当作学完。")
@@ -773,7 +828,7 @@ object ExamStudyPlan {
         date <= LocalDate.of(2026, 7, 31) -> "当前阶段节点：7 月 31 日核对刑法课时与闭环痕迹，重新估算完成日"
         date <= LocalDate.of(2026, 8, 20) -> "当前阶段节点：8 月 20 日核对唯一新课主线，并按真实课时重算完成日"
         date <= LocalDate.of(2026, 8, 31) -> "当前阶段节点：8 月 31 日按真实进度重排 9 月章节范围"
-        date <= LocalDate.of(2026, 9, 14) -> "当前压力线：9 月 14 日核对新课完成度，背诵和输出复线不得停"
+        date <= LocalDate.of(2026, 9, 14) -> "当前冲刺假设：9 月 14 日核对新课完成度，背诵和输出复线不得停"
         date <= LocalDate.of(2026, 9, 30) -> "当前收口与分数关：力争结束常规新课，两张专业课诊断卷各 100-105 分"
         date <= LocalDate.of(2026, 10, 31) -> "当前分数关：10 月末两张专业课限时卷各 110-115 分"
         date <= LocalDate.of(2026, 11, 30) -> "当前分数关：11 月末专业课各 118-122 分，总分进入 375 区间"
