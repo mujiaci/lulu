@@ -11,6 +11,7 @@ fun resolveAppVideoUri(context: Context, uri: String): Uri {
     val knownRawId = when (rawName) {
         "star_wish_rainbow_draw" -> R.raw.star_wish_rainbow_draw
         "star_wish_epic_draw" -> R.raw.star_wish_epic_draw
+        "star_wish_rare_draw" -> R.raw.star_wish_rare_draw
         else -> 0
     }
     if (knownRawId != 0) return rawResourceUri(context, knownRawId)
