@@ -1,19 +1,23 @@
 package me.rerere.rikkahub.data.companion
 
 internal fun CompanionState.sanitizedCompanionState(): CompanionState = copy(
-    statusText = statusText.cleanTechnicalStateText(fallback = "安静留意"),
-    innerThought = innerThought.cleanTechnicalStateText(fallback = ""),
-    mindState = mindState.cleanTechnicalStateText(fallback = "安静留意着现在的变化"),
-    selfScene = selfScene.cleanTechnicalStateText(
+    statusText = statusText.cleanTechnicalCompanionStateText(fallback = "安静留意"),
+    innerThought = innerThought.cleanTechnicalCompanionStateText(fallback = ""),
+    mindState = mindState.cleanTechnicalCompanionStateText(fallback = "安静留意着现在的变化"),
+    selfScene = selfScene.cleanTechnicalCompanionStateText(
         fallback = "暂时没有开口，只把注意力留在接下来的变化上。",
     ),
 )
 
-private fun String.cleanTechnicalStateText(fallback: String): String {
+internal fun String.cleanTechnicalCompanionStateText(fallback: String): String {
     val normalized = trim().replace(Regex("\\s+"), " ")
     if (normalized.isBlank()) return ""
-    val lower = normalized.lowercase()
-    return if (TECHNICAL_STATE_MARKERS.any { marker -> marker in lower }) fallback else normalized
+    return if (normalized.isTechnicalCompanionStateText()) fallback else normalized
+}
+
+internal fun String.isTechnicalCompanionStateText(): Boolean {
+    val lower = trim().replace(Regex("\\s+"), " ").lowercase()
+    return lower.isNotBlank() && TECHNICAL_STATE_MARKERS.any { marker -> marker in lower }
 }
 
 private val TECHNICAL_STATE_MARKERS = listOf(

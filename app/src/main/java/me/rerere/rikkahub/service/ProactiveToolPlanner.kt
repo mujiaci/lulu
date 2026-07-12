@@ -119,27 +119,76 @@ object ProactiveToolPlanner {
         containsAny(EXPLICIT_ACTION_WORDS) || Regex("""\d{1,2}\s*[点:：]""").containsMatchIn(this)
 
     private fun String.buildAlarmArgumentsJson(): String? {
-        val match = Regex("""([零〇一二两三四五六七八九十\d]{1,3})\s*[点:：]\s*([零〇一二两三四五六七八九十\d]{1,3})?""")
+        val matches = Regex("""([零〇一二两三四五六七八九十\d]{1,3})\s*[点:：]\s*(半|[零〇一二两三四五六七八九十\d]{1,3})?""")
             .findAll(this)
-            .lastOrNull()
+            .toList()
+        val match = matches
+            .minWithOrNull(
+                compareBy<MatchResult> { candidate -> candidate.distanceToAlarmContext(this) }
+                    .thenByDescending { candidate -> candidate.range.first },
+            )
             ?: return null
         val hour = parseChineseNumber(match.groupValues[1]) ?: return null
         val inlineMinute = match.groupValues.getOrNull(2)
             ?.takeIf { it.isNotBlank() }
-            ?.let { parseChineseNumber(it) }
-        val trailingMinute = if (inlineMinute == null) {
-            Regex("""[点:：]\s*([零〇一二两三四五六七八九十\d]{1,3})\s*(?:分|叫|提醒|闹钟)""")
-                .findAll(this)
-                .lastOrNull()
-                ?.groupValues
-                ?.getOrNull(1)
-                ?.let { parseChineseNumber(it) }
-        } else {
-            null
+            ?.let { minuteText ->
+                if (minuteText == "半") 30 else parseChineseNumber(minuteText)
+            }
+        val minute = inlineMinute ?: 0
+        val adjustedHour = hour.adjustForAlarmContext(this, match.range.first)
+        if (adjustedHour !in 0..23 || minute !in 0..59) return null
+        return """{"hour":$adjustedHour,"minute":$minute,"label":"提醒"}"""
+    }
+
+    /**
+     * Chinese alarm requests often omit the period when the intent is to rest:
+     * "十点半提醒我休息" means 22:30, while an explicit morning marker must
+     * remain in the morning.  Use the period nearest to the matched time so a
+     * message containing more than one time does not borrow an earlier marker.
+     */
+    private fun Int.adjustForAlarmContext(source: String, timeStart: Int): Int {
+        val prefix = source.substring(0, timeStart)
+        val clauseSeparator = Regex("""[，,。.!！?？；;\n]+|然后|接着|同时""")
+        val clauseStart = clauseSeparator
+            .findAll(prefix)
+            .maxOfOrNull { match -> match.range.last + 1 }
+            ?: 0
+        val clauseEnd = clauseSeparator.find(source, timeStart)?.range?.first ?: source.length
+        val clauseText = source.substring(clauseStart, clauseEnd)
+        val nearestPeriod = (MORNING_PERIOD_WORDS + EVENING_PERIOD_WORDS)
+            .mapNotNull { word ->
+                prefix.lastIndexOf(word)
+                    .takeIf { it >= clauseStart }
+                    ?.let { index -> index to word }
+            }
+            .maxByOrNull { it.first }
+            ?.second
+
+        return when {
+            nearestPeriod != null && nearestPeriod in MORNING_PERIOD_WORDS -> this
+            nearestPeriod != null && nearestPeriod in EVENING_PERIOD_WORDS && this in 1..11 -> this + 12
+            nearestPeriod == null && REST_REMINDER_WORDS.any { clauseText.contains(it) } && this in 1..11 -> this + 12
+            else -> this
         }
-        val minute = inlineMinute ?: trailingMinute ?: 0
-        if (hour !in 0..23 || minute !in 0..59) return null
-        return """{"hour":$hour,"minute":$minute,"label":"提醒"}"""
+    }
+
+    private fun MatchResult.distanceToAlarmContext(source: String): Int {
+        var best = Int.MAX_VALUE
+        ALARM_CONTEXT_WORDS.forEach { word ->
+            var searchFrom = 0
+            while (searchFrom <= source.length - word.length) {
+                val index = source.indexOf(word, searchFrom)
+                if (index < 0) break
+                val distance = when {
+                    index > range.last -> index - range.last - 1
+                    range.first > index + word.length - 1 -> range.first - index - word.length
+                    else -> 0
+                }
+                best = minOf(best, distance)
+                searchFrom = index + 1
+            }
+        }
+        return best
     }
 
     private fun parseChineseNumber(raw: String): Int? {
@@ -178,6 +227,34 @@ object ProactiveToolPlanner {
             ?.toIntOrNull()
     }
 
+    private val MORNING_PERIOD_WORDS = setOf(
+        "\u51cc\u6668", // 凌晨
+        "\u65e9\u4e0a", // 早上
+        "\u4e0a\u5348", // 上午
+        "\u6e05\u6668", // 清晨
+        "\u65e9\u6668", // 早晨
+        "\u4eca\u65e9", // 今早
+        "\u660e\u65e9", // 明早
+    )
+
+    private val EVENING_PERIOD_WORDS = setOf(
+        "\u4e0b\u5348", // 下午
+        "\u508d\u665a", // 傍晚
+        "\u665a\u4e0a", // 晚上
+        "\u591c\u91cc", // 夜里
+        "\u591c\u95f4", // 夜间
+        "\u4eca\u665a", // 今晚
+        "\u660e\u665a", // 明晚
+    )
+
+    private val REST_REMINDER_WORDS = setOf(
+        "\u4f11\u606f", // 休息
+        "\u7761\u89c9", // 睡觉
+        "\u7761\u7720", // 睡眠
+        "\u4e0a\u5e8a", // 上床
+        "\u665a\u5b89", // 晚安
+    )
+
     private val TIRED_WORDS = setOf(
         "累", "困", "困死", "疲惫", "没精神", "不舒服", "难受", "心慌", "头疼", "头痛",
         "睡不好", "没睡好", "失眠", "熬夜", "emo", "焦虑", "崩溃", "低落"
@@ -194,6 +271,13 @@ object ProactiveToolPlanner {
 
     private val ALARM_WORDS = setOf(
         "闹钟", "叫我", "提醒我", "起床", "几点叫", "记得叫"
+    )
+
+    private val ALARM_CONTEXT_WORDS = ALARM_WORDS + REST_REMINDER_WORDS + setOf(
+        "\u8d77\u5e8a", // 起床
+        "\u7761\u89c9", // 睡觉
+        "\u7761\u7720", // 睡眠
+        "\u4e0a\u5e8a", // 上床
     )
 
     private val SCHEDULE_WORDS = setOf(

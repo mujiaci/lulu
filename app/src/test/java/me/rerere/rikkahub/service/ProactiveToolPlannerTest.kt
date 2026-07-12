@@ -42,6 +42,75 @@ class ProactiveToolPlannerTest {
     }
 
     @Test
+    fun `half past clock keeps thirty minute alarm`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "明天早上八点半叫我起床",
+            availableToolNames = setOf("set_alarm"),
+        )
+
+        val alarm = plan.single { it.toolName == "set_alarm" }
+        assertTrue(alarm.autoExecutable)
+        assertTrue(alarm.argumentsJson.contains("\"hour\":8"))
+        assertTrue(alarm.argumentsJson.contains("\"minute\":30"))
+    }
+
+    @Test
+    fun `rest reminder without period defaults to evening`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "十点半提醒我休息",
+            availableToolNames = setOf("set_alarm"),
+        )
+
+        val alarm = plan.single { it.toolName == "set_alarm" }
+        assertTrue(alarm.autoExecutable)
+        assertTrue(alarm.argumentsJson.contains("\"hour\":22"))
+        assertTrue(alarm.argumentsJson.contains("\"minute\":30"))
+    }
+
+    @Test
+    fun `explicit morning period is not shifted to evening`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "上午十点半提醒我休息",
+            availableToolNames = setOf("set_alarm"),
+        )
+
+        val alarm = plan.single { it.toolName == "set_alarm" }
+        assertTrue(alarm.autoExecutable)
+        assertTrue(alarm.argumentsJson.contains("\"hour\":10"))
+        assertTrue(alarm.argumentsJson.contains("\"minute\":30"))
+    }
+
+    @Test
+    fun `period from an earlier clause does not override an evening rest reminder`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "上午八点学习，十点半提醒我休息",
+            availableToolNames = setOf("set_alarm"),
+        )
+
+        val alarm = plan.single { it.toolName == "set_alarm" }
+        assertTrue(alarm.argumentsJson.contains("\"hour\":22"))
+        assertTrue(alarm.argumentsJson.contains("\"minute\":30"))
+    }
+
+    @Test
+    fun `date words keep their morning and evening meaning`() {
+        val morningPlan = ProactiveToolPlanner.plan(
+            userText = "明早十点半提醒我休息",
+            availableToolNames = setOf("set_alarm"),
+        )
+        val morningAlarm = morningPlan.single { it.toolName == "set_alarm" }
+        assertTrue(morningAlarm.argumentsJson.contains("\"hour\":10"))
+        assertTrue(morningAlarm.argumentsJson.contains("\"minute\":30"))
+
+        val eveningPlan = ProactiveToolPlanner.plan(
+            userText = "明晚十点叫我",
+            availableToolNames = setOf("set_alarm"),
+        )
+        val eveningAlarm = eveningPlan.single { it.toolName == "set_alarm" }
+        assertTrue(eveningAlarm.argumentsJson.contains("\"hour\":22"))
+    }
+
+    @Test
     fun `music mention should inspect current playback without changing it`() {
         val plan = ProactiveToolPlanner.plan(
             userText = "我现在听歌写作业，有点静不下来",

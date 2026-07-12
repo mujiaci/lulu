@@ -123,7 +123,28 @@ internal fun buildCompanionTurnReminderPlans(
         nowMillis = nowMillis,
         zoneId = zoneId,
     )
-    val initialPlans = fromFollowUps + listOfNotNull(fromSingularFollowUp, deterministic)
+    val explicitDeterministicPlans = buildExplicitUserReminderPlans(
+        userText = userText,
+        nowMillis = nowMillis,
+        zoneId = zoneId,
+    )
+    val deterministicPlans = explicitDeterministicPlans + listOfNotNull(deterministic)
+        .filterNot { fallback ->
+            explicitDeterministicPlans.any { explicit -> fallback.conflictsWith(explicit) }
+        }
+    val modelPlans = fromFollowUps + listOfNotNull(fromSingularFollowUp)
+    // The model expresses clock times as a delay, which is easy to round
+    // incorrectly (for example, turning 08:30 into 08:00). When the user
+    // explicitly wrote a time, the deterministic parser is the source of
+    // truth. Drop only the model plan that represents that same reminder;
+    // independent care plans such as bedtime supervision remain intact.
+    val initialPlans = if (explicitDeterministicPlans.isNotEmpty()) {
+        deterministicPlans + modelPlans.filterNot { modelPlan ->
+            explicitDeterministicPlans.any { explicit -> modelPlan.conflictsWith(explicit) }
+        }
+    } else {
+        modelPlans + deterministicPlans
+    }
     val wakePlan = initialPlans.firstOrNull { it.kind == ProactiveReminderKind.WAKE }
     val localHour = Instant.ofEpochMilli(nowMillis).atZone(zoneId).hour
     val sleepSupervision = wakePlan
@@ -151,6 +172,63 @@ internal fun buildCompanionTurnReminderPlans(
         .sortedBy { it.triggerAtMillis }
         .take(MAX_COMPANION_TURN_REMINDERS)
 }
+
+private fun ProactiveReminderPlan.conflictsWith(other: ProactiveReminderPlan): Boolean {
+    val withinSameReminderWindow = kotlin.math.abs(triggerAtMillis - other.triggerAtMillis) <= 90L * 60L * 1_000L
+    if (kind == other.kind) return withinSameReminderWindow
+    val genericKinds = setOf(
+        ProactiveReminderKind.WAKE,
+        ProactiveReminderKind.SCHEDULE,
+        ProactiveReminderKind.STUDY,
+        ProactiveReminderKind.GENERAL,
+    )
+    return kind in genericKinds &&
+        other.kind in genericKinds &&
+        withinSameReminderWindow
+}
+
+private fun String.hasExplicitReminderTime(): Boolean =
+    Regex(
+        """(?:[一二两三四五六七八九十\d]+\s*(?:分钟|分|小时|个小时)\s*后)|""" +
+            """(?:(?:今天|今日|今晚|今早|明天|明日|明早|明晚|后天)?\s*""" +
+            """(?:凌晨|早上|早晨|上午|中午|下午|傍晚|晚上)?\s*""" +
+            """[零〇一二两三四五六七八九十\d]{1,3}\s*[点时:：]\s*""" +
+            """(?:半|[零〇一二两三四五六七八九十\d]{1,3})?\s*分?)""",
+    ).containsMatchIn(this)
+
+private fun buildExplicitUserReminderPlans(
+    userText: String,
+    nowMillis: Long,
+    zoneId: ZoneId,
+): List<ProactiveReminderPlan> {
+    var carriedDateWord = ""
+    return userText
+        .split(Regex("""[，,。.!！?？；;\n]+|然后|接着|同时"""))
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .mapNotNull { clause ->
+            val ownDateWord = REMINDER_DATE_WORD.find(clause)?.value.orEmpty()
+            if (ownDateWord.isNotBlank()) carriedDateWord = ownDateWord
+            val contextualClause = if (ownDateWord.isBlank() && carriedDateWord.isNotBlank()) {
+                "$carriedDateWord$clause"
+            } else {
+                clause
+            }
+            contextualClause
+                .takeIf(String::hasExplicitReminderTime)
+                ?.let { explicitClause ->
+                    ProactiveReminderPlanner.plan(
+                        userText = explicitClause,
+                        assistantText = "",
+                        nowMillis = nowMillis,
+                        zoneId = zoneId,
+                    )
+                }
+        }
+        .distinctBy { reminder -> reminder.kind to (reminder.triggerAtMillis / 60_000L) }
+}
+
+private val REMINDER_DATE_WORD = Regex("""今天|今日|今晚|今早|明天|明日|明早|明晚|后天""")
 
 private fun String?.toCompanionReminderKind(reason: String): ProactiveReminderKind = when (this?.lowercase()) {
     "wake" -> ProactiveReminderKind.WAKE
@@ -192,7 +270,7 @@ object ProactiveReminderPlanner {
         }
 
         val triggerAt = findExplicitRelativeTime(combined, nowMillis)
-            ?: findExplicitClockTime(combined, nowMillis, zoneId)
+            ?: findExplicitClockTime(combined, nowMillis, zoneId, kind)
             ?: when (kind) {
                 ProactiveReminderKind.SLEEP -> nowMillis + DEFAULT_SLEEP_DELAY_MINUTES * 60_000L
                 ProactiveReminderKind.MEAL -> nowMillis + DEFAULT_MEAL_DELAY_MINUTES * 60_000L
@@ -302,14 +380,28 @@ object ProactiveReminderPlanner {
         return nowMillis + minutes * 60_000L
     }
 
-    private fun findExplicitClockTime(text: String, nowMillis: Long, zoneId: ZoneId): Long? {
-        val match = Regex(
+    private fun findExplicitClockTime(
+        text: String,
+        nowMillis: Long,
+        zoneId: ZoneId,
+        kind: ProactiveReminderKind,
+    ): Long? {
+        val clockPattern = Regex(
             """(?:(今天|今日|今晚|今早|明天|明日|明早|明晚|后天)\s*)?""" +
                 """(?:(凌晨|早上|早晨|上午|中午|下午|傍晚|晚上)\s*)?""" +
                 """([零〇一二两三四五六七八九十\d]{1,3})\s*[点时:：]\s*""" +
                 """(半|[零〇一二两三四五六七八九十\d]{1,3})?\s*分?""",
         )
-            .find(text)
+        val contextWords = when (kind) {
+            ProactiveReminderKind.WAKE -> WAKE_WORDS
+            ProactiveReminderKind.SLEEP -> SLEEP_WORDS
+            ProactiveReminderKind.SCHEDULE -> SCHEDULE_WORDS + GENERAL_REMINDER_WORDS
+            ProactiveReminderKind.MEAL -> MEAL_WORDS
+            ProactiveReminderKind.STUDY -> STUDY_WORDS
+            ProactiveReminderKind.GENERAL -> GENERAL_REMINDER_WORDS
+        }
+        val match = clockPattern.findAll(text)
+            .minByOrNull { candidate -> candidate.distanceToContext(text, contextWords) }
             ?: return null
         val dateWord = match.groupValues[1]
         val periodWord = match.groupValues[2]
@@ -321,9 +413,16 @@ object ProactiveReminderPlanner {
             else -> parseChineseNumber(minuteWord) ?: return null
         }
         val effectivePeriod = periodWord.ifBlank {
-            when (dateWord) {
-                "今晚", "明晚" -> "晚上"
-                "今早", "明早" -> "早上"
+            when {
+                dateWord == "今晚" || dateWord == "明晚" -> "晚上"
+                dateWord == "今早" || dateWord == "明早" -> "早上"
+                // Chinese reminders often omit “晚上” in phrases such as
+                // “十点半提醒我休息”.  Treat a sleep reminder in the usual
+                // evening range as a 24-hour clock time instead of silently
+                // scheduling it for 10:30 in the morning.
+                kind == ProactiveReminderKind.SLEEP &&
+                    rawHour in 1..11 &&
+                    text.containsAny(SLEEP_WORDS) -> "晚上"
                 else -> ""
             }
         }
@@ -392,8 +491,29 @@ object ProactiveReminderPlanner {
     private fun String.containsAny(words: Set<String>): Boolean =
         words.any { it in this }
 
+    private fun MatchResult.distanceToContext(text: String, words: Set<String>): Int {
+        if (words.isEmpty()) return Int.MAX_VALUE
+        return words.minOfOrNull { word ->
+            var searchFrom = 0
+            var best = Int.MAX_VALUE
+            while (searchFrom <= text.length - word.length) {
+                val index = text.indexOf(word, searchFrom)
+                if (index < 0) break
+                val distance = when {
+                    index > range.last -> index - range.last - 1
+                    range.first > index + word.length - 1 -> range.first - index - word.length
+                    else -> 0
+                }
+                best = minOf(best, distance)
+                searchFrom = index + 1
+            }
+            best
+        } ?: Int.MAX_VALUE
+    }
+
     private val SLEEP_WORDS = setOf(
-        "睡觉", "睡了", "睡啦", "晚安", "早点睡", "去睡", "想睡", "困了", "催我睡", "提醒我睡"
+        "睡觉", "睡了", "睡啦", "晚安", "早点睡", "早点休息", "去睡", "想睡", "困了",
+        "休息", "催我睡", "催我休息", "提醒我睡", "提醒我休息",
     )
 
     private val SCHEDULE_WORDS = setOf(

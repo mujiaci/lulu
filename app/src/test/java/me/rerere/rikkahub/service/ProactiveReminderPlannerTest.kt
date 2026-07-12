@@ -113,6 +113,48 @@ class ProactiveReminderPlannerTest {
     }
 
     @Test
+    fun `sleep reminder without evening marker uses evening clock`() {
+        val requestTime = LocalDateTime.of(2026, 7, 10, 20, 0)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "十点半提醒我休息",
+            assistantText = "好，到时候提醒你。",
+            nowMillis = requestTime,
+            zoneId = zone,
+        )
+
+        assertNotNull(plan)
+        assertEquals(
+            LocalDateTime.of(2026, 7, 10, 22, 30),
+            LocalDateTime.ofInstant(Instant.ofEpochMilli(plan!!.triggerAtMillis), zone),
+        )
+    }
+
+    @Test
+    fun `sleep clock is selected from the sleep clause when several clocks are present`() {
+        val requestTime = LocalDateTime.of(2026, 7, 10, 20, 0)
+            .atZone(zone)
+            .toInstant()
+            .toEpochMilli()
+
+        val plan = ProactiveReminderPlanner.plan(
+            userText = "八点半开始学习，十点半提醒我休息",
+            assistantText = "好。",
+            nowMillis = requestTime,
+            zoneId = zone,
+        )
+
+        assertNotNull(plan)
+        assertEquals(
+            LocalDateTime.of(2026, 7, 10, 22, 30),
+            LocalDateTime.ofInstant(Instant.ofEpochMilli(plan!!.triggerAtMillis), zone),
+        )
+    }
+
+    @Test
     fun `general reminder carries journal hint without system blocking tools`() {
         val plan = ProactiveReminderPlanner.plan(
             userText = "十五分钟后提醒我把今天这件事记到日志里",

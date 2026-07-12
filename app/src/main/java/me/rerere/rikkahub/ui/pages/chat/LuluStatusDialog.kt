@@ -37,6 +37,7 @@ import me.rerere.rikkahub.data.model.Assistant
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.abs
 
 @Composable
 fun LuluStatusDialog(
@@ -46,11 +47,30 @@ fun LuluStatusDialog(
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     val state = snapshot.state
-    val activeConcerns = snapshot.concerns
-        .filter { it.status == CompanionConcernStatus.ACTIVE }
-        .take(3)
     val activeCommitments = snapshot.commitments
         .filter { it.status.isVisibleInStatus() }
+        .take(3)
+    // A scheduled follow-up is persisted as both a concern (for perception) and
+    // a commitment (for execution).  The two records intentionally share a
+    // subjectKey, but showing both cards makes one promise look duplicated.
+    // Keep the executable commitment card in the status view and only show
+    // concerns that do not already have a visible commitment counterpart.
+    val visibleCommitmentSubjects = activeCommitments
+        .map { it.subjectKey }
+        .toSet()
+    val activeConcerns = snapshot.concerns
+        .filter { it.status == CompanionConcernStatus.ACTIVE }
+        .filterNot { concern ->
+            concern.subjectKey in visibleCommitmentSubjects || activeCommitments.any { commitment ->
+                val concernGoal = concern.goal.cleanCompanionHumanText("")
+                val sameHumanPromise = concernGoal.isNotBlank() &&
+                    concernGoal == commitment.promise.cleanCompanionHumanText("")
+                val nextPerceptionAt = concern.nextPerceptionAt
+                val sameDueWindow = nextPerceptionAt != null &&
+                    abs(commitment.dueAt - nextPerceptionAt) <= 2 * 60_000L
+                sameHumanPromise && sameDueWindow
+            }
+        }
         .take(3)
     val stateChips = buildList {
         state.mood.takeIf(String::isNotBlank)?.let { add("心情" to it) }
