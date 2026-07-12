@@ -362,7 +362,11 @@ object ExamStudyPlan {
         val hasLesson = tasks.any { it.title.hasAny("看课", "听课", "课程", "听众合法硕") }
         val hasRecite = tasks.any { it.title.hasAny("背诵", "回背", "口头", "闭卷", "抽背", "规范表述") }
         val hasEnglish = tasks.any { it.kind == StudyPlanTaskKind.English }
-        val hasReviewDay = tasks.any { it.title.hasAny("复盘", "缓冲", "收口", "整理 7 月") }
+        val hasReviewDay = tasks.any {
+            it.kind != StudyPlanTaskKind.Health &&
+                it.kind != StudyPlanTaskKind.English &&
+                it.title.hasAny("复盘", "缓冲", "整理 7 月")
+        }
         val lawTasks = tasks.filter { it.kind == StudyPlanTaskKind.Law }.map { it.title }
         val reviewTasks = tasks.filter { it.kind == StudyPlanTaskKind.Review }.map { it.title }
         val englishTasks = tasks.filter { it.kind == StudyPlanTaskKind.English }.map { it.title }
@@ -640,11 +644,12 @@ object ExamStudyPlan {
                     kind = when {
                         task.contains("英语") || task.contains("单词") || task.contains("长难句") -> StudyPlanTaskKind.English
                         task.contains("散步") || task.contains("手势舞") || task.contains("广播体操") ||
-                        task.contains("羽毛球") || task.contains("开窗站") || task.contains("原地踏步") ||
+                            task.contains("羽毛球") || task.contains("开窗站") || task.contains("原地踏步") ||
                             task.contains("转肩") || task.contains("转腰") || task.contains("音乐轻活动") ||
                             task.contains("吃") || task.contains("拉伸") -> StudyPlanTaskKind.Health
-                        task.contains("听众合法硕") || task.contains("听课") || task.contains("看课") ||
-                            task.contains("课程") -> StudyPlanTaskKind.Law
+                        task.contains("听众合法硕") || task.contains("众合法硕课程") || task.contains("听课") ||
+                            task.contains("看课") || task.contains("课程主块") || task.contains("课程队列") ||
+                            task.contains("当前课程") -> StudyPlanTaskKind.Law
                         task.contains("回看") || task.contains("复述") || task.contains("背诵") ||
                             task.contains("框架") || task.contains("思维导图") || task.contains("整理") -> StudyPlanTaskKind.Review
                         task.contains("确认") || task.contains("补一个") -> StudyPlanTaskKind.Foundation
