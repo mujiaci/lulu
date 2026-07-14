@@ -66,6 +66,22 @@ jobs:
             echo "keyPassword=lulu-release-password"
           } > local.properties
 
+      - name: Companion and memory regression tests
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :app:testDebugUnitTest \
+            --tests "*CompanionLifeClaimOutputTransformerTest" \
+            --tests "*CompanionGameToolTest" \
+            --tests "*CompanionIntentPlannerTest" \
+            --tests "*AffectivePrivateImpressionTest" \
+            --tests "*MemoryArchiveTest" \
+            --tests "*CompanionRuntimeReducerTest" \
+            --tests "*MemoryBankContextTest" \
+            --tests "*CompanionPresenceStateTest" \
+            --tests "*CompanionLifeEventFactoryTest" \
+            --tests "*LuluExpressionOutputTransformerTest" \
+            --tests "*CompanionPresenceContractTransformerTest"
+
       - name: Gradle Build
         run: |
           chmod +x ./gradlew

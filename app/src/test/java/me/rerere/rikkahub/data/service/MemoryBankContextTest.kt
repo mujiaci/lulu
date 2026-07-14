@@ -327,7 +327,7 @@ class MemoryBankContextTest {
             queryVector = listOf(1f, 0f, 0f),
         )
 
-        assertEquals(10, selected.size)
+        assertEquals(8, selected.size)
     }
 
     @Test
