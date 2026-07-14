@@ -38,6 +38,24 @@ object ProactiveToolPlanner {
             addAuto("today_study_plan", "用户在问学习 App 里的考研今日计划、待办、番茄钟或完成状态；必须读取本地 StudyStore，不能用系统日历代替。")
         }
 
+        val asksSleepReward = normalized.containsAny(SLEEP_REWARD_WORDS)
+        if (asksSleepReward) {
+            addAuto(
+                "get_gadgetbridge_data",
+                "用户在报告早睡或早起，先读取可用的睡眠记录，让角色结合客观数据判断，不只听口头索要。",
+                """{"data_type":"sleep"}""",
+            )
+            addAuto(
+                "get_app_usage",
+                "用户在报告作息，读取当天应用使用和最后使用时间，辅助判断是否熬夜或早起。",
+                """{"limit":10}""",
+            )
+            addAuto(
+                "get_battery_info",
+                "用户在报告作息，读取电量和充电状态作为夜间设备活动的辅助线索。",
+            )
+        }
+
         if (normalized.containsAny(TIRED_WORDS)) {
             addAuto("get_gadgetbridge_data", "用户表达疲惫或身体状态不好，需要主动查看睡眠、心率和健康数据。", """{"data_type":"all"}""")
             addAuto("get_app_usage", "用户表达疲惫时，屏幕使用情况可能帮助判断是否熬夜或用机过久。", """{"limit":5}""")
@@ -289,6 +307,10 @@ object ProactiveToolPlanner {
         "考研计划", "今日计划", "今天计划", "学习计划", "今日待办", "今天待办", "待办",
         "番茄钟", "番茄", "夸夸值", "完成了", "划掉", "打钩", "学什么", "今天学",
         "早睡", "早起", "按时睡", "按时起", "作息奖励", "睡眠奖励"
+    )
+
+    private val SLEEP_REWARD_WORDS = setOf(
+        "早睡", "睡得早", "早起", "起得早", "作息奖励", "睡眠奖励", "睡眠记录", "几点睡", "几点起",
     )
 
     private val MEAL_WORDS = setOf(

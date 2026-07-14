@@ -37,8 +37,9 @@ fun createTodayStudyPlanTool(
         Read or update today's app-local study state. Use action=set_completion only after the user explicitly reports
         task completion. Use action=claim_sleep_reward only after the character has judged the user's early-sleep or
         early-rise report credible from the current time and conversation. Do not grant merely because the user asks;
-        obtain the reported clock time, ask a follow-up when it is missing, and refuse obvious contradictions. The
-        user's personal baseline is sleep by about 01:30 and wake by about 09:30. Each reward is idempotent per day.
+        obtain the reported clock time or derive it from available sleep/app-usage evidence, ask a follow-up when it
+        is missing, and refuse obvious contradictions. The user's personal baseline is sleep by about 01:30 and wake
+        by about 09:30. Each reward is idempotent per day.
         Use this for 考研计划, 今日计划, 待办, 番茄钟, 作息, 早睡, 早起, 夸夸值 and rewards.
         Only existing tasks can change; this tool never creates or deletes tasks. Do not use calendar_tool.
     """.trimIndent().replace("\n", " "),

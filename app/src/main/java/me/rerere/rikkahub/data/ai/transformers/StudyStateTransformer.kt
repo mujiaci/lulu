@@ -68,6 +68,7 @@ internal fun buildStudyCompanionContext(
             "作息奖励规则：用户自述昨晚早睡或今天早起时，由当前学习陪伴角色结合当前时间、前后对话和描述可信度判断；" +
                 "你的个人基线是最晚约01:30入睡、最晚约09:30起床。必须得到具体时间，没有时间就先追问；" +
                 "不要因为用户索要就自动发放，明显矛盾或超过个人基线时拒绝。角色认可后通过 today_study_plan 发放。" +
+                "如果可用，先结合 get_gadgetbridge_data 的睡眠记录、get_app_usage 的夜间使用情况和 get_battery_info 的充电线索；" +
                 "早睡 +${StudyRules.EARLY_SLEEP_KUDOS} 夸夸值，早起发十连抽券 " +
                 "x${StudyRules.EARLY_RISE_TEN_DRAW_TICKETS}，每项每天一次。",
         )

@@ -179,4 +179,17 @@ class ProactiveToolPlannerTest {
         assertTrue(plan.any { it.toolName == "today_study_plan" && it.autoExecutable })
         assertTrue(plan.none { it.toolName == "calendar_tool" && it.autoExecutable })
     }
+
+    @Test
+    fun `sleep reward report should gather health usage and battery evidence`() {
+        val plan = ProactiveToolPlanner.plan(
+            userText = "我昨晚一点二十睡的，今天九点二十起，早睡早起奖励可以给吗",
+            availableToolNames = setOf("today_study_plan", "get_gadgetbridge_data", "get_app_usage", "get_battery_info"),
+        )
+
+        assertTrue(plan.any { it.toolName == "today_study_plan" })
+        assertTrue(plan.any { it.toolName == "get_gadgetbridge_data" && it.argumentsJson.contains("sleep") })
+        assertTrue(plan.any { it.toolName == "get_app_usage" })
+        assertTrue(plan.any { it.toolName == "get_battery_info" })
+    }
 }
