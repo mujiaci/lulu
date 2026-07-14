@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.service
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
@@ -144,8 +145,9 @@ class CompanionTurnReminderPlannerTest {
             zoneId = zone,
         )
 
-        val sleepPlan = plans.single { it.kind == ProactiveReminderKind.SLEEP }
-        assertEquals(15L, (sleepPlan.triggerAtMillis - now) / 60_000L)
+        val sleepPlan = plans.singleOrNull { it.kind == ProactiveReminderKind.SLEEP }
+        assertNotNull("plans=$plans", sleepPlan)
+        assertEquals(15L, (sleepPlan!!.triggerAtMillis - now) / 60_000L)
         assertEquals(1, plans.count { it.kind == ProactiveReminderKind.WAKE })
     }
 }
