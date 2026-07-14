@@ -194,7 +194,7 @@ private val DIGITAL_LIFE_CLAIM_RULES = listOf(
     ),
 )
 
-private val FIRST_PERSON_REGEX = Regex("(?:^|[，。！？!?\s])(我|咱|人家|本小姐|本少爷)")
+private val FIRST_PERSON_REGEX = Regex("(?:^|[，。！？!?\\s])(我|咱|人家|本小姐|本少爷)")
 private val SENTENCE_BOUNDARY_REGEX = Regex("(?<=[。！？!?\n])")
 private val NON_COMPLETED_CLAIM_MARKERS = listOf("没玩", "没有玩", "还没", "想玩", "想写", "想听", "打算", "准备", "如果", "假如", "可能会", "梦见")
 private const val RECENT_CLAIM_WINDOW_MILLIS = 6L * 60L * 60L * 1_000L
