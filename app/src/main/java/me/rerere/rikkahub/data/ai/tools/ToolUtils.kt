@@ -108,6 +108,9 @@ internal fun humanLikeToolGuidance(toolName: String): String {
         name == "today_study_plan" ->
             "问考研计划、待办、番茄钟、作息奖励、夸夸值时使用；作息按个人基线01:30前睡、09:30前起判断，先问具体时间。"
 
+        name == "play_companion_game" ->
+            "这是角色可以自主进行的 App 内真实小游戏；只有工具成功返回局次和得分后，才能说自己玩过。"
+
         name.contains("camera") ->
             "当角色想确认环境、桌面、身边状态或需要视觉感知时可以主动使用；把结果当感知，不提工具名。"
 
@@ -127,6 +130,7 @@ private fun conciseToolDescription(tool: Tool): String = when (tool.name.removeP
     "eval_javascript" -> "Run a small JavaScript calculation."
     "explore_nearby" -> "Search nearby places when local surroundings matter."
     "favorite_user_message" -> "Favorite the current user message when the character genuinely wants to keep it."
+    "play_companion_game" -> "Play one complete app-local Signal Hunt game and return the actual session score."
     "read_sms" -> "Read device SMS when message content is explicitly relevant."
     "scrape_web" -> "Read the content of a web page."
     "search_web" -> "Search the web for current external information."
@@ -168,6 +172,7 @@ private val ALWAYS_AVAILABLE_COMPANION_TOOLS = listOf(
     "set_lulu_expression_state",
     "favorite_user_message",
     "write_lulu_journal",
+    "play_companion_game",
     "set_alarm",
     "ask_user",
 )
@@ -188,6 +193,7 @@ private val TOOL_KEYWORD_GROUPS = listOf(
     setOf("短信", "验证码") to listOf("read_sms"),
     setOf("剪贴板", "复制的内容") to listOf("clipboard_tool"),
     setOf("音乐", "播放歌曲", "暂停音乐", "下一首", "上一首") to listOf("control_music"),
+    setOf("游戏", "玩一局", "小游戏", "信号寻踪") to listOf("play_companion_game"),
     setOf("朗读", "语音说", "读给我听", "用声音") to listOf("text_to_speech"),
     setOf("附近", "周边", "哪里有", "去哪吃") to listOf("explore_nearby"),
     setOf("写文件", "保存到文件", "生成文件") to listOf("write_files"),

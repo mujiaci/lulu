@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.data.companion
 
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.rikkahub.utils.JsonInstant
@@ -44,7 +46,7 @@ fun buildToolLifeEvent(
 ): CompanionLifeEvent? {
     if (assistantId.isBlank() || execution.toolCallId.isBlank() || execution.toolName.isBlank()) return null
     val successful = execution.outputText.toolExecutionSucceeded()
-    val details = execution.outputText.cleanLifeEventText(320)
+    val details = execution.outputText.toLifeEventSummary(execution.toolName)
     val descriptor = execution.toolName.toLifeEventDescriptor()
     return CompanionLifeEvent(
         id = stableLifeEventId(assistantId, descriptor.type, execution.toolCallId),
@@ -128,6 +130,12 @@ private fun String.toLifeEventDescriptor(): LifeEventDescriptor = when (this) {
         "尝试操作音乐，但没有成功",
         2,
     )
+    "play_companion_game" -> LifeEventDescriptor(
+        CompanionLifeEventType.GAME,
+        "完成了一局信号寻踪",
+        "想玩一局信号寻踪，但游戏没有完成",
+        3,
+    )
     "today_study_plan" -> LifeEventDescriptor(
         CompanionLifeEventType.STUDY_REVIEW,
         "查看或整理了考研计划",
@@ -157,6 +165,22 @@ private fun String.toolExecutionSucceeded(): Boolean {
     if (explicit != null) return explicit
     return listOf("error", "failed", "失败", "错误", "未成功")
         .none { marker -> contains(marker, ignoreCase = true) }
+}
+
+private fun String.toLifeEventSummary(toolName: String): String {
+    if (toolName != "play_companion_game") return cleanLifeEventText(320)
+    val output = runCatching { JsonInstant.parseToJsonElement(trim()).jsonObject }.getOrNull()
+        ?: return cleanLifeEventText(320)
+    val score = output["score"]?.jsonPrimitive?.intOrNull
+    val maxScore = output["max_score"]?.jsonPrimitive?.intOrNull
+    val found = output["signals_found"]?.jsonPrimitive?.intOrNull
+    val result = output["result"]?.jsonPrimitive?.contentOrNull.orEmpty().trim()
+    return buildString {
+        append("信号寻踪")
+        if (score != null && maxScore != null) append("得分 $score/$maxScore")
+        if (found != null) append("，找到 $found 个信号")
+        if (result.isNotBlank()) append("。$result")
+    }.cleanLifeEventText(320)
 }
 
 private fun String.cleanLifeEventText(maxLength: Int): String = lineSequence()

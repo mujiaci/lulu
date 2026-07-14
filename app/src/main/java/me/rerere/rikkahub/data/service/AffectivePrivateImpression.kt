@@ -39,7 +39,7 @@ internal fun buildCompanionPrivateImpression(
         recentChanges.isEmpty()
     ) return previous
 
-    return mergeCompanionPrivateImpression(
+    val merged = mergeCompanionPrivateImpression(
         previous = previous,
         summary = summary,
         observedTraits = traits,
@@ -48,4 +48,12 @@ internal fun buildCompanionPrivateImpression(
         recentChanges = recentChanges,
         nowMillis = nowMillis,
     )
+    return if (merged.sameImpressionContent(previous)) previous else merged
 }
+
+private fun CompanionPrivateImpression.sameImpressionContent(other: CompanionPrivateImpression): Boolean =
+    summary == other.summary &&
+        observedTraits == other.observedTraits &&
+        preferences == other.preferences &&
+        boundaries == other.boundaries &&
+        recentChanges == other.recentChanges

@@ -73,6 +73,7 @@ import me.rerere.rikkahub.data.ai.tools.SystemToolOption
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
+import me.rerere.rikkahub.data.ai.tools.createCompanionGameTool
 import me.rerere.rikkahub.data.ai.tools.activeModelTools
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
@@ -134,6 +135,7 @@ import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
 import me.rerere.rikkahub.data.service.buildCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidates
+import me.rerere.rikkahub.data.service.syncCompanionPrivateImpression
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -627,6 +629,10 @@ class ChatService(
             .deduplicateByToolName()
             .selectRelevantToolsForPrompt(hiddenMessages)
         val latestUserText = hiddenMessages.lastOrNull { it.role == MessageRole.USER }?.toText().orEmpty()
+        memoryBankService.syncCompanionPrivateImpression(
+            companionRuntime = companionRuntime,
+            assistantId = assistant.id.toString(),
+        )
         val memoryContext = memoryBankService.buildRecallContext(
             assistantId = assistant.id.toString(),
             query = latestUserText,
@@ -890,6 +896,11 @@ class ChatService(
             val allTools = buildAvailableTools(settings, assistant, conversationId)
                 .deduplicateByToolName()
                 .selectRelevantToolsForPrompt(conversation.currentMessages)
+            memoryBankService.syncCompanionPrivateImpression(
+                companionRuntime = companionRuntime,
+                assistantId = assistant.id.toString(),
+                nowMillis = turnStartedAt,
+            )
             val memoryContext = memoryBankService.buildRecallContext(
                 assistantId = assistant.id.toString(),
                 query = latestUserText,
@@ -1559,6 +1570,7 @@ class ChatService(
         conversationId: Uuid? = null,
     ): List<Tool> = buildList {
         add(createTodayStudyPlanTool(assistant.id.toString(), assistant.name))
+        add(createCompanionGameTool(assistant.id.toString()))
         conversationId?.let { add(createFavoriteCurrentUserMessageTool(it)) }
         if (settings.enableWebSearch) {
             addAll(createSearchTools(settings))

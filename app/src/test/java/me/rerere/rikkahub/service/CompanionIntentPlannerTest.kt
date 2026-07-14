@@ -46,6 +46,22 @@ class CompanionIntentPlannerTest {
     }
 
     @Test
+    fun `background fallback may choose a real private activity during quiet time`() {
+        val decision = CompanionIntentFallbackPlanner.plan(
+            CompanionIntentInput(
+                perception = perception(availableTools = setOf("play_companion_game")),
+                mode = CompanionDecisionMode.BACKGROUND,
+                minutesSinceLastChat = 60L,
+            ),
+        )
+
+        assertEquals(CompanionIntent.SELF_ACTIVITY, decision.intent)
+        assertFalse(decision.shouldMessageNow)
+        assertEquals("play_companion_game", decision.actionToolName)
+        assertTrue(decision.actionArgumentsJson.contains("curious"))
+    }
+
+    @Test
     fun `background fallback respects unresolved relationship tension`() {
         val tenseSnapshot = CompanionSnapshot.empty("assistant-a").copy(
             relationship = CompanionRelationshipState(unresolvedTension = 0.8f),
@@ -109,9 +125,26 @@ class CompanionIntentPlannerTest {
 
         assertTrue(prompt.contains("A restrained housekeeper persona"))
         assertTrue(prompt.contains("<companion_runtime"))
-        assertTrue(prompt.contains("FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, WAIT"))
+        assertTrue(prompt.contains("FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, SELF_ACTIVITY, WAIT"))
         assertTrue(prompt.contains("用户曾明确说过早晨很难醒。"))
         assertFalse(prompt.contains("study-supervisor"))
+    }
+
+    @Test
+    fun `model self activity requires a real available action tool`() {
+        val accepted = CompanionIntentModelPlanner.parsePlan(
+            rawText = """{"intent":"SELF_ACTIVITY","actionToolName":"play_companion_game","actionArguments":{"strategy":"careful"}}""",
+            availableToolNames = setOf("play_companion_game"),
+        )
+        val rejected = CompanionIntentModelPlanner.parsePlan(
+            rawText = """{"intent":"SELF_ACTIVITY","actionToolName":"imaginary_game"}""",
+            availableToolNames = setOf("play_companion_game"),
+        )
+
+        assertEquals(CompanionIntent.SELF_ACTIVITY, accepted?.intent)
+        assertEquals("play_companion_game", accepted?.actionToolName)
+        assertTrue(accepted?.actionArgumentsJson?.contains("careful") == true)
+        assertEquals(null, rejected)
     }
 
     @Test

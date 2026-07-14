@@ -56,8 +56,11 @@ import me.rerere.rikkahub.data.companion.CompanionPrivateImpression
 import me.rerere.rikkahub.data.companion.CompanionRelationshipEvent
 import me.rerere.rikkahub.data.companion.CompanionRelationshipState
 import me.rerere.rikkahub.data.companion.CompanionStore
+import me.rerere.rikkahub.data.companion.CompanionRuntime
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.service.ProactiveMessageService
+import me.rerere.rikkahub.data.service.MemoryBankService
+import me.rerere.rikkahub.data.service.syncCompanionPrivateImpression
 import me.rerere.rikkahub.ui.components.ui.UIAvatar
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.theme.CustomColors
@@ -74,6 +77,8 @@ fun CihaiPage(onBack: () -> Unit) {
     val settings = LocalSettings.current
     val store = koinInject<CihaiStore>()
     val companionStore = koinInject<CompanionStore>()
+    val companionRuntime = koinInject<CompanionRuntime>()
+    val memoryBankService = koinInject<MemoryBankService>()
     val state by store.state.collectAsState()
     val companionState by companionStore.state.collectAsState()
     val scope = rememberCoroutineScope()
@@ -94,6 +99,10 @@ fun CihaiPage(onBack: () -> Unit) {
         if (state.selectedAssistantId != selectedAssistantId) {
             store.selectAssistant(selectedAssistantId)
         }
+        memoryBankService.syncCompanionPrivateImpression(
+            companionRuntime = companionRuntime,
+            assistantId = selectedAssistantId,
+        )
     }
 
     Scaffold(containerColor = CustomColors.topBarColors.containerColor) { padding ->

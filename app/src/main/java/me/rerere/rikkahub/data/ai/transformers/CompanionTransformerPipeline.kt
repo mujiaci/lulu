@@ -16,6 +16,7 @@ internal val companionOutputTransformers: List<OutputMessageTransformer> = listO
     Base64ImageToLocalFileTransformer,
     RegexOutputTransformer,
     LuluExpressionOutputTransformer,
+    CompanionLifeClaimOutputTransformer,
 )
 
 internal fun List<InputMessageTransformer>.withRequiredAssistantPromptContext(): List<InputMessageTransformer> =

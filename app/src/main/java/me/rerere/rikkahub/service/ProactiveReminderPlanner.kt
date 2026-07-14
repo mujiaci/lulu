@@ -31,6 +31,7 @@ fun CompanionIntentDecision.toProactiveReminderPlan(
         CompanionIntent.STAY_AVAILABLE,
         CompanionIntent.OBSERVE,
         CompanionIntent.REACH_OUT -> ProactiveReminderKind.GENERAL
+        CompanionIntent.SELF_ACTIVITY,
         CompanionIntent.WAIT -> return null
     }
     return ProactiveReminderPlan(

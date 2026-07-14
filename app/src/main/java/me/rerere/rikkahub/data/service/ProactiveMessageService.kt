@@ -37,6 +37,7 @@ import me.rerere.rikkahub.data.ai.tools.createAlarmTool
 import me.rerere.rikkahub.data.ai.tools.createSearchTools
 import me.rerere.rikkahub.data.ai.tools.createSkillTools
 import me.rerere.rikkahub.data.ai.tools.createTodayStudyPlanTool
+import me.rerere.rikkahub.data.ai.tools.createCompanionGameTool
 import me.rerere.rikkahub.data.ai.tools.deduplicateByToolName
 import me.rerere.rikkahub.data.ai.tools.activeModelTools
 import me.rerere.rikkahub.data.ai.tools.selectRelevantToolsForPrompt
@@ -1039,6 +1040,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     executingCommitment?.promise,
                     historyMessages.lastOrNull { it.role == MessageRole.USER }?.toText(),
                 ).filter(String::isNotBlank).joinToString("\n")
+                memoryBankService.syncCompanionPrivateImpression(
+                    companionRuntime = companionRuntime,
+                    assistantId = assistantUuid.toString(),
+                    nowMillis = nowMillis,
+                )
                 val memoryContext = memoryBankService.buildRecallContext(
                     assistantId = assistantUuid.toString(),
                     query = memoryQuery,
@@ -1135,6 +1141,64 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         passiveFacts = passiveFacts,
                         memoryContext = memoryContext,
                     )
+                }
+                if (!isTargetedTrigger && autonomousPlan?.intent == CompanionIntent.SELF_ACTIVITY) {
+                    val execution = executeAutonomousSelfActivity(
+                        tools = activeTools,
+                        plan = autonomousPlan,
+                        nowMillis = nowMillis,
+                    )
+                    val activityEvent = execution?.let { toolExecution ->
+                        buildToolLifeEvent(
+                            assistantId = assistant.id.toString(),
+                            execution = toolExecution,
+                            source = CompanionLifeEventSource.AGENT,
+                            nowMillis = nowMillis,
+                        )
+                    }
+                    val completed = activityEvent?.status == me.rerere.rikkahub.data.companion.CompanionLifeEventStatus.COMPLETED
+                    runCatching {
+                        val plannedState = buildAutonomousPlanPresenceState(
+                            previous = companionRuntime.snapshot(assistant.id.toString()).state,
+                            assistantName = assistant.name,
+                            plan = autonomousPlan,
+                            nowMillis = nowMillis,
+                        )
+                        persistCompanionState(
+                            assistant = assistant,
+                            state = plannedState.copy(
+                                statusText = if (completed) "刚玩完一局" else "刚试着做件自己的事",
+                                mindState = if (completed) "还在回味刚才的选择" else "记着这次没有完成",
+                                activityMode = if (completed) "playing" else "waiting",
+                                selfScene = if (completed) {
+                                    "${assistant.name.ifBlank { "当前角色" }}刚刚在 App 里真实完成了一局信号寻踪，结果已经留在生活记录里。"
+                                } else {
+                                    "${assistant.name.ifBlank { "当前角色" }}刚才尝试进行一次自己的数字活动，但没有把它说成已经完成。"
+                                },
+                            ),
+                            nowMillis = nowMillis,
+                            lifeEvents = listOfNotNull(
+                                buildAutonomousReflectionLifeEvent(
+                                    assistantId = assistant.id.toString(),
+                                    reason = autonomousPlan.reason,
+                                    reviewedMemory = memoryContext.isNotBlank(),
+                                    evidenceReference = "autonomous:self_activity:${nowMillis / 3_600_000L}",
+                                    nowMillis = nowMillis,
+                                ),
+                                activityEvent,
+                            ),
+                        )
+                    }.onFailure { error ->
+                        Log.w(TAG, "Failed to execute autonomous self activity", error)
+                    }
+                    ProactiveMessageService.scheduleNext(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        minutesSinceLastChat = minutesSinceLastChat,
+                        assistantId = assistantUuid,
+                    )
+                    stopSelf()
+                    return@launch
                 }
                 if (!isTargetedTrigger && autonomousPlan?.intent == CompanionIntent.WAIT) {
                     Log.d(TAG, "Companion intent planner chose not to disturb")
@@ -1846,6 +1910,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     ): List<Tool> {
         return buildList {
             add(createTodayStudyPlanTool(assistant.id.toString(), assistant.name))
+            add(createCompanionGameTool(assistant.id.toString()))
 
             // 搜索工具
             if (settings.enableWebSearch) {
@@ -1965,6 +2030,32 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         return modelPlan ?: CompanionIntentFallbackPlanner.plan(input)
     }
 
+    private suspend fun executeAutonomousSelfActivity(
+        tools: List<Tool>,
+        plan: CompanionIntentDecision,
+        nowMillis: Long,
+    ): CompanionToolExecution? {
+        val toolName = plan.actionToolName?.takeIf { it in AUTONOMOUS_SELF_ACTIVITY_TOOLS } ?: return null
+        val tool = tools.firstOrNull { it.name == toolName } ?: return null
+        val input = runCatching {
+            JsonInstant.parseToJsonElement(plan.actionArgumentsJson.ifBlank { "{}" })
+        }.getOrElse { JsonObject(emptyMap()) }
+        val output = runCatching { tool.execute(input) }
+            .getOrElse { error ->
+                listOf(
+                    UIMessagePart.Text(
+                        """{"success":false,"error":${JsonPrimitive(error.message ?: "Autonomous activity failed")}}""",
+                    ),
+                )
+            }
+        return CompanionToolExecution(
+            toolCallId = "autonomous:$toolName:$nowMillis",
+            toolName = toolName,
+            inputJson = input.toString(),
+            outputText = output.filterIsInstance<UIMessagePart.Text>().joinToString("\n") { it.text },
+        )
+    }
+
     private fun Assistant.toLuluPlannerPersona(
         messages: List<UIMessage>,
         settings: Settings,
@@ -2063,6 +2154,7 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.STAY_AVAILABLE -> "我先不打断，把注意留在这里，等下一次有意义的变化。"
             CompanionIntent.REACH_OUT -> "安静了一阵，我想按自己的人设确认现在是否适合开口。"
             CompanionIntent.OBSERVE -> "我先重新看清上下文，再决定行动和表达。"
+            CompanionIntent.SELF_ACTIVITY -> "现在不用打扰你，我想自己做一件真实的小事。"
             CompanionIntent.WAIT -> "现在没有足够理由打扰，我先保持安静。"
         }
     val name = assistantName.ifBlank { "当前角色" }
@@ -2072,6 +2164,7 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.STAY_AVAILABLE, CompanionIntent.OBSERVE -> "在心里记着"
             CompanionIntent.FOLLOW_UP -> "记着后续"
             CompanionIntent.REACH_OUT -> "想主动联系"
+            CompanionIntent.SELF_ACTIVITY -> "想做件自己的事"
         },
         innerThought = innerVoice,
         mindState = when (plan.intent) {
@@ -2080,8 +2173,13 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.REACH_OUT -> "想着怎样自然开口"
             CompanionIntent.OBSERVE -> "重新确认现在的情况"
             CompanionIntent.FOLLOW_UP -> "记着接下来要照看的事"
+            CompanionIntent.SELF_ACTIVITY -> "选择一件可以真实完成的小活动"
         },
-        activityMode = if (plan.intent == CompanionIntent.OBSERVE) "observing" else "waiting",
+        activityMode = when (plan.intent) {
+            CompanionIntent.OBSERVE -> "observing"
+            CompanionIntent.SELF_ACTIVITY -> "playing"
+            else -> "waiting"
+        },
         updatedAt = nowMillis,
         sinceAt = nowMillis,
         selfScene = when (plan.intent) {
@@ -2090,9 +2188,12 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.OBSERVE -> "$name 正在重新看清现在的情况，还没有急着开口。"
             CompanionIntent.FOLLOW_UP -> "$name 把要继续确认的事记在心里，等合适的时候回来。"
             CompanionIntent.REACH_OUT -> "$name 正在斟酌怎样自然地开口联系你。"
+            CompanionIntent.SELF_ACTIVITY -> "$name 决定不打扰你，转身去完成一件 App 里真实存在的小活动。"
         },
     )
 }
+
+private val AUTONOMOUS_SELF_ACTIVITY_TOOLS = setOf("play_companion_game")
 
 internal fun composeProactiveGenerationMessages(
     historyMessages: List<UIMessage>,

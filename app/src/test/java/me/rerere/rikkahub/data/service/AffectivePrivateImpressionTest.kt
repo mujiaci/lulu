@@ -46,4 +46,27 @@ class AffectivePrivateImpressionTest {
         assertEquals(listOf("不能编造已经发生的角色生活"), impression.boundaries)
         assertEquals(500L, impression.updatedAt)
     }
+
+    @Test
+    fun `unchanged impression candidates do not rewrite the timestamp`() {
+        val previous = CompanionPrivateImpression(
+            preferences = listOf("不喜欢空泛打鸡血"),
+            updatedAt = 100L,
+        )
+
+        val impression = buildCompanionPrivateImpression(
+            previous = previous,
+            candidates = listOf(
+                AffectiveMemoryCandidate(
+                    type = "user_preference",
+                    content = "不喜欢空泛打鸡血",
+                    importance = 4,
+                    confidence = 0.9,
+                ),
+            ),
+            nowMillis = 500L,
+        )
+
+        assertEquals(previous, impression)
+    }
 }

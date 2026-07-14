@@ -19,6 +19,7 @@ import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
+import me.rerere.rikkahub.data.companion.CompanionPrivateImpression
 import me.rerere.rikkahub.utils.JsonInstant
 import okhttp3.OkHttpClient
 import kotlin.math.ln
@@ -35,6 +36,16 @@ private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
 private const val LAST_LIGHT_MAINTENANCE_KEY = "last_light_maintenance_at"
 private const val LAST_HEAVY_MAINTENANCE_KEY = "last_heavy_maintenance_at"
 private const val MAX_PROCESSED_MEMORY_NODE_IDS = 5_000
+private const val STORED_IMPRESSION_MEMORY_LIMIT = 400
+private const val MAX_ARCHIVES_CREATED_PER_MAINTENANCE = 6
+private val PRIVATE_IMPRESSION_MEMORY_KINDS = setOf(
+    "user_fact",
+    "user_preference",
+    "user_boundary",
+    "relationship",
+    "shared_event",
+    "correction",
+)
 
 class MemoryBankService(
     private val memoryBankDAO: MemoryBankDAO,
@@ -55,6 +66,8 @@ class MemoryBankService(
 
     data class MaintenanceResult(
         val deprecatedDuplicateCount: Int = 0,
+        val createdDailyArchiveCount: Int = 0,
+        val createdMonthlyArchiveCount: Int = 0,
     )
 
     private var lastLightMaintenanceAt: Long = 0L
@@ -64,6 +77,26 @@ class MemoryBankService(
 
     suspend fun getAssistantIds(): List<String> = withContext(Dispatchers.IO) {
         memoryBankDAO.getDistinctAssistantIds()
+    }
+
+    suspend fun buildStoredPrivateImpression(
+        assistantId: String,
+        previous: CompanionPrivateImpression,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): CompanionPrivateImpression = withContext(Dispatchers.IO) {
+        if (assistantId.isBlank()) return@withContext previous
+        val candidates = memoryBankDAO.getMemoriesByAssistant(assistantId)
+            .asSequence()
+            .filter { memory -> !memory.deprecated && memory.confidence >= 0.6 && memory.importance >= 2 }
+            .sortedBy(MemoryBankEntity::createdAt)
+            .toList()
+            .takeLast(STORED_IMPRESSION_MEMORY_LIMIT)
+            .mapNotNull(MemoryBankEntity::toPrivateImpressionCandidate)
+        buildCompanionPrivateImpression(
+            previous = previous,
+            candidates = candidates,
+            nowMillis = nowMillis,
+        )
     }
 
     suspend fun getStats(assistantId: String? = null): MemoryStats = withContext(Dispatchers.IO) {
@@ -198,7 +231,11 @@ class MemoryBankService(
                 correctedAt = now,
             )
         }
-        MaintenanceResult(deprecatedDuplicateCount = deprecated.size)
+        val dailyArchives = createMissingDailyArchives(now)
+        MaintenanceResult(
+            deprecatedDuplicateCount = deprecated.size,
+            createdDailyArchiveCount = dailyArchives.size,
+        )
     }
 
     suspend fun runHeavyMaintenance(limit: Int = 800): MaintenanceResult = withContext(Dispatchers.IO) {
@@ -215,7 +252,35 @@ class MemoryBankService(
                 correctedAt = now,
             )
         }
-        MaintenanceResult(deprecatedDuplicateCount = deprecated.size)
+        val dailyArchives = createMissingDailyArchives(now)
+        val monthlyArchives = createMissingMonthlyArchives(now)
+        MaintenanceResult(
+            deprecatedDuplicateCount = deprecated.size,
+            createdDailyArchiveCount = dailyArchives.size,
+            createdMonthlyArchiveCount = monthlyArchives.size,
+        )
+    }
+
+    private suspend fun createMissingDailyArchives(nowMillis: Long): List<MemoryBankEntity> {
+        val memories = memoryBankDAO.getDistinctAssistantIds()
+            .flatMap { assistantId -> memoryBankDAO.getMemoriesByAssistant(assistantId) }
+        return buildMissingDailyMemoryArchives(memories, nowMillis = nowMillis)
+            .take(MAX_ARCHIVES_CREATED_PER_MAINTENANCE)
+            .map { archive ->
+                val id = memoryBankDAO.insertMemory(archive).toInt()
+                archive.copy(id = id)
+            }
+    }
+
+    private suspend fun createMissingMonthlyArchives(nowMillis: Long): List<MemoryBankEntity> {
+        val memories = memoryBankDAO.getDistinctAssistantIds()
+            .flatMap { assistantId -> memoryBankDAO.getMemoriesByAssistant(assistantId) }
+        return buildMissingMonthlyMemoryArchives(memories, nowMillis = nowMillis)
+            .take(MAX_ARCHIVES_CREATED_PER_MAINTENANCE)
+            .map { archive ->
+                val id = memoryBankDAO.insertMemory(archive).toInt()
+                archive.copy(id = id)
+            }
     }
 
     suspend fun runAutoMaintenanceIfDue(now: Long = System.currentTimeMillis()) {
@@ -606,6 +671,8 @@ private fun buildMemoryRecallContextFromSelected(
     if (selected.isEmpty()) return ""
 
     val sections = listOf(
+        "月度核心记忆" to selected.filter { it.recallSectionTitle() == "月度核心记忆" },
+        "每日归档" to selected.filter { it.recallSectionTitle() == "每日归档" },
         "长期印象" to selected.filter { it.recallSectionTitle() == "长期印象" },
         "最近情感记忆" to selected.filter { it.recallSectionTitle() == "最近情感记忆" },
         "身体和五感" to selected.filter { it.bodySense.isNotBlankValue() || it.recallSectionTitle() == "身体和五感" },
@@ -832,12 +899,31 @@ private fun MemoryBankEntity.maintenanceKeepScore(): Double =
         createdAt.coerceAtLeast(0L) / 1_000_000_000_000.0
 
 private fun MemoryBankEntity.recallSectionTitle(): String = when (memoryKind ?: type) {
+    "monthly_archive", "phase_summary" -> "月度核心记忆"
+    "daily_archive", "daily_summary" -> "每日归档"
     "role_emotion" -> "最近情感记忆"
     "body_sense" -> "身体和五感"
     "promise" -> "未完成承诺"
     "relationship" -> "关系变化"
     "user_preference", "manual" -> "长期印象"
     else -> "当前相关回忆"
+}
+
+private fun MemoryBankEntity.toPrivateImpressionCandidate(): AffectiveMemoryCandidate? {
+    val kind = memoryKind?.trim()?.takeIf { it in PRIVATE_IMPRESSION_MEMORY_KINDS } ?: return null
+    if (content.isBlank()) return null
+    return AffectiveMemoryCandidate(
+        type = kind,
+        content = content,
+        title = title,
+        roleFeeling = roleFeeling,
+        bodySense = bodySense,
+        unspokenThought = unspokenThought,
+        userSignal = userSignal,
+        relationshipEffect = relationshipEffect,
+        importance = importance,
+        confidence = confidence,
+    )
 }
 
 private fun MemoryBankEntity.recallScore(
@@ -990,7 +1076,16 @@ private fun MemoryBankEntity.toRecallLine(maxContentLength: Int): String {
         relationshipEffect?.takeIf { it.isNotBlank() }?.let { add("我的关系判断：$it") }
     }
     val prefix = if (confidence < 0.7) "可能：" else ""
-    return (prefix + parts.joinToString("；")).ellipsize(maxContentLength)
+    val dateLabel = createdAt.takeIf { it > 0L }?.let { timestamp ->
+        runCatching {
+            java.time.Instant.ofEpochMilli(timestamp)
+                .atZone(java.time.ZoneId.systemDefault())
+                .toLocalDate()
+                .toString()
+        }.getOrNull()
+    }
+    val dated = if (dateLabel != null) "[$dateLabel] " else ""
+    return (dated + prefix + parts.joinToString("；")).ellipsize(maxContentLength)
 }
 
 private fun String?.isNotBlankValue(): Boolean = this != null && isNotBlank()
@@ -1035,3 +1130,127 @@ private fun String.recallQueryTerms(): List<String> {
         .take(24)
         .toList()
 }
+
+internal fun buildMissingDailyMemoryArchives(
+    memories: List<MemoryBankEntity>,
+    nowMillis: Long,
+    zoneId: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+): List<MemoryBankEntity> {
+    val today = java.time.Instant.ofEpochMilli(nowMillis).atZone(zoneId).toLocalDate()
+    val existingKeys = memories.asSequence()
+        .filter { it.type == "daily_summary" || it.memoryKind == "daily_archive" }
+        .mapNotNull { memory -> memory.assistantId?.let { it to memory.dateGroup.orEmpty() } }
+        .toSet()
+    return memories.asSequence()
+        .filter { memory ->
+            !memory.deprecated &&
+                !memory.assistantId.isNullOrBlank() &&
+                memory.id > 0 &&
+                memory.content.isNotBlank() &&
+                memory.type !in setOf("daily_summary", "phase_summary") &&
+                memory.memoryKind !in setOf("daily_archive", "monthly_archive")
+        }
+        .groupBy { memory ->
+            val date = java.time.Instant.ofEpochMilli(memory.createdAt).atZone(zoneId).toLocalDate()
+            memory.assistantId.orEmpty() to date
+        }
+        .asSequence()
+        .filter { (key, items) -> key.second < today && items.size >= MIN_DAILY_ARCHIVE_SOURCE_COUNT }
+        .filterNot { (key, _) -> (key.first to key.second.toString()) in existingKeys }
+        .sortedByDescending { (key, _) -> key.second }
+        .map { (key, items) ->
+            val selected = items
+                .sortedWith(compareByDescending<MemoryBankEntity> { it.importance }.thenByDescending { it.createdAt })
+                .take(MAX_DAILY_ARCHIVE_ITEMS)
+                .sortedBy { it.createdAt }
+            val content = selected.joinToString("\n", prefix = "这一天留下的真实记忆索引：\n") { memory ->
+                val time = java.time.Instant.ofEpochMilli(memory.createdAt).atZone(zoneId).toLocalTime()
+                "- [${"%02d:%02d".format(time.hour, time.minute)}] ${memory.content.compactArchiveText(220)}"
+            }.take(MAX_DAILY_ARCHIVE_CONTENT_LENGTH)
+            MemoryBankEntity(
+                content = content,
+                type = "daily_summary",
+                title = "${key.second} 的记忆归档",
+                memoryKind = "daily_archive",
+                importance = selected.maxOfOrNull { it.importance }?.coerceAtLeast(3) ?: 3,
+                confidence = selected.map { it.confidence }.average().takeIf { !it.isNaN() } ?: 0.8,
+                embeddingText = content,
+                relatedMemoryIdsJson = JsonInstant.encodeToString(
+                    ListSerializer(String.serializer()),
+                    selected.map { it.id.toString() },
+                ),
+                assistantId = key.first,
+                createdAt = selected.maxOf { it.createdAt },
+                dateGroup = key.second.toString(),
+                vectorStatus = "pending",
+            )
+        }
+        .toList()
+}
+
+internal fun buildMissingMonthlyMemoryArchives(
+    memories: List<MemoryBankEntity>,
+    nowMillis: Long,
+    zoneId: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+): List<MemoryBankEntity> {
+    val currentMonth = java.time.YearMonth.from(java.time.Instant.ofEpochMilli(nowMillis).atZone(zoneId))
+    val existingKeys = memories.asSequence()
+        .filter { it.type == "phase_summary" || it.memoryKind == "monthly_archive" }
+        .mapNotNull { memory -> memory.assistantId?.let { it to memory.dateGroup.orEmpty() } }
+        .toSet()
+    return memories.asSequence()
+        .filter { memory ->
+            !memory.deprecated &&
+                !memory.assistantId.isNullOrBlank() &&
+                memory.content.isNotBlank() &&
+                (memory.type == "daily_summary" || memory.memoryKind == "daily_archive")
+        }
+        .mapNotNull { memory ->
+            val month = runCatching {
+                java.time.YearMonth.parse(memory.dateGroup.orEmpty().take(7))
+            }.getOrNull() ?: return@mapNotNull null
+            Triple(memory.assistantId.orEmpty(), month, memory)
+        }
+        .groupBy { (assistantId, month, _) -> assistantId to month }
+        .asSequence()
+        .filter { (key, items) -> key.second < currentMonth && items.size >= MIN_MONTHLY_ARCHIVE_SOURCE_COUNT }
+        .filterNot { (key, _) -> (key.first to key.second.toString()) in existingKeys }
+        .sortedByDescending { (key, _) -> key.second }
+        .map { (key, triples) ->
+            val selected = triples.map { it.third }.sortedBy { it.dateGroup }
+            val content = selected.joinToString("\n", prefix = "这个月由每日真实归档汇成：\n") { memory ->
+                "- [${memory.dateGroup}] ${memory.content.compactArchiveText(320)}"
+            }.take(MAX_MONTHLY_ARCHIVE_CONTENT_LENGTH)
+            MemoryBankEntity(
+                content = content,
+                type = "phase_summary",
+                title = "${key.second} 的月度核心记忆",
+                memoryKind = "monthly_archive",
+                importance = selected.maxOfOrNull { it.importance }?.coerceAtLeast(4) ?: 4,
+                confidence = selected.map { it.confidence }.average().takeIf { !it.isNaN() } ?: 0.8,
+                embeddingText = content,
+                relatedMemoryIdsJson = JsonInstant.encodeToString(
+                    ListSerializer(String.serializer()),
+                    selected.map { it.id.toString() },
+                ),
+                assistantId = key.first,
+                createdAt = selected.maxOf { it.createdAt },
+                dateGroup = key.second.toString(),
+                vectorStatus = "pending",
+            )
+        }
+        .toList()
+}
+
+private fun String.compactArchiveText(maxLength: Int): String = lineSequence()
+    .map(String::trim)
+    .filter(String::isNotBlank)
+    .joinToString(" ")
+    .replace(Regex("\\s+"), " ")
+    .take(maxLength)
+
+private const val MIN_DAILY_ARCHIVE_SOURCE_COUNT = 2
+private const val MIN_MONTHLY_ARCHIVE_SOURCE_COUNT = 2
+private const val MAX_DAILY_ARCHIVE_ITEMS = 6
+private const val MAX_DAILY_ARCHIVE_CONTENT_LENGTH = 1_800
+private const val MAX_MONTHLY_ARCHIVE_CONTENT_LENGTH = 2_800

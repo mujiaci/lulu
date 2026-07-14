@@ -34,6 +34,8 @@ data class CompanionIntentDecision(
     val innerThought: String = "",
     val followUps: List<CompanionFollowUpPlan> = emptyList(),
     val category: String? = null,
+    val actionToolName: String? = null,
+    val actionArgumentsJson: String = "{}",
     val fromModel: Boolean = false,
 )
 
@@ -48,6 +50,7 @@ enum class CompanionIntent {
     STAY_AVAILABLE,
     REACH_OUT,
     OBSERVE,
+    SELF_ACTIVITY,
     WAIT,
 }
 
@@ -75,6 +78,29 @@ object CompanionIntentFallbackPlanner {
                 tone = "Follow the persona and current relationship boundaries.",
                 innerThought = "我先重新看清现在的情况，再决定要不要开口。",
                 category = "concern",
+            )
+        }
+
+        val recentlyPlayed = input.perception.recentLifeEvents.any { event ->
+            event.type == me.rerere.rikkahub.data.companion.CompanionLifeEventType.GAME &&
+                input.perception.nowMillis - (event.endedAt ?: event.startedAt) < SELF_ACTIVITY_COOLDOWN_MILLIS
+        }
+        if (
+            "play_companion_game" in input.perception.availableToolNames &&
+            input.minutesSinceLastChat in SELF_ACTIVITY_MIN_IDLE_MINUTES until DEFAULT_REACH_OUT_MINUTES &&
+            !recentlyPlayed
+        ) {
+            return CompanionIntentDecision(
+                intent = CompanionIntent.SELF_ACTIVITY,
+                shouldMessageNow = false,
+                delayMinutes = null,
+                toolNames = emptyList(),
+                reason = "The character has quiet time and chose one real app-local activity without interrupting the user.",
+                tone = "No user-facing message is needed for this private activity.",
+                innerThought = "现在不用打扰你，我想自己去玩一小局，再把真实结果留下来。",
+                category = "digital_life",
+                actionToolName = "play_companion_game",
+                actionArgumentsJson = """{"strategy":"curious"}""",
             )
         }
 
@@ -114,6 +140,8 @@ object CompanionIntentFallbackPlanner {
     ).filter { it in available }
 
     private const val DEFAULT_REACH_OUT_MINUTES = 120L
+    private const val SELF_ACTIVITY_MIN_IDLE_MINUTES = 45L
+    private const val SELF_ACTIVITY_COOLDOWN_MILLIS = 6L * 60L * 60L * 1_000L
     private const val MAX_FALLBACK_REACH_OUT_TENSION = 0.5f
 }
 
@@ -151,8 +179,10 @@ object CompanionIntentModelPlanner {
         appendLine("The role persona is authoritative. The runtime core must not assume housekeeper, lover, friend, or supervisor behavior.")
         appendLine("Use evidence from the unified runtime snapshot. Existing commitments are durable and ordinary chat never cancels them.")
         appendLine("A model may propose changes, but deterministic reducers validate identity, time, transitions, and relationship deltas.")
-        appendLine("Return JSON only with: intent, shouldMessageNow, delayMinutes, toolNames, reason, tone, innerThought, category, followUps.")
-        appendLine("intent must be one of FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, WAIT.")
+        appendLine("Return JSON only with: intent, shouldMessageNow, delayMinutes, toolNames, reason, tone, innerThought, category, followUps, actionToolName, actionArguments.")
+        appendLine("intent must be one of FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, SELF_ACTIVITY, WAIT.")
+        appendLine("SELF_ACTIVITY means silently doing one real App-local action. It requires an available actionToolName and JSON object actionArguments; never invent completion and do not send a user-facing message merely to narrate it.")
+        appendLine("Do not repeat the same SELF_ACTIVITY when recent_digital_life already contains it within roughly six hours.")
         appendLine("followUps contains objects with delayMinutes, reason, and optional category. Schedule only useful next perception points.")
         appendLine("Never prewrite a future message. Never increase closeness merely because time passed.")
         appendLine("Formal diary writing requires the explicit write_lulu_journal tool and new concrete content.")
@@ -183,6 +213,10 @@ object CompanionIntentModelPlanner {
             JsonInstant.parseToJsonElement(rawText.extractCompanionJsonPayload())
         }.getOrNull() as? JsonObject ?: return null
         val intent = root.string("intent")?.toCompanionIntent() ?: return null
+        val actionToolName = root.string("actionToolName")
+            ?.trim()
+            ?.takeIf { it in availableToolNames }
+        if (intent == CompanionIntent.SELF_ACTIVITY && actionToolName == null) return null
         val shouldMessageNow = root["shouldMessageNow"]?.jsonPrimitive?.booleanOrNull
             ?: (intent == CompanionIntent.REACH_OUT)
         val delayMinutes = root["delayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60)
@@ -209,6 +243,10 @@ object CompanionIntentModelPlanner {
                 ?: fallbackCompanionInnerThought(intent),
             followUps = parseFollowUps(root),
             category = root.string("category")?.trim()?.take(60)?.takeIf(String::isNotBlank),
+            actionToolName = actionToolName,
+            actionArgumentsJson = (root["actionArguments"] as? JsonObject)?.toString()
+                ?: root.string("actionArgumentsJson")?.take(1_200)
+                ?: "{}",
             fromModel = true,
         )
     }
@@ -243,6 +281,7 @@ private fun String.toCompanionIntent(): CompanionIntent? = when (trim().uppercas
     "STAY_AVAILABLE", "STAY_NEAR" -> CompanionIntent.STAY_AVAILABLE
     "REACH_OUT" -> CompanionIntent.REACH_OUT
     "OBSERVE", "CHECK_CONTEXT" -> CompanionIntent.OBSERVE
+    "SELF_ACTIVITY", "PRIVATE_ACTIVITY", "PLAY" -> CompanionIntent.SELF_ACTIVITY
     "WAIT", "DO_NOT_DISTURB" -> CompanionIntent.WAIT
     else -> null
 }
@@ -252,6 +291,7 @@ private fun fallbackCompanionInnerThought(intent: CompanionIntent): String = whe
     CompanionIntent.STAY_AVAILABLE -> "我先不打断，把注意留在这里，等下一次有意义的变化。"
     CompanionIntent.REACH_OUT -> "安静了一阵，我想按自己的人设自然确认一下现在是否适合开口。"
     CompanionIntent.OBSERVE -> "我先重新看清上下文，再决定行动和表达。"
+    CompanionIntent.SELF_ACTIVITY -> "现在不用打扰你，我想自己做一件真实的小事。"
     CompanionIntent.WAIT -> "现在没有足够理由打扰，我先保持安静。"
 }
 

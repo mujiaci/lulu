@@ -59,6 +59,54 @@ class MemoryBankServiceExtractionTest {
     }
 
     @Test
+    fun `stored durable memories backfill private impression`() = runBlocking {
+        val dao = RecordingMemoryBankDAO(
+            assistantMemories = listOf(
+                MemoryBankEntity(
+                    id = 1,
+                    assistantId = "assistant-1",
+                    content = "用户不喜欢没有证据的生活故事",
+                    memoryKind = "user_boundary",
+                    importance = 5,
+                    confidence = 1.0,
+                    createdAt = 10L,
+                ),
+                MemoryBankEntity(
+                    id = 2,
+                    assistantId = "assistant-1",
+                    content = "用户更喜欢直接落地",
+                    memoryKind = "user_preference",
+                    importance = 4,
+                    confidence = 0.9,
+                    createdAt = 20L,
+                ),
+                MemoryBankEntity(
+                    id = 3,
+                    assistantId = "assistant-1",
+                    content = "已被纠正的旧印象",
+                    memoryKind = "user_fact",
+                    deprecated = true,
+                    importance = 5,
+                    confidence = 1.0,
+                    createdAt = 30L,
+                ),
+            ),
+        )
+        val service = MemoryBankService(dao, okHttpClient = null, context = null)
+
+        val impression = service.buildStoredPrivateImpression(
+            assistantId = "assistant-1",
+            previous = me.rerere.rikkahub.data.companion.CompanionPrivateImpression(),
+            nowMillis = 100L,
+        )
+
+        assertEquals(listOf("用户更喜欢直接落地"), impression.preferences)
+        assertEquals(listOf("用户不喜欢没有证据的生活故事"), impression.boundaries)
+        assertTrue(impression.observedTraits.isEmpty())
+        assertEquals(100L, impression.updatedAt)
+    }
+
+    @Test
     fun `delete all memories removes graph edges before memory rows`() = runBlocking {
         val dao = RecordingMemoryBankDAO()
         val service = MemoryBankService(
