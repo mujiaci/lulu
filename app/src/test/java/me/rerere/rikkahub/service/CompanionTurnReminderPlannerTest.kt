@@ -138,7 +138,7 @@ class CompanionTurnReminderPlannerTest {
 
         val plans = buildCompanionTurnReminderPlans(
             plan = CompanionChatTurnPlan(),
-            userText = "我明天早上七点要起床，你一定叫醒我",
+            userText = "我今天早上七点要起床，你一定叫醒我",
             assistantText = "现在先睡。",
             nowMillis = now,
             zoneId = zone,

@@ -566,7 +566,7 @@ class StudyRulesTest {
 
         val synced = StudyRules.syncPlanTasks(state, date)
 
-        assertTrue(synced.tasks.any { it.title.contains("刑法1入口") })
+        assertTrue(synced.tasks.any { it.title.contains("刑法学第 1 章") })
         assertFalse(synced.generatedSchedules.containsKey(date.toString()))
     }
 
