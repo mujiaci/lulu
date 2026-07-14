@@ -180,7 +180,7 @@ class CompanionIntentPlannerTest {
             CompanionChatTurnPlanInput(perception = packet),
         )
 
-        assertTrue(prompt.contains("当前角色现在想先知道什么"))
+        assertTrue(prompt.contains("本轮聊天前的行动规划"))
         assertTrue(prompt.contains("如果当前角色决定稍后主动找用户"))
         assertTrue(prompt.contains("<companion_runtime"))
         assertTrue(prompt.contains("安静留意"))

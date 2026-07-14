@@ -482,7 +482,9 @@ class CompanionRuntimeReducerTest {
         )
 
         assertEquals(2, reduced.persistedState.snapshots.size)
-        assertEquals(assistantB, reduced.persistedState.snapshots.single { it.assistantId == ASSISTANT_B })
+        val persistedAssistantB = reduced.persistedState.snapshots.single { it.assistantId == ASSISTANT_B }
+        assertEquals(assistantB, persistedAssistantB.copy(goals = emptyList()))
+        assertEquals(defaultCompanionGoals(ASSISTANT_B).map { it.id }, persistedAssistantB.goals.map { it.id })
         assertEquals(emptyList<CompanionConcern>(), reduced.snapshot.concerns)
         assertEquals(emptyList<CompanionCommitment>(), reduced.snapshot.commitments)
         assertEquals(0.5f, reduced.snapshot.relationship.trust)

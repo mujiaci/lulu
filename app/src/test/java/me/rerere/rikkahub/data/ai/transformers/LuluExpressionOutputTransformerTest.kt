@@ -12,20 +12,19 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertSame
 import org.junit.Test
 
 class LuluExpressionOutputTransformerTest {
     @Test
     fun `splits long assistant speech into short bubbles`() {
-        val original = assistantMessage("A\u3002B\u3002C\u3002")
+        val original = assistantMessage("我已经看到啦。现在先陪你理一理。然后我们慢慢来。")
 
         val result = splitLuluAssistantExpressionMessages(listOf(original))
 
         assertEquals(3, result.size)
-        assertEquals("A\u3002", result[0].toText())
-        assertEquals("B\u3002", result[1].toText())
-        assertEquals("C\u3002", result[2].toText())
+        assertEquals("我已经看到啦。", result[0].toText())
+        assertEquals("现在先陪你理一理。", result[1].toText())
+        assertEquals("然后我们慢慢来。", result[2].toText())
         assertEquals(original.id, result[0].id)
         assertEquals(original.modelId, result[1].modelId)
     }
@@ -37,7 +36,7 @@ class LuluExpressionOutputTransformerTest {
         val result = splitLuluAssistantExpressionMessages(listOf(original))
 
         assertEquals(1, result.size)
-        assertSame(original, result.single())
+        assertEquals(original, result.single())
     }
 
     @Test

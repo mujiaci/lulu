@@ -737,7 +737,13 @@ internal fun selectMemoryRecallItems(
     return direct
         .expandGraphMemories(sorted, graphEdges, maxRelatedItems = 2, nowMillis = nowMillis)
         .expandRelatedMemories(sorted, maxRelatedItems = 1)
-        .distinctBy { it.id }
+        .distinctBy { it.recallDistinctKey() }
+}
+
+private fun MemoryBankEntity.recallDistinctKey(): Any = if (id > 0) {
+    id
+} else {
+    listOf(content, type, memoryKind.orEmpty(), createdAt.toString(), embeddingVectorJson.orEmpty())
 }
 
 private fun rankMemoryRecallCandidates(
@@ -1085,7 +1091,7 @@ private fun MemoryBankEntity.toRecallLine(maxContentLength: Int): String {
         }.getOrNull()
     }
     val dated = if (dateLabel != null) "[$dateLabel] " else ""
-    return (dated + prefix + parts.joinToString("；")).ellipsize(maxContentLength)
+    return dated + (prefix + parts.joinToString("；")).ellipsize(maxContentLength)
 }
 
 private fun String?.isNotBlankValue(): Boolean = this != null && isNotBlank()
