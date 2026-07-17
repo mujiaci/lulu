@@ -100,6 +100,13 @@ internal fun reduceCompanionNeuroState(
 internal fun mergeCompanionPrivateImpression(
     previous: CompanionPrivateImpression,
     summary: String? = null,
+    relationshipTitle: String? = null,
+    relationshipNarrative: String? = null,
+    userPortrait: String? = null,
+    interactionUnderstanding: String? = null,
+    uncertainties: List<String> = emptyList(),
+    unresolvedMatters: List<String> = emptyList(),
+    evidenceMessageNodeIds: List<String> = emptyList(),
     observedTraits: List<String> = emptyList(),
     preferences: List<String> = emptyList(),
     boundaries: List<String> = emptyList(),
@@ -107,6 +114,16 @@ internal fun mergeCompanionPrivateImpression(
     nowMillis: Long,
 ): CompanionPrivateImpression = previous.copy(
     summary = summary?.trim()?.takeIf(String::isNotBlank) ?: previous.summary,
+    relationshipTitle = relationshipTitle?.trim()?.takeIf(String::isNotBlank) ?: previous.relationshipTitle,
+    relationshipNarrative = relationshipNarrative?.trim()?.takeIf(String::isNotBlank) ?: previous.relationshipNarrative,
+    userPortrait = userPortrait?.trim()?.takeIf(String::isNotBlank) ?: previous.userPortrait,
+    interactionUnderstanding = interactionUnderstanding?.trim()?.takeIf(String::isNotBlank) ?: previous.interactionUnderstanding,
+    uncertainties = (previous.uncertainties + uncertainties).cleanDigitalLifeItems(8),
+    unresolvedMatters = (previous.unresolvedMatters + unresolvedMatters).cleanDigitalLifeItems(8),
+    evidenceMessageNodeIds = (previous.evidenceMessageNodeIds + evidenceMessageNodeIds)
+        .filter(String::isNotBlank)
+        .distinct()
+        .takeLast(80),
     observedTraits = (previous.observedTraits + observedTraits).cleanDigitalLifeItems(20),
     preferences = (previous.preferences + preferences).cleanDigitalLifeItems(20),
     boundaries = (previous.boundaries + boundaries).cleanDigitalLifeItems(20),
