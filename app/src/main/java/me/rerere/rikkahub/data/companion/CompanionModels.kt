@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.companion
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-const val CURRENT_COMPANION_SCHEMA_VERSION = 4
+const val CURRENT_COMPANION_SCHEMA_VERSION = 5
 
 @Serializable
 data class CompanionPersistedState(
@@ -51,7 +51,19 @@ data class CompanionNeuroState(
 
 @Serializable
 data class CompanionPrivateImpression(
+    /** Legacy short summary kept for backward-compatible imports. */
     val summary: String = "",
+    /** A role-voiced name for the relationship, such as "可以放心互相惦记的人". */
+    val relationshipTitle: String = "",
+    /** How this character currently describes the relationship in their own voice. */
+    val relationshipNarrative: String = "",
+    /** A natural, evidence-backed portrait of the user from this character's perspective. */
+    val userPortrait: String = "",
+    /** What the character has learned about how to interact with the user. */
+    val interactionUnderstanding: String = "",
+    val uncertainties: List<String> = emptyList(),
+    val unresolvedMatters: List<String> = emptyList(),
+    val evidenceMessageNodeIds: List<String> = emptyList(),
     val observedTraits: List<String> = emptyList(),
     val preferences: List<String> = emptyList(),
     val boundaries: List<String> = emptyList(),
