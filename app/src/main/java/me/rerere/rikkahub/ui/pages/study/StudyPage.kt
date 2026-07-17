@@ -660,7 +660,7 @@ fun StudyPomodoroFocusPage(
                 .fillMaxSize()
                 .background(
                     Brush.verticalGradient(
-                        listOf(Color.White.copy(alpha = 0.36f), Color.Transparent, Color(0xFF5C6B7D).copy(alpha = 0.12f))
+                        listOf(Color.White.copy(alpha = 0.18f), Color.Transparent, Color(0xFF5C6B7D).copy(alpha = 0.06f))
                     )
                 )
                 .padding(horizontal = 22.dp, vertical = 24.dp)
@@ -2983,29 +2983,29 @@ private fun PomodoroTimerCircle(
 ) {
     Box(
         modifier = Modifier
-            .size(258.dp)
+            .size(246.dp)
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.42f)),
+            .background(Color.White.copy(alpha = 0.24f)),
         contentAlignment = Alignment.Center,
     ) {
         CircularProgressIndicator(
             progress = { progress.coerceIn(0f, 1f) },
-            modifier = Modifier.size(232.dp),
-            strokeWidth = 8.dp,
-            color = Color(0xFF5B91B8),
-            trackColor = Color.White.copy(alpha = 0.62f),
+            modifier = Modifier.size(222.dp),
+            strokeWidth = 5.dp,
+            color = Color(0xFF7895A6),
+            trackColor = Color.White.copy(alpha = 0.34f),
         )
         Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(
                 text = timeText,
                 style = MaterialTheme.typography.displayLarge,
-                color = Color(0xFF2F4053),
-                fontWeight = FontWeight.Bold,
+                color = Color(0xFF35434D),
+                fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = task,
                 style = MaterialTheme.typography.bodyMedium,
-                color = Color(0xFF5E6B78),
+                color = Color(0xFF667782).copy(alpha = 0.82f),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
@@ -3094,7 +3094,9 @@ private fun heroBrush(): Brush = Brush.linearGradient(
 )
 
 private fun focusBrush(): Brush = Brush.verticalGradient(
-    listOf(Color(0xFFFFF0F6), Color(0xFFEAF7FF), Color(0xFFFFF5D8))
+    // Keep the focus page calm: low-saturation surfaces let the timer be readable
+    // when checked, without constantly pulling attention from the study task.
+    listOf(Color(0xFFF4F6F6), Color(0xFFEEF3F4), Color(0xFFF2F3F1))
 )
 
 private fun rarityColor(rarity: StudyRarity): Color = when (rarity) {
