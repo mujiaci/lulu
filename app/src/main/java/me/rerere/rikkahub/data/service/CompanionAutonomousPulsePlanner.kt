@@ -92,4 +92,5 @@ object CompanionAutonomousPulsePlanner {
             input.minutesSinceLastChat.coerceAtMost(10_000L)
         return first + Math.floorMod(seed, (last - first + 1).toLong()).toInt()
     }
+
 }

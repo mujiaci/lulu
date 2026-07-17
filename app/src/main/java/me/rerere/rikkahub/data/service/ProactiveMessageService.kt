@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.net.Uri
 import android.os.BatteryManager
 import android.os.PowerManager
 import android.util.Log
@@ -145,9 +146,11 @@ class ProactiveMessageService : KoinComponent {
         internal const val EXTRA_COMMITMENT_ID = "commitment_id"
         internal const val EXTRA_ASSISTANT_ID = "assistant_id"
 
+        private fun requestCode(base: Int, identity: String): Int = base xor identity.hashCode()
+
         fun scheduleNext(context: Context, setting: ProactiveMessageSetting) {
             if (!setting.enabled) {
-                cancel(context)
+                cancel(context, setting.assistantId)
                 return
             }
 
@@ -166,11 +169,12 @@ class ProactiveMessageService : KoinComponent {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                data = Uri.parse("rikka://proactive/autonomous/${setting.assistantId}")
                 putExtra(EXTRA_ASSISTANT_ID, setting.assistantId)
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                REQUEST_CODE,
+                requestCode(REQUEST_CODE, setting.assistantId),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -218,7 +222,7 @@ class ProactiveMessageService : KoinComponent {
         ) {
             val setting = settings.getProactiveMessageSetting(assistantId)
             if (!setting.enabled) {
-                cancel(context)
+                cancel(context, setting.assistantId)
                 return
             }
             val assistant = settings.assistants.find { it.id.toString() == setting.assistantId }
@@ -263,11 +267,12 @@ class ProactiveMessageService : KoinComponent {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                data = Uri.parse("rikka://proactive/autonomous/${setting.assistantId}")
                 putExtra(EXTRA_ASSISTANT_ID, setting.assistantId)
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                REQUEST_CODE,
+                requestCode(REQUEST_CODE, setting.assistantId),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -315,6 +320,7 @@ class ProactiveMessageService : KoinComponent {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                data = Uri.parse("rikka://proactive/targeted/$assistantId/${commitmentId.orEmpty()}")
                 putExtra(EXTRA_ASSISTANT_ID, assistantId)
                 putExtra(EXTRA_TARGETED_REASON, reason)
                 putExtra(EXTRA_TARGETED_USER_TEXT, userText)
@@ -323,7 +329,7 @@ class ProactiveMessageService : KoinComponent {
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                TARGETED_REQUEST_CODE,
+                requestCode(TARGETED_REQUEST_CODE, "$assistantId:${commitmentId.orEmpty()}") ,
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
@@ -363,6 +369,7 @@ class ProactiveMessageService : KoinComponent {
             val userText = "夜间责任检查：读取常驻锚点、睡眠、应用使用和健康数据，完成必要的次日作息动作。"
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                data = Uri.parse("rikka://proactive/responsibility/${assistantId}")
                 putExtra(EXTRA_ASSISTANT_ID, assistantId.toString())
                 putExtra(EXTRA_TARGETED_REASON, reason)
                 putExtra(EXTRA_TARGETED_USER_TEXT, userText)
@@ -370,7 +377,7 @@ class ProactiveMessageService : KoinComponent {
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                RESPONSIBILITY_REVIEW_REQUEST_CODE,
+                requestCode(RESPONSIBILITY_REVIEW_REQUEST_CODE, assistantId.toString()),
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
@@ -545,7 +552,7 @@ class ProactiveMessageService : KoinComponent {
             return if (triggerTime > 0) triggerTime else null
         }
 
-        fun cancel(context: Context) {
+        fun cancel(context: Context, assistantId: String? = null) {
             // 清除保存的触发时间
             context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
                 .edit()
@@ -555,10 +562,13 @@ class ProactiveMessageService : KoinComponent {
             val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
             val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
                 action = ACTION_PROACTIVE_MESSAGE
+                assistantId?.takeIf(String::isNotBlank)?.let { id ->
+                    data = Uri.parse("rikka://proactive/autonomous/$id")
+                }
             }
             val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                REQUEST_CODE,
+                assistantId?.takeIf(String::isNotBlank)?.let { requestCode(REQUEST_CODE, it) } ?: REQUEST_CODE,
                 intent,
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
             )
@@ -568,8 +578,13 @@ class ProactiveMessageService : KoinComponent {
             }
             PendingIntent.getBroadcast(
                 context,
-                RESPONSIBILITY_REVIEW_REQUEST_CODE,
-                intent,
+                assistantId?.takeIf(String::isNotBlank)?.let { requestCode(RESPONSIBILITY_REVIEW_REQUEST_CODE, it) }
+                    ?: RESPONSIBILITY_REVIEW_REQUEST_CODE,
+                intent.apply {
+                    assistantId?.takeIf(String::isNotBlank)?.let { id ->
+                        data = Uri.parse("rikka://proactive/responsibility/$id")
+                    }
+                },
                 PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
             )?.let { reviewIntent ->
                 alarmManager.cancel(reviewIntent)
@@ -577,8 +592,8 @@ class ProactiveMessageService : KoinComponent {
             }
 
             // Also cancel WorkManager fallback
-            ProactiveMessageWorker.cancel(context)
-            ProactiveMessageWorker.cancelTargeted(context)
+            ProactiveMessageWorker.cancel(context, assistantId)
+            ProactiveMessageWorker.cancelTargeted(context, assistantId = assistantId)
         }
 
         fun resetTimer(context: Context, setting: ProactiveMessageSetting) {
@@ -634,6 +649,7 @@ class ProactiveMessageService : KoinComponent {
         // Current time
         val currentTime = java.lang.System.currentTimeMillis()
         sb.appendLine(me.rerere.rikkahub.service.LocalTimeContextFormatter.format(currentTime))
+        sb.appendLine("自主联系原则：角色自己根据近期聊天、长期记忆、承诺、当前时间与真实感知决定是否开口。用户说忙、暂时不能聊天、想休息或需要空间时，要把它理解为降低打扰频率的明确意愿；可以安静等待、做真实的 App 内活动或稍后重新感知，不能用机械问候增加压力。夜间也不要因为静默就联系，除非承诺、安全或新的真实情境足以支持这次行动。")
 
         // Study plan context
         try {

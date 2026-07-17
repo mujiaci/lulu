@@ -244,7 +244,7 @@ class ChatVM(
 
     fun stopGeneration() {
         viewModelScope.launch {
-            chatService.stopGeneration(_conversationId)
+            conversationJob.value?.cancel()
         }
     }
 

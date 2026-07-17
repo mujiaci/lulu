@@ -34,7 +34,7 @@ internal fun buildTargetedProactiveWorkSpec(
     assistantId: String,
     commitmentId: String,
 ): TargetedProactiveWorkSpec = TargetedProactiveWorkSpec(
-    uniqueWorkName = "targeted_proactive_message_work",
+    uniqueWorkName = "targeted_proactive_message_work:${assistantId.trim()}:${commitmentId.trim()}",
     delayMillis = (triggerAtMillis - nowMillis).coerceAtLeast(0L),
     assistantId = assistantId.trim(),
     commitmentId = commitmentId.trim(),
@@ -54,9 +54,15 @@ class ProactiveMessageWorker(
         private const val UNIQUE_WORK_NAME = "proactive_message_work"
         private const val TARGETED_UNIQUE_WORK_NAME = "targeted_proactive_message_work"
 
+        private fun autonomousWorkName(assistantId: String): String =
+            "$UNIQUE_WORK_NAME:${assistantId.trim()}"
+
+        private fun assistantWorkTag(assistantId: String): String =
+            "proactive_assistant:${assistantId.trim()}"
+
         fun scheduleNext(context: Context, setting: me.rerere.rikkahub.data.datastore.ProactiveMessageSetting) {
             if (!setting.enabled) {
-                cancel(context)
+                cancel(context, setting.assistantId)
                 return
             }
 
@@ -72,18 +78,24 @@ class ProactiveMessageWorker(
             delayMinutes: Int,
         ) {
             if (!setting.enabled) {
-                cancel(context)
+                cancel(context, setting.assistantId)
                 return
             }
             val safeDelayMinutes = delayMinutes.coerceAtLeast(1)
 
             val workRequest = OneTimeWorkRequestBuilder<ProactiveMessageWorker>()
+                .setInputData(
+                    Data.Builder()
+                        .putString(ProactiveMessageService.EXTRA_ASSISTANT_ID, setting.assistantId)
+                        .build(),
+                )
+                .addTag(assistantWorkTag(setting.assistantId))
                 .setInitialDelay(safeDelayMinutes.toLong(), TimeUnit.MINUTES)
                 .build()
 
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(
-                    UNIQUE_WORK_NAME,
+                    autonomousWorkName(setting.assistantId),
                     ExistingWorkPolicy.REPLACE,
                     workRequest
                 )
@@ -99,9 +111,15 @@ class ProactiveMessageWorker(
             Log.d(TAG, "Scheduled WorkManager proactive message in $safeDelayMinutes minutes")
         }
 
-        fun cancel(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
-            Log.d(TAG, "Cancelled WorkManager proactive message")
+        fun cancel(context: Context, assistantId: String? = null) {
+            val workManager = WorkManager.getInstance(context)
+            if (assistantId.isNullOrBlank()) {
+                // Compatibility cleanup for schedules created by older app versions.
+                workManager.cancelUniqueWork(UNIQUE_WORK_NAME)
+            } else {
+                workManager.cancelAllWorkByTag(assistantWorkTag(assistantId))
+            }
+            Log.d(TAG, "Cancelled WorkManager proactive message assistant=$assistantId")
         }
 
         fun scheduleTargeted(
@@ -123,6 +141,7 @@ class ProactiveMessageWorker(
                 .build()
             val workRequest = OneTimeWorkRequestBuilder<ProactiveMessageWorker>()
                 .setInputData(inputData)
+                .addTag(assistantWorkTag(spec.assistantId))
                 .setInitialDelay(spec.delayMillis, TimeUnit.MILLISECONDS)
                 .build()
 
@@ -134,8 +153,16 @@ class ProactiveMessageWorker(
             Log.d(TAG, "Scheduled targeted WorkManager fallback commitment=${spec.commitmentId}")
         }
 
-        fun cancelTargeted(context: Context) {
-            WorkManager.getInstance(context).cancelUniqueWork(TARGETED_UNIQUE_WORK_NAME)
+        fun cancelTargeted(context: Context, assistantId: String? = null, commitmentId: String? = null) {
+            val workManager = WorkManager.getInstance(context)
+            if (!assistantId.isNullOrBlank() && !commitmentId.isNullOrBlank()) {
+                workManager.cancelUniqueWork("$TARGETED_UNIQUE_WORK_NAME:${assistantId.trim()}:${commitmentId.trim()}")
+            } else if (!assistantId.isNullOrBlank()) {
+                workManager.cancelAllWorkByTag(assistantWorkTag(assistantId))
+            } else {
+                // Compatibility cleanup for the pre-per-role targeted fallback.
+                workManager.cancelUniqueWork(TARGETED_UNIQUE_WORK_NAME)
+            }
             Log.d(TAG, "Cancelled targeted WorkManager fallback")
         }
 
@@ -164,19 +191,17 @@ class ProactiveMessageWorker(
 
         val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
         val settings = settingsStore.settingsFlow.first()
-        val targetedAssistantId = inputData
+        val scheduledAssistantId = inputData
             .getString(ProactiveMessageService.EXTRA_ASSISTANT_ID)
             ?.takeIf(String::isNotBlank)
         val targetedCommitmentId = inputData
             .getString(ProactiveMessageService.EXTRA_COMMITMENT_ID)
             ?.takeIf(String::isNotBlank)
-        val isTargeted = targetedAssistantId != null && targetedCommitmentId != null
-        val targetedAssistantUuid = if (isTargeted) {
-            runCatching { Uuid.parse(targetedAssistantId.orEmpty()) }.getOrNull() ?: return Result.failure()
-        } else {
-            null
-        }
-        val proactiveSetting = settings.getProactiveMessageSetting(targetedAssistantUuid)
+        val isTargeted = scheduledAssistantId != null && targetedCommitmentId != null
+        val scheduledAssistantUuid = scheduledAssistantId
+            ?.let { runCatching { Uuid.parse(it) }.getOrNull() }
+            ?: if (isTargeted) return Result.failure() else null
+        val proactiveSetting = settings.getProactiveMessageSetting(scheduledAssistantUuid)
 
         if (!proactiveSetting.enabled && !isTargeted) {
             Log.d(TAG, "Proactive message disabled, skipping")

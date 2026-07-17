@@ -100,15 +100,23 @@ fun CihaiPage(onBack: () -> Unit) {
     val meaningfulLifeEvents = selectedSnapshot.lifeEvents
         .filter { it.isMeaningfulDigitalLifeEvidence() }
         .sortedByDescending { it.endedAt ?: it.startedAt }
+    val recentActivityEvents = selectedSnapshot.lifeEvents
+        .filter { event ->
+            event.status != CompanionLifeEventStatus.CANCELLED &&
+                event.type != me.rerere.rikkahub.data.companion.CompanionLifeEventType.CONVERSATION
+        }
+        .sortedByDescending { it.endedAt ?: it.startedAt }
+        .take(30)
     val activeResponsibilityAnchors = selectedSnapshot.alwaysOnAnchors
         .filter { anchor ->
             anchor.status == CompanionAlwaysOnAnchorStatus.ACTIVE &&
                 (anchor.expiresAt == null || anchor.expiresAt > System.currentTimeMillis())
         }
         .sortedWith(compareByDescending<CompanionAlwaysOnAnchor> { it.importance }.thenByDescending { it.updatedAt })
-    val visibleCommitments = selectedSnapshot.commitments
+    val activeCommitments = selectedSnapshot.commitments
         .filter { commitment ->
             commitment.status !in setOf(
+                CompanionCommitmentStatus.FULFILLED,
                 CompanionCommitmentStatus.CANCELLED,
                 CompanionCommitmentStatus.SUPERSEDED,
             )
@@ -118,6 +126,10 @@ fun CihaiPage(onBack: () -> Unit) {
                 .thenBy { it.dueAt }
                 .thenByDescending { it.updatedAt },
         )
+    val fulfilledCommitments = selectedSnapshot.commitments
+        .filter { it.status == CompanionCommitmentStatus.FULFILLED }
+        .sortedByDescending { it.resolvedAt ?: it.updatedAt }
+        .take(12)
 
     LaunchedEffect(selectedAssistantId) {
         if (state.selectedAssistantId != selectedAssistantId) {
@@ -203,6 +215,27 @@ fun CihaiPage(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when (selectedSection) {
+                    CihaiSection.ACTIVITY -> {
+                        item(key = "activity-intro") {
+                            Text(
+                                text = "这里只记录角色实际完成、正在处理或认真放下的一件事；没有真实动作，就不会编一条动态。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (recentActivityEvents.isEmpty()) {
+                            item(key = "empty-activity") {
+                                EmptyCihaiSection(
+                                    title = "还没有新的角色动态",
+                                    body = "角色完成游戏、设置提醒、整理记忆或写下日记后，会在这里留下时间线。",
+                                )
+                            }
+                        } else {
+                            items(recentActivityEvents, key = { "activity-${it.id}" }) { event ->
+                                LifeEventCard(event)
+                            }
+                        }
+                    }
                     CihaiSection.COMMITMENTS -> {
                         item(key = "commitment-intro") {
                             Text(
@@ -230,7 +263,7 @@ fun CihaiPage(onBack: () -> Unit) {
                                 )
                             }
                         }
-                        if (visibleCommitments.isNotEmpty()) {
+                        if (activeCommitments.isNotEmpty()) {
                             item(key = "commitment-action-title") {
                                 Text(
                                     text = "正在兑现",
@@ -238,11 +271,23 @@ fun CihaiPage(onBack: () -> Unit) {
                                     fontWeight = FontWeight.SemiBold,
                                 )
                             }
-                            items(visibleCommitments, key = { "commitment-${it.id}" }) { commitment ->
+                            items(activeCommitments, key = { "commitment-${it.id}" }) { commitment ->
                                 CommitmentCard(commitment)
                             }
                         }
-                        if (activeResponsibilityAnchors.isEmpty() && visibleCommitments.isEmpty()) {
+                        if (fulfilledCommitments.isNotEmpty()) {
+                            item(key = "commitment-history-title") {
+                                Text(
+                                    text = "已经做到的记录",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(fulfilledCommitments, key = { "fulfilled-commitment-${it.id}" }) { commitment ->
+                                CommitmentCard(commitment)
+                            }
+                        }
+                        if (activeResponsibilityAnchors.isEmpty() && activeCommitments.isEmpty() && fulfilledCommitments.isEmpty()) {
                             item(key = "empty-commitments") {
                                 EmptyCihaiSection(
                                     title = "还没有写下的承诺",
@@ -371,6 +416,12 @@ internal enum class CihaiSection(
     val emptyTitle: String,
     val emptyBody: String,
 ) {
+    ACTIVITY(
+        label = "动态",
+        entryKind = null,
+        emptyTitle = "还没有新的角色动态",
+        emptyBody = "角色真实完成的数字行动、记忆整理、游戏和提醒都会出现在这里。",
+    ),
     COMMITMENTS(
         label = "承诺",
         entryKind = null,
@@ -410,6 +461,7 @@ internal enum class CihaiSection(
 }
 
 internal fun visibleCihaiSections(): List<CihaiSection> = listOf(
+    CihaiSection.ACTIVITY,
     CihaiSection.COMMITMENTS,
     CihaiSection.CONCERNS,
     CihaiSection.RESPONSIBILITIES,

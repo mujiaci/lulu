@@ -686,7 +686,7 @@ internal fun AssistantBasicContent(
                             if (enabled) {
                                 ProactiveMessageService.scheduleNext(context, next)
                             } else {
-                                ProactiveMessageService.cancel(context)
+                                ProactiveMessageService.cancel(context, next.assistantId)
                             }
                         }
                     )
