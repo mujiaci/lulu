@@ -182,7 +182,7 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
-            chatService.saveConversation(uuid, conversation.copy(isPinned = !conversation.isPinned))
+            conversationRepo.updateConversation(conversation.copy(isPinned = !conversation.isPinned))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 
@@ -209,7 +209,7 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
-            chatService.saveConversation(uuid, conversation.copy(title = title))
+            conversationRepo.updateConversation(conversation.copy(title = title))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 
@@ -227,7 +227,7 @@ fun Route.conversationRoutes(
             val conversation = conversationRepo.getConversationById(uuid)
                 ?: throw NotFoundException("Conversation not found")
 
-            chatService.saveConversation(uuid, conversation.copy(assistantId = targetAssistantId))
+            conversationRepo.updateConversation(conversation.copy(assistantId = targetAssistantId))
             call.respond(HttpStatusCode.OK, mapOf("status" to "updated"))
         }
 
@@ -248,8 +248,8 @@ fun Route.conversationRoutes(
             val messageId = call.parameters["messageId"].toUuid("message id")
             val request = call.receive<EditMessageRequest>()
 
-            chatService.initializeConversation(uuid)
-            chatService.editMessage(uuid, messageId, request.parts)
+            conversationRepo.editMessageAsBranch(uuid, messageId, request.parts)
+                ?: throw NotFoundException("Message not found")
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
         }
@@ -260,8 +260,8 @@ fun Route.conversationRoutes(
             val request = call.receive<ForkConversationRequest>()
             val messageId = request.messageId.toUuid("message id")
 
-            chatService.initializeConversation(uuid)
-            val fork = chatService.forkConversationAtMessage(uuid, messageId)
+            val fork = conversationRepo.forkConversationAtMessage(uuid, messageId)
+                ?: throw NotFoundException("Message not found")
 
             call.respond(HttpStatusCode.Created, ForkConversationResponse(conversationId = fork.id.toString()))
         }
@@ -271,8 +271,8 @@ fun Route.conversationRoutes(
             val uuid = call.parameters["id"].toUuid("conversation id")
             val messageId = call.parameters["messageId"].toUuid("message id")
 
-            chatService.initializeConversation(uuid)
-            chatService.deleteMessage(uuid, messageId)
+            conversationRepo.deleteMessageById(uuid, messageId)
+                ?: throw NotFoundException("Message not found")
 
             call.respond(HttpStatusCode.OK, mapOf("status" to "deleted"))
         }
@@ -283,26 +283,16 @@ fun Route.conversationRoutes(
             val nodeId = call.parameters["nodeId"].toUuid("node id")
             val request = call.receive<SelectMessageNodeRequest>()
 
-            chatService.initializeConversation(uuid)
-            val conversation = chatService.getConversationFlow(uuid).first()
+            val conversation = conversationRepo.getConversationById(uuid)
+                ?: throw NotFoundException("Conversation not found")
             val targetNode = conversation.messageNodes.firstOrNull { it.id == nodeId }
                 ?: throw NotFoundException("Message node not found")
             if (request.selectIndex !in targetNode.messages.indices) {
                 throw BadRequestException("Invalid selectIndex")
             }
             if (targetNode.selectIndex != request.selectIndex) {
-                chatService.saveConversation(
-                    uuid,
-                    conversation.copy(
-                        messageNodes = conversation.messageNodes.map { node ->
-                            if (node.id == nodeId) {
-                                node.copy(selectIndex = request.selectIndex)
-                            } else {
-                                node
-                            }
-                        },
-                    ),
-                )
+                conversationRepo.selectMessageNode(uuid, nodeId, request.selectIndex)
+                    ?: throw BadRequestException("Invalid selectIndex")
             }
 
             call.respond(HttpStatusCode.Accepted, mapOf("status" to "accepted"))
