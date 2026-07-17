@@ -8,9 +8,14 @@ internal fun buildCompanionPrivateImpression(
     candidates: List<AffectiveMemoryCandidate>,
     nowMillis: Long,
 ): CompanionPrivateImpression {
+    val dismissedEvidence = previous.dismissedProfileEvidenceMessageNodeIds.toSet()
     val durable = candidates
         .map(AffectiveMemoryCandidate::normalized)
         .filter { it.confidence >= 0.6 && it.importance >= 2 }
+        .filter { candidate ->
+            (candidate.evidenceMessageNodeIds + candidate.sourceMessageNodeIds)
+                .none { it in dismissedEvidence }
+        }
 
     val relationshipCandidates = durable.filter {
         it.type in setOf("relationship", "shared_event", "correction")
@@ -122,6 +127,7 @@ private fun CompanionPrivateImpression.sameImpressionContent(other: CompanionPri
         uncertainties == other.uncertainties &&
         unresolvedMatters == other.unresolvedMatters &&
         evidenceMessageNodeIds == other.evidenceMessageNodeIds &&
+        dismissedProfileEvidenceMessageNodeIds == other.dismissedProfileEvidenceMessageNodeIds &&
         observedTraits == other.observedTraits &&
         preferences == other.preferences &&
         boundaries == other.boundaries &&
