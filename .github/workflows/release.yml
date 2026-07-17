@@ -71,6 +71,7 @@ jobs:
         id: regression_tests
         run: |
           mkdir -p ci-logs
+          set -o pipefail
           chmod +x ./gradlew
           ./gradlew --no-daemon --no-build-cache clean :app:testDebugUnitTest \
             --tests "*CompanionLifeClaimOutputTransformerTest" \
@@ -92,6 +93,7 @@ jobs:
         id: gradle_build
         run: |
           mkdir -p ci-logs
+          set -o pipefail
           chmod +x ./gradlew
           ./gradlew --no-daemon --no-build-cache assembleRelease -x uploadCrashlyticsMappingFileRelease 2>&1 | tee ci-logs/gradle-build.log
 
