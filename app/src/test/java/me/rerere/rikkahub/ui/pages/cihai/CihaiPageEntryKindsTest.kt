@@ -8,11 +8,11 @@ import org.junit.Test
 
 class CihaiPageEntryKindsTest {
     @Test
-    fun `cihai page exposes concern and diary without legacy reflection tab`() {
+    fun `cihai page exposes five distinct user facing sections`() {
         val sections = visibleCihaiSections()
 
         assertEquals(
-            listOf("挂心", "责任", "关系", "生活", "日记"),
+            listOf("生活", "挂心", "约定", "关系", "日记"),
             sections.map { it.label },
         )
         assertEquals(null, CihaiSection.CONCERNS.entryKind)
