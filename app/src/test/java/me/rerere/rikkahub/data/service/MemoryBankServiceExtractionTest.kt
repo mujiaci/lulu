@@ -499,6 +499,7 @@ private class RecordingMemoryBankDAO(
     override suspend fun deleteMemoryGraphEdgesForAssistant(assistantId: String) = unsupported()
     override suspend fun deleteMemoriesByAssistant(assistantId: String) = unsupported()
     override suspend fun deleteExtractionCheckpointsByAssistant(assistantId: String) = unsupported()
+    override suspend fun deleteExtractionCheckpoint(assistantId: String, conversationId: String) = unsupported()
     override suspend fun deleteAllMemoryGraphEdges() {
         deleteAllCalls += "edges"
     }
