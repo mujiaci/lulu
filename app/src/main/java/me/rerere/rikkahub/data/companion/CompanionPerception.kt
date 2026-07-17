@@ -177,7 +177,8 @@ object CompanionPerceptionAssembler {
         .take(maxLength)
 
     private const val MAX_ASSISTANT_NAME_LENGTH = 120
-    private const val MAX_PERSONA_LENGTH = 4_000
+    // Keep the full selected role/world-book context available to planner calls.
+    private const val MAX_PERSONA_LENGTH = 16_000
     private const val MAX_MEMORY_CONTEXT_LENGTH = 6_000
     private const val MAX_RECENT_TURNS = 12
     private const val MAX_TURN_CONTENT_LENGTH = 1_000
@@ -203,13 +204,21 @@ fun CompanionPerceptionPacket.toPromptContext(): String = buildString {
         "relationship trust=${snapshot.relationship.trust} closeness=${snapshot.relationship.closeness} " +
             "reliability=${snapshot.relationship.reliability} tension=${snapshot.relationship.unresolvedTension}",
     )
+    appendLine(snapshot.relationship.toBehaviorContract())
     appendLine(
         "digital_neuro dopamine=${snapshot.neuroState.dopamine} serotonin=${snapshot.neuroState.serotonin} " +
             "cortisol=${snapshot.neuroState.cortisol} oxytocin=${snapshot.neuroState.oxytocin} " +
             "focus=${snapshot.neuroState.norepinephrine} energy=${snapshot.neuroState.energy}",
     )
+    buildCompanionCurrentLifeThread(snapshot, nowMillis)
+        .takeIf(String::isNotBlank)
+        ?.let(::appendLine)
     snapshot.privateImpression.takeIf { impression ->
-        impression.summary.isNotBlank() || impression.preferences.isNotEmpty() || impression.boundaries.isNotEmpty()
+        impression.summary.isNotBlank() ||
+            impression.observedTraits.isNotEmpty() ||
+            impression.preferences.isNotEmpty() ||
+            impression.boundaries.isNotEmpty() ||
+            impression.recentChanges.isNotEmpty()
     }?.let { impression ->
         appendLine("private_impression:")
         impression.summary.takeIf(String::isNotBlank)?.let { appendLine("- summary=${it.take(300)}") }
@@ -218,6 +227,9 @@ fun CompanionPerceptionPacket.toPromptContext(): String = buildString {
         impression.boundaries.take(4).forEach { appendLine("- boundary=${it.take(180)}") }
         impression.recentChanges.takeLast(3).forEach { appendLine("- recent_change=${it.take(180)}") }
     }
+    buildCompanionResponsibilityContext(snapshot.alwaysOnAnchors, nowMillis)
+        .takeIf(String::isNotBlank)
+        ?.let(::appendLine)
     if (snapshot.state.statusText.isNotBlank() || snapshot.state.innerThought.isNotBlank()) {
         appendLine(
             "state status=${snapshot.state.statusText.take(120)} " +

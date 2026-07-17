@@ -10,7 +10,9 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.UIMessage
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
 import me.rerere.rikkahub.data.companion.CompanionPerceptionPacket
+import me.rerere.rikkahub.data.companion.CompanionResponsibilityAnchorDraft
 import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.findProvider
@@ -32,7 +34,7 @@ object CompanionChatTurnModelPlanner {
                 model = model,
                 temperature = 0.25f,
                 topP = 0.8f,
-                maxTokens = 700,
+                maxTokens = 950,
             ),
         )
         val raw = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
@@ -41,7 +43,16 @@ object CompanionChatTurnModelPlanner {
             JsonInstant.parseToJsonElement(jsonText)
         }.getOrNull()
         if (root !is JsonObject) return null
-        return parseChatTurnPlan(raw, input.perception.availableToolNames)
+        return parseChatTurnPlan(
+            rawText = raw,
+            availableToolNames = input.perception.availableToolNames,
+            activeResponsibilityAnchorIds = input.perception.snapshot.alwaysOnAnchors.mapTo(mutableSetOf()) { it.id },
+        ).enforceRelationshipPolicy(
+            relationship = input.perception.snapshot.relationship,
+            latestUserText = input.perception.recentTurns.lastOrNull { it.role == me.rerere.rikkahub.data.companion.CompanionTurnRole.USER }
+                ?.content
+                .orEmpty(),
+        )
     }
 
     fun buildChatTurnPrompt(input: CompanionChatTurnPlanInput): String = buildString {
@@ -49,6 +60,11 @@ object CompanionChatTurnModelPlanner {
         appendLine("你是${perception.assistantName.ifBlank { "当前角色" }}的后台小脑，只负责本轮聊天前的行动规划，不生成聊天正文。")
         appendLine("你可以像角色本人一样判断：先读取已经注入的手机状态、位置等被动感知，再决定是否要看摄像头/日历/短信、控制音乐或顺手安排后续主动消息。")
         appendLine("统一陪伴系统采用：感知世界包-意义评估-动态判断-行动实现-状态生成-正式日记架构。")
+        appendLine("responsibility_anchors 不是角色对用户的印象，也不是普通记忆召回；它只保存角色需要持续主动承担的责任。每一轮都必须检查 trigger，并把 required_action 变成真实工具行动、自然提醒或有意识的等待；不能只在回复里复述 statement。")
+        appendLine("健康类 anchor 要改变照顾方式：先确认状态、降低负担、提醒规律生活，不要诊断或强迫。责任类 anchor 要在行动窗口执行，完成后保留真实结果；用户取消或纠正时立即停止旧责任。")
+        appendLine("只有用户明确交托长期/循环职责，或用户长期健康情况明确要求角色持续调整照顾方式时，才新增 responsibilityAnchorUpserts。普通事实、喜好、一次性请求、角色对用户的看法都不能写成责任锚点。")
+        appendLine("每个 responsibilityAnchorUpsert 包含 stableKey、kind、statement、responsibility、triggers、actions、avoid、importance。kind 只能是 HEALTH 或 RESPONSIBILITY；actions 至少一项，必须写角色今后具体要做什么。stableKey 要短而稳定，同一责任的修改继续使用同一个 key。")
+        appendLine("cancelResponsibilityAnchorIds 只能填写现有 responsibility_anchors 中的 id；当用户明确取消、纠正或收回职责时填写。不要修改 private_impression 来代替责任新增、执行或取消。")
         appendLine("情境感知包括当前时间、上下文、考研 App 计划、被动感知事实、排序后的向量记忆召回、最近状态栏/辞海/历史挂心记录；不要为重复读取已提供事实而调用工具。")
         appendLine("意义评估只评估重要性、威胁、机会、身体/精神安全、时间压力、成本、收益、不行动后果和资源；它不直接选择行动。")
         appendLine("动态判断负责决定 intention、工具需求、是否行动、行动池选择和下一次感知时间；工具结果如果能同步得到，就补回本轮再决定行动。")
@@ -61,16 +77,17 @@ object CompanionChatTurnModelPlanner {
         appendLine("Expression 只负责表达已决定的行动，不决定政策；expressionAffordances 可从 TEXT, KAOMOJI, STICKER, VOICE, STATUS_BAR, LIGHT_REMINDER, LONG_EXPLANATION, SILENT_RECORD 中选择。")
         appendLine("沉默、待办、番茄钟、学习状态只是观察事实，不代表自动安静下来；如果角色是学习监督员，可以主动监督、追问未完成任务，最终由人设决定。")
         appendLine("只返回 JSON，不要 markdown，不要解释。")
-        appendLine("JSON 字段：toolRequests, followUpDelayMinutes, followUpReason, followUps, expressionGuidance, expressionAffordances, innerThought。")
+        appendLine("JSON 字段：toolRequests, followUpDelayMinutes, followUpReason, followUps, responsibilityAnchorUpserts, cancelResponsibilityAnchorIds, expressionGuidance, expressionAffordances, innerThought。")
         appendLine("toolRequests 最多 5 个；toolName 只能从 availableTools 中选。")
         appendLine("每个 toolRequest 字段：toolName, reason, arguments, autoExecutable。arguments 必须是 JSON 对象；autoExecutable 仅为兼容字段，角色形成意图的工具请求都会在回复前尝试执行。")
         appendLine("followUpDelayMinutes 可以是 null；如果当前角色决定稍后主动找用户，填 1 到 1440 的分钟数。")
         appendLine("followUps 可以列出多个不同时间点，每项包含 delayMinutes、reason 和 kind；需要持续照看的目标不要只安排一次后就当作完成。")
         appendLine("delayMinutes 永远是从 current_time 开始计算的相对分钟数，不是钟点数字。先判断目标是今天还是明天再计算；用户说‘现在去吃饭’这类立即开始的活动，通常只需在 30 到 60 分钟后确认，绝不能误排到第二天早晨。")
         appendLine("不要给普通回来、普通闲聊、无风险沉默安排固定 5 分钟 follow-up；只有身体不适、明确提醒/DDL/起床、学习承诺、吃饭睡觉照看这类语义才安排后续主动消息。")
+        appendLine("沉默时长本身不是事件，不能仅因为很久没聊天就安排主动打扰；必须同时存在责任触发、挂心到期、真实环境变化或角色刚完成的数字生活事件。")
         appendLine("Unified companion contract: perception packet gathers persona/context/actions/memory/diary/concerns/status -> appraisal understands meaningToUser and meaningToRole -> judgment decides intention, action needs, and nextPerceptionAt -> action executes message/tool/schedule/wait; formal diary is written only by write_lulu_journal -> status generates mood/body/mind/relationship/innerThought -> Cihai keeps concern cards and formal tool-written diary entries.")
         appendLine("<persona>")
-        appendLine(perception.persona.take(2000))
+        appendLine(perception.persona)
         appendLine("</persona>")
         appendLine(perception.toPromptContext())
         if (perception.contextFacts.isNotEmpty()) {
@@ -93,7 +110,11 @@ object CompanionChatTurnModelPlanner {
         appendLine("</conversation>")
     }
 
-    fun parseChatTurnPlan(rawText: String, availableToolNames: Set<String>): CompanionChatTurnPlan {
+    fun parseChatTurnPlan(
+        rawText: String,
+        availableToolNames: Set<String>,
+        activeResponsibilityAnchorIds: Set<String> = emptySet(),
+    ): CompanionChatTurnPlan {
         val jsonText = rawText.extractJsonPayload()
         val obj = runCatching {
             JsonInstant.parseToJsonElement(jsonText) as? JsonObject
@@ -121,6 +142,9 @@ object CompanionChatTurnModelPlanner {
             followUpDelayMinutes = obj["followUpDelayMinutes"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 24 * 60),
             followUpReason = obj.string("followUpReason")?.sanitizePlanReason()?.take(180)?.ifBlank { null },
             followUps = parseFollowUps(obj),
+            responsibilityAnchorUpserts = parseResponsibilityAnchorDrafts(obj),
+            cancelResponsibilityAnchorIds = obj.stringList("cancelResponsibilityAnchorIds", maxItems = 12)
+                .filter { it in activeResponsibilityAnchorIds },
             expressionGuidance = obj.string("expressionGuidance")?.take(180)?.ifBlank { null },
             expressionAffordances = parseExpressionAffordances(obj),
             innerThought = obj.string("innerThought")
@@ -162,8 +186,48 @@ object CompanionChatTurnModelPlanner {
             ?.take(5)
             ?: emptyList()
 
+    private fun parseResponsibilityAnchorDrafts(obj: JsonObject): List<CompanionResponsibilityAnchorDraft> =
+        (obj["responsibilityAnchorUpserts"] as? JsonArray)
+            ?.mapNotNull { item ->
+                val draft = item as? JsonObject ?: return@mapNotNull null
+                val stableKey = draft.string("stableKey")?.trim()?.take(120)?.ifBlank { null }
+                    ?: return@mapNotNull null
+                val statement = draft.string("statement")?.trim()?.take(360)?.ifBlank { null }
+                    ?: return@mapNotNull null
+                val responsibility = draft.string("responsibility")?.trim()?.take(520)?.ifBlank { null }
+                    ?: return@mapNotNull null
+                val actions = draft.stringList("actions", maxItems = 8, maxLength = 260)
+                if (actions.isEmpty()) return@mapNotNull null
+                CompanionResponsibilityAnchorDraft(
+                    stableKey = stableKey,
+                    kind = when (draft.string("kind")?.trim()?.uppercase()) {
+                        CompanionAlwaysOnAnchorKind.HEALTH.name -> CompanionAlwaysOnAnchorKind.HEALTH
+                        else -> CompanionAlwaysOnAnchorKind.RESPONSIBILITY
+                    },
+                    statement = statement,
+                    responsibility = responsibility,
+                    triggers = draft.stringList("triggers", maxItems = 8, maxLength = 220),
+                    actions = actions,
+                    avoid = draft.stringList("avoid", maxItems = 8, maxLength = 220),
+                    importance = draft["importance"]?.jsonPrimitive?.intOrNull?.coerceIn(1, 5) ?: 5,
+                )
+            }
+            ?.distinctBy { it.stableKey.trim().lowercase() }
+            ?.take(8)
+            ?: emptyList()
+
     private fun JsonObject.string(name: String): String? =
         this[name]?.jsonPrimitive?.contentOrNull
+
+    private fun JsonObject.stringList(
+        name: String,
+        maxItems: Int,
+        maxLength: Int = 180,
+    ): List<String> = (this[name] as? JsonArray)
+        ?.mapNotNull { item -> item.jsonPrimitive.contentOrNull?.trim()?.take(maxLength)?.ifBlank { null } }
+        ?.distinct()
+        ?.take(maxItems)
+        ?: emptyList()
 
     private fun JsonElement.compactJsonObjectOrNull(): String? =
         (this as? JsonObject)?.toString()
@@ -191,6 +255,8 @@ data class CompanionChatTurnPlan(
     val followUpDelayMinutes: Int? = null,
     val followUpReason: String? = null,
     val followUps: List<CompanionChatFollowUpPlan> = emptyList(),
+    val responsibilityAnchorUpserts: List<CompanionResponsibilityAnchorDraft> = emptyList(),
+    val cancelResponsibilityAnchorIds: List<String> = emptyList(),
     val expressionGuidance: String? = null,
     val expressionAffordances: List<CompanionExpressionAffordance> = emptyList(),
     val innerThought: String? = null,

@@ -118,6 +118,7 @@ import me.rerere.hugeicons.stroke.Package
 import me.rerere.hugeicons.stroke.Play
 import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.rikkahub.Screen
+import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getAssistantTTSProvider
 import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.model.Assistant
@@ -470,11 +471,13 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
 fun StudyPomodoroPage() {
     val navController = LocalNavController.current
     val settings = LocalSettings.current
+    val settingsStore = koinInject<SettingsStore>()
+    val scope = rememberCoroutineScope()
     val assistant = settings.getCurrentAssistant()
     var minutes by remember { mutableIntStateOf(25) }
     var customMinutes by remember { mutableStateOf("") }
     var taskText by remember { mutableStateOf("") }
-    var voiceEnabled by remember { mutableStateOf(true) }
+    val voiceEnabled = settings.pomodoroVoiceEnabled
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
     Scaffold(
@@ -498,7 +501,13 @@ fun StudyPomodoroPage() {
                 CompanionPrepCard(
                     assistant = assistant,
                     voiceEnabled = voiceEnabled,
-                    onVoiceToggle = { voiceEnabled = it },
+                    onVoiceToggle = { enabled ->
+                        scope.launch {
+                            settingsStore.update { current ->
+                                current.copy(pomodoroVoiceEnabled = enabled)
+                            }
+                        }
+                    },
                 )
             }
             item {

@@ -163,6 +163,9 @@ class SettingsStore(
 
         val MEMORY_EMBEDDING_CONFIG = stringPreferencesKey("memory_embedding_config")
 
+        // 考研番茄钟
+        val POMODORO_VOICE_ENABLED = booleanPreferencesKey("pomodoro_voice_enabled")
+
     }
 
     private val dataStore = context.settingsStore
@@ -243,6 +246,7 @@ class SettingsStore(
                 themeId = preferences[THEME_ID] ?: PresetThemes[0].id,
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
+                pomodoroVoiceEnabled = preferences[POMODORO_VOICE_ENABLED] != false,
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: listOf(SearchServiceOptions.DEFAULT),
@@ -467,6 +471,7 @@ class SettingsStore(
             preferences[SYSTEM_TOOLS_SETTING] = JsonInstant.encodeToString(settings.systemToolsSetting)
             preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
             preferences[MEMORY_EMBEDDING_CONFIG] = JsonInstant.encodeToString(settings.memoryEmbeddingConfig)
+            preferences[POMODORO_VOICE_ENABLED] = settings.pomodoroVoiceEnabled
         }
     }
 
@@ -600,6 +605,7 @@ data class Settings(
     val systemToolsSetting: SystemToolsSetting = SystemToolsSetting(),
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
     val memoryEmbeddingConfig: MemoryEmbeddingConfig = MemoryEmbeddingConfig(),
+    val pomodoroVoiceEnabled: Boolean = true,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储

@@ -148,6 +148,52 @@ class CompanionRuntimeReducerTest {
     }
 
     @Test
+    fun `responsibility anchors merge by stable id and explicit cancellation wins`() {
+        val existing = CompanionAlwaysOnAnchor(
+            id = "assistant-a:responsibility:water",
+            assistantId = ASSISTANT_A,
+            kind = CompanionAlwaysOnAnchorKind.RESPONSIBILITY,
+            statement = "旧责任",
+            responsibility = "旧行动",
+            actions = listOf("旧动作"),
+            updatedAt = 100L,
+        )
+        val updated = existing.copy(
+            statement = "新责任",
+            responsibility = "新行动",
+            actions = listOf("新动作"),
+            updatedAt = 200L,
+        )
+        val first = reduceCompanionRuntimeState(
+            current = CompanionPersistedState(),
+            mutation = CompanionTurnMutation(
+                assistantId = ASSISTANT_A,
+                alwaysOnAnchors = listOf(existing),
+                nowMillis = 100L,
+            ),
+        )
+        val merged = reduceCompanionRuntimeState(
+            current = first.persistedState,
+            mutation = CompanionTurnMutation(
+                assistantId = ASSISTANT_A,
+                alwaysOnAnchors = listOf(updated),
+                nowMillis = 200L,
+            ),
+        )
+
+        assertEquals("新责任", merged.snapshot.alwaysOnAnchors.single().statement)
+        val cancelled = reduceCompanionRuntimeState(
+            current = merged.persistedState,
+            mutation = CompanionTurnMutation(
+                assistantId = ASSISTANT_A,
+                cancelAlwaysOnAnchorIds = listOf(updated.id),
+                nowMillis = 300L,
+            ),
+        )
+        assertTrue(cancelled.snapshot.alwaysOnAnchors.isEmpty())
+    }
+
+    @Test
     fun `accepted commitment becomes active in the same mutation`() {
         val reduced = reduceCompanionRuntimeState(
             current = CompanionPersistedState(),

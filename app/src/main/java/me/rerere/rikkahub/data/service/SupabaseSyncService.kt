@@ -10,8 +10,11 @@ import android.os.IBinder
 import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import me.rerere.rikkahub.AppScope
 import me.rerere.rikkahub.CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import org.koin.core.context.GlobalContext
@@ -117,7 +120,13 @@ class SupabaseSyncService : Service() {
             } catch (e: Exception) {
                 Log.e(TAG, "startForegroundService failed, trying direct sync", e)
                 // Service启动失败，直接在后台协程执行同步
-                kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+                val appScope = GlobalContext.getOrNull()?.get<AppScope>()
+                if (appScope == null) {
+                    Log.e(TAG, "AppScope unavailable, cannot run direct sync fallback")
+                    markSyncing(context, false)
+                    return
+                }
+                appScope.launch(Dispatchers.IO) {
                     try {
                         val settingsStore = org.koin.core.context.GlobalContext.getOrNull()?.get<SettingsStore>()
                         if (settingsStore == null) {
@@ -150,7 +159,12 @@ class SupabaseSyncService : Service() {
         }
 
         fun rescheduleIfEnabled(context: Context) {
-            CoroutineScope(Dispatchers.IO).launch {
+            val appScope = GlobalContext.getOrNull()?.get<AppScope>()
+            if (appScope == null) {
+                Log.e(TAG, "AppScope unavailable, cannot reschedule Supabase sync")
+                return
+            }
+            appScope.launch(Dispatchers.IO) {
                 try {
                     val settingsStore = GlobalContext.get().get<SettingsStore>()
                     val settings = settingsStore.settingsFlowRaw.first()
@@ -168,6 +182,8 @@ class SupabaseSyncService : Service() {
         }
     }
 
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         try {
             val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
@@ -184,7 +200,7 @@ class SupabaseSyncService : Service() {
             return START_NOT_STICKY
         }
 
-        CoroutineScope(Dispatchers.IO).launch {
+        serviceScope.launch {
             try {
                 val settingsStore = GlobalContext.get().get<SettingsStore>()
                 val settings = settingsStore.settingsFlowRaw.first()
@@ -214,6 +230,11 @@ class SupabaseSyncService : Service() {
         }
 
         return START_NOT_STICKY
+    }
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -248,7 +269,12 @@ class SupabaseSyncReceiver : BroadcastReceiver() {
 
                 // 推送一条 boot 事件。独立 try-catch + 协程，不阻塞 onReceive。
                 try {
-                    CoroutineScope(Dispatchers.IO).launch {
+                    val appScope = GlobalContext.getOrNull()?.get<AppScope>()
+                    if (appScope == null) {
+                        Log.e("SupabaseSyncService", "Boot: AppScope unavailable, skip boot event")
+                        return
+                    }
+                    appScope.launch(Dispatchers.IO) {
                         try {
                             val settingsStore = GlobalContext.get().get<SettingsStore>()
                             val settings = settingsStore.settingsFlowRaw.first()

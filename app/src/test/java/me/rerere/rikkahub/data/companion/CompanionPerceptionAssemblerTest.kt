@@ -139,6 +139,67 @@ class CompanionPerceptionAssemblerTest {
     }
 
     @Test
+    fun `prompt context keeps responsibility anchors separate from impression`() {
+        val packet = CompanionPerceptionAssembler.assemble(
+            input = input(),
+            snapshot = CompanionSnapshot.empty("assistant-a").copy(
+                privateImpression = CompanionPrivateImpression(summary = "用户喜欢被温柔提醒"),
+                alwaysOnAnchors = listOf(
+                    CompanionAlwaysOnAnchor(
+                        id = "assistant-a:responsibility:water",
+                        assistantId = "assistant-a",
+                        kind = CompanionAlwaysOnAnchorKind.RESPONSIBILITY,
+                        statement = "用户把喝水交给角色照看",
+                        responsibility = "学习久了提醒补水",
+                        actions = listOf("读取学习时长", "发送轻提醒"),
+                    ),
+                ),
+            ),
+        )
+
+        val prompt = packet.toPromptContext()
+
+        assertTrue(prompt.contains("private_impression:"))
+        assertTrue(prompt.contains("responsibility_anchors:"))
+        assertTrue(prompt.contains("<current_life_thread>"))
+        assertTrue(prompt.contains("responsibility=用户把喝水交给角色照看"))
+        assertTrue(prompt.contains("学习久了提醒补水"))
+        assertTrue(prompt.contains("Do not move these duties into private_impression"))
+    }
+
+    @Test
+    fun `relationship measurements produce behavioral boundaries`() {
+        val contract = CompanionRelationshipState(
+            trust = 0.2f,
+            boundaryConfidence = 0.2f,
+            unresolvedTension = 0.8f,
+        ).toBehaviorContract()
+
+        assertTrue(contract.contains("priority=repair_first"))
+        assertTrue(contract.contains("ask before sensitive"))
+        assertTrue(contract.contains("latest_user_correction_wins=true"))
+    }
+
+    @Test
+    fun `single impression dimensions are still injected`() {
+        val traitsOnly = CompanionPerceptionAssembler.assemble(
+            input = input(),
+            snapshot = CompanionSnapshot.empty("assistant-a").copy(
+                privateImpression = CompanionPrivateImpression(observedTraits = listOf("careful with commitments")),
+            ),
+        ).toPromptContext()
+        val changesOnly = CompanionPerceptionAssembler.assemble(
+            input = input(),
+            snapshot = CompanionSnapshot.empty("assistant-a").copy(
+                privateImpression = CompanionPrivateImpression(recentChanges = listOf("trust recovered after correction")),
+            ),
+        ).toPromptContext()
+
+        assertTrue(traitsOnly.contains("observed_trait=careful with commitments"))
+        assertTrue(changesOnly.contains("recent_change=trust recovered after correction"))
+    }
+
+    @Test
     fun `prompt context exposes absolute time and overdue state`() {
         val packet = CompanionPerceptionAssembler.assemble(
             input = input().copy(nowMillis = 1_783_616_400_000L),

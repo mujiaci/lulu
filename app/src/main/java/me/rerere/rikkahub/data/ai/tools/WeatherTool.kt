@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import android.content.Context
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.jsonObject
@@ -47,9 +46,9 @@ fun createWeatherTool(context: Context, settings: Settings): Tool = Tool(
             val apiKey = settings.systemToolsSetting.amapApiKey
             val locationService = LocationService(context, AmapService(apiKey))
             val locationResult = if (apiKey.isNotBlank()) {
-                runBlocking { locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh) }
+                locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh)
             } else {
-                runBlocking { locationService.getCoordinatesOnly(forceRefresh = forceRefresh) }
+                locationService.getCoordinatesOnly(forceRefresh = forceRefresh)
             }
             val location = locationResult.getOrNull()
                 ?: return@Tool listOf(

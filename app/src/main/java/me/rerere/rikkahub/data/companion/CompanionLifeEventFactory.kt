@@ -16,7 +16,7 @@ fun buildToolLifeEvent(
     nowMillis: Long,
 ): CompanionLifeEvent? {
     if (assistantId.isBlank() || execution.toolCallId.isBlank() || execution.toolName.isBlank()) return null
-    val successful = execution.outputText.toolExecutionSucceeded()
+    val successful = execution.isSuccessfulToolExecution()
     if (!successful) return null
     val descriptor = execution.toMeaningfulLifeEventDescriptor() ?: return null
     return CompanionLifeEvent(
@@ -28,6 +28,9 @@ fun buildToolLifeEvent(
         summary = execution.toLifeEventSummary(descriptor),
         source = source,
         evidenceReference = execution.toolCallId,
+        detailsJson = if (descriptor.type == CompanionLifeEventType.GAME) {
+            execution.outputText.trim().takeIf { it.startsWith("{") }
+        } ?: "",
         importance = descriptor.importance,
         startedAt = nowMillis,
         endedAt = nowMillis,
@@ -113,6 +116,8 @@ private fun CompanionToolExecution.toMeaningfulLifeEventDescriptor(): LifeEventD
     }
     else -> null
 }
+
+internal fun CompanionToolExecution.isSuccessfulToolExecution(): Boolean = outputText.toolExecutionSucceeded()
 
 private fun String.toolExecutionSucceeded(): Boolean {
     val trimmed = trim()

@@ -61,8 +61,10 @@ import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.companion.CompanionActionResult
+import me.rerere.rikkahub.data.companion.CompanionActionType
 import me.rerere.rikkahub.data.companion.CompanionCommitment
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorStatus
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionModelPresence
@@ -74,9 +76,8 @@ import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.CompanionLifeEvent
 import me.rerere.rikkahub.data.companion.CompanionLifeEventSource
 import me.rerere.rikkahub.data.companion.CompanionToolExecution
-import me.rerere.rikkahub.data.companion.buildAutonomousReflectionLifeEvent
 import me.rerere.rikkahub.data.companion.buildToolLifeEvent
-import me.rerere.rikkahub.data.companion.buildWaitingLifeEvent
+import me.rerere.rikkahub.data.companion.isSuccessfulToolExecution
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
 import me.rerere.rikkahub.data.companion.commitmentStatusesBySourceMessageId
 import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
@@ -128,6 +129,7 @@ class ProactiveMessageService : KoinComponent {
         const val ACTION_PROACTIVE_MESSAGE = "me.rerere.rikkahub.PROACTIVE_MESSAGE"
         private const val REQUEST_CODE = 10001
         private const val TARGETED_REQUEST_CODE = 10002
+        private const val RESPONSIBILITY_REVIEW_REQUEST_CODE = 10003
 
         internal const val PREFS_NAME = "proactive_message_prefs"
         private const val KEY_NEXT_TRIGGER_TIME = "next_trigger_time"
@@ -347,6 +349,44 @@ class ProactiveMessageService : KoinComponent {
             }
         }
 
+        /** Schedule the nightly review that turns always-on responsibilities into real actions. */
+        fun scheduleAlwaysOnAnchorReview(
+            context: Context,
+            settings: Settings,
+            assistantId: Uuid,
+            nowMillis: Long = System.currentTimeMillis(),
+        ) {
+            val setting = settings.getProactiveMessageSetting(assistantId)
+            if (!setting.enabled) return
+            val triggerAtMillis = nextAlwaysOnAnchorReviewAt(nowMillis)
+            val reason = "检查角色的常驻责任锚点，并在有真实证据时执行今晚需要完成的事情。"
+            val userText = "夜间责任检查：读取常驻锚点、睡眠、应用使用和健康数据，完成必要的次日作息动作。"
+            val intent = Intent(context, ProactiveMessageReceiver::class.java).apply {
+                action = ACTION_PROACTIVE_MESSAGE
+                putExtra(EXTRA_ASSISTANT_ID, assistantId.toString())
+                putExtra(EXTRA_TARGETED_REASON, reason)
+                putExtra(EXTRA_TARGETED_USER_TEXT, userText)
+                putExtra(EXTRA_TARGETED_KIND, "always_on_anchor_review")
+            }
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                RESPONSIBILITY_REVIEW_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+                    alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                } else {
+                    alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+                }
+            } else {
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+            }
+            Log.d(TAG, "Scheduled responsibility review at $triggerAtMillis")
+        }
+
         fun scheduleCommitment(
             context: Context,
             setting: ProactiveMessageSetting,
@@ -525,6 +565,15 @@ class ProactiveMessageService : KoinComponent {
             pendingIntent?.let {
                 alarmManager.cancel(it)
                 Log.d(TAG, "Cancelled proactive message alarm")
+            }
+            PendingIntent.getBroadcast(
+                context,
+                RESPONSIBILITY_REVIEW_REQUEST_CODE,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+            )?.let { reviewIntent ->
+                alarmManager.cancel(reviewIntent)
+                Log.d(TAG, "Cancelled responsibility review alarm")
             }
 
             // Also cancel WorkManager fallback
@@ -761,55 +810,71 @@ class ProactiveMessageService : KoinComponent {
 class ProactiveMessageReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d(ProactiveMessageService.TAG, "=== onReceive triggered at ${System.currentTimeMillis()}, action=${intent.action} ===")
-        when (intent.action) {
-            ProactiveMessageService.ACTION_PROACTIVE_MESSAGE -> {
-                Log.d(ProactiveMessageService.TAG, "Starting ProactiveMessageTriggerService...")
-                val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
-                    putExtra(
-                        ProactiveMessageService.EXTRA_ASSISTANT_ID,
-                        intent.getStringExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID)
-                    )
-                    putExtra(
-                        ProactiveMessageService.EXTRA_TARGETED_REASON,
-                        intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_REASON)
-                    )
-                    putExtra(
-                        ProactiveMessageService.EXTRA_TARGETED_USER_TEXT,
-                        intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_USER_TEXT)
-                    )
-                    putExtra(
-                        ProactiveMessageService.EXTRA_TARGETED_KIND,
-                        intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_KIND)
-                    )
-                    putExtra(
-                        ProactiveMessageService.EXTRA_COMMITMENT_ID,
-                        intent.getStringExtra(ProactiveMessageService.EXTRA_COMMITMENT_ID)
-                    )
-                }
-                context.startForegroundService(serviceIntent)
-            }
-            Intent.ACTION_BOOT_COMPLETED -> {
-                Log.d(ProactiveMessageService.TAG, "Boot completed, rescheduling proactive message")
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
-                        val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
-                        val companionRuntime = org.koin.core.context.GlobalContext.get().get<CompanionRuntime>()
-                        val settings = settingsStore.settingsFlow.first()
-                        companionRuntime.nextCommitment()?.let { commitment ->
-                            val assistantId = runCatching { Uuid.parse(commitment.assistantId) }.getOrNull()
-                            val setting = assistantId?.let { settings.getProactiveMessageSetting(it) }
-                            if (setting?.enabled == true) {
-                                ProactiveMessageService.scheduleCommitment(context, setting, commitment)
-                            }
-                        }
-                        val proactiveSetting = settings.getProactiveMessageSetting()
-                        if (proactiveSetting.enabled) {
-                            ProactiveMessageService.scheduleNext(context, settings)
-                        }
-                    } catch (e: Exception) {
-                        Log.e(ProactiveMessageService.TAG, "Failed to reschedule after boot", e)
+        if (intent.action != ProactiveMessageService.ACTION_PROACTIVE_MESSAGE) return
+        Log.d(ProactiveMessageService.TAG, "Starting ProactiveMessageTriggerService...")
+        val serviceIntent = Intent(context, ProactiveMessageTriggerService::class.java).apply {
+            putExtra(
+                ProactiveMessageService.EXTRA_ASSISTANT_ID,
+                intent.getStringExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID)
+            )
+            putExtra(
+                ProactiveMessageService.EXTRA_TARGETED_REASON,
+                intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_REASON)
+            )
+            putExtra(
+                ProactiveMessageService.EXTRA_TARGETED_USER_TEXT,
+                intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_USER_TEXT)
+            )
+            putExtra(
+                ProactiveMessageService.EXTRA_TARGETED_KIND,
+                intent.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_KIND)
+            )
+            putExtra(
+                ProactiveMessageService.EXTRA_COMMITMENT_ID,
+                intent.getStringExtra(ProactiveMessageService.EXTRA_COMMITMENT_ID)
+            )
+        }
+        context.startForegroundService(serviceIntent)
+    }
+}
+
+/** Receives only the system boot broadcast and never forwards untrusted extras into generation. */
+class ProactiveBootReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
+        Log.d(ProactiveMessageService.TAG, "Boot completed, rescheduling proactive message")
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val settingsStore = org.koin.core.context.GlobalContext.get().get<SettingsStore>()
+                val companionRuntime = org.koin.core.context.GlobalContext.get().get<CompanionRuntime>()
+                val settings = settingsStore.settingsFlow.first()
+                companionRuntime.nextCommitment()?.let { commitment ->
+                    val assistantId = runCatching { Uuid.parse(commitment.assistantId) }.getOrNull()
+                    val setting = assistantId?.let { settings.getProactiveMessageSetting(it) }
+                    if (setting?.enabled == true) {
+                        ProactiveMessageService.scheduleCommitment(context, setting, commitment)
                     }
                 }
+                val currentAssistant = settings.getCurrentAssistant()
+                if (companionRuntime.snapshot(currentAssistant.id.toString()).alwaysOnAnchors.any { anchor ->
+                        anchor.status == CompanionAlwaysOnAnchorStatus.ACTIVE &&
+                            (anchor.expiresAt == null || anchor.expiresAt > System.currentTimeMillis())
+                    }) {
+                    ProactiveMessageService.scheduleAlwaysOnAnchorReview(
+                        context = context,
+                        settings = settings,
+                        assistantId = currentAssistant.id,
+                    )
+                }
+                val proactiveSetting = settings.getProactiveMessageSetting()
+                if (proactiveSetting.enabled) {
+                    ProactiveMessageService.scheduleNext(context, settings)
+                }
+            } catch (e: Exception) {
+                Log.e(ProactiveMessageService.TAG, "Failed to reschedule after boot", e)
+            } finally {
+                pendingResult.finish()
             }
         }
     }
@@ -881,12 +946,16 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     } else {
                         null
                     }
-                val targetedCommitmentId = intent?.getStringExtra(ProactiveMessageService.EXTRA_COMMITMENT_ID)
-                    ?: if (canRestoreTargeted) {
-                        prefs.getString(ProactiveMessageService.KEY_TARGETED_COMMITMENT_ID, null)
-                    } else {
-                        null
-                    }
+                val targetedCommitmentId = if (targetedKind == "always_on_anchor_review") {
+                    null
+                } else {
+                    intent?.getStringExtra(ProactiveMessageService.EXTRA_COMMITMENT_ID)
+                        ?: if (canRestoreTargeted) {
+                            prefs.getString(ProactiveMessageService.KEY_TARGETED_COMMITMENT_ID, null)
+                        } else {
+                            null
+                        }
+                }
                 val isDurableCommitmentTrigger = !targetedCommitmentId.isNullOrBlank()
                 val isTargetedTrigger = isDurableCommitmentTrigger || !targetedReason.isNullOrBlank()
 
@@ -959,6 +1028,25 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
                 executingAssistantName = assistant.name.ifBlank { "当前角色" }
                 val assistantUuid = assistant.id
+                if (targetedKind == "always_on_anchor_review") {
+                    val nowMillis = System.currentTimeMillis()
+                    val hasActiveResponsibility = companionRuntime.snapshot(assistantUuid.toString())
+                        .alwaysOnAnchors
+                        .any { anchor ->
+                            anchor.status == CompanionAlwaysOnAnchorStatus.ACTIVE &&
+                                (anchor.expiresAt == null || anchor.expiresAt > nowMillis)
+                        }
+                    if (!hasActiveResponsibility) {
+                        Log.d(TAG, "Discarding responsibility review because no active anchors remain")
+                        ProactiveMessageService.scheduleNext(
+                            context = this@ProactiveMessageTriggerService,
+                            settings = settings,
+                            assistantId = assistantUuid,
+                        )
+                        stopSelf()
+                        return@launch
+                    }
+                }
                 if (isDurableCommitmentTrigger) {
                     val started = companionRuntime.beginCommitment(
                         assistantId = assistantUuid.toString(),
@@ -1180,16 +1268,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 },
                             ),
                             nowMillis = nowMillis,
-                            lifeEvents = listOfNotNull(
-                                buildAutonomousReflectionLifeEvent(
-                                    assistantId = assistant.id.toString(),
-                                    reason = autonomousPlan.reason,
-                                    reviewedMemory = memoryContext.isNotBlank(),
-                                    evidenceReference = "autonomous:self_activity:${nowMillis / 3_600_000L}",
-                                    nowMillis = nowMillis,
-                                ),
-                                activityEvent,
-                            ),
+                            lifeEvents = listOfNotNull(activityEvent),
                         )
                     }.onFailure { error ->
                         Log.w(TAG, "Failed to execute autonomous self activity", error)
@@ -1215,21 +1294,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 nowMillis = nowMillis,
                             ),
                             nowMillis = nowMillis,
-                            lifeEvents = listOfNotNull(
-                                buildAutonomousReflectionLifeEvent(
-                                    assistantId = assistant.id.toString(),
-                                    reason = autonomousPlan.reason,
-                                    reviewedMemory = memoryContext.isNotBlank(),
-                                    evidenceReference = "autonomous:reflection:${nowMillis / 3_600_000L}",
-                                    nowMillis = nowMillis,
-                                ),
-                                buildWaitingLifeEvent(
-                                    assistantId = assistant.id.toString(),
-                                    reason = autonomousPlan.reason,
-                                    evidenceReference = "autonomous:wait:${nowMillis / 3_600_000L}",
-                                    nowMillis = nowMillis,
-                                ),
-                            ),
                         )
                     }.onFailure { error ->
                         Log.w(TAG, "Failed to persist waiting companion state", error)
@@ -1261,21 +1325,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                     nowMillis = nowMillis,
                                 ),
                                 nowMillis = nowMillis,
-                                lifeEvents = listOfNotNull(
-                                    buildAutonomousReflectionLifeEvent(
-                                        assistantId = assistant.id.toString(),
-                                        reason = plan.reason,
-                                        reviewedMemory = memoryContext.isNotBlank(),
-                                        evidenceReference = "autonomous:reflection:${nowMillis / 3_600_000L}",
-                                        nowMillis = nowMillis,
-                                    ),
-                                    buildWaitingLifeEvent(
-                                        assistantId = assistant.id.toString(),
-                                        reason = plan.reason,
-                                        evidenceReference = "autonomous:deferred:${nowMillis / 3_600_000L}",
-                                        nowMillis = nowMillis,
-                                    ),
-                                ),
                             )
                         }.onFailure { error ->
                             Log.w(TAG, "Failed to persist deferred companion state", error)
@@ -1351,6 +1400,9 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     executingCommitment?.actionPlan?.toolName?.let(::add)
                     addAll(executingCommitment?.actionPlan?.preferredToolNames.orEmpty())
                     addAll(autonomousPlan?.toolNames.orEmpty())
+                    if (effectiveTargetedKind == "always_on_anchor_review") {
+                        addAll(listOf("get_gadgetbridge_data", "get_app_usage", "get_battery_info", "set_alarm"))
+                    }
                 }
                 val tools = activeTools
                     .selectCompanionToolsForGeneration(
@@ -1457,11 +1509,16 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 }
                 val commitmentResolvedExternally = executingCommitmentId != null &&
                     currentCommitmentStatus != CompanionCommitmentStatus.EXECUTING
+                val commitmentCompletion = validateProactiveCommitmentCompletion(
+                    commitment = executingCommitment,
+                    toolExecutions = completedToolExecutions,
+                    replyText = replyText,
+                )
                 val shouldDiscardReply = shouldDiscardProactiveReply(
                     replyText = replyText,
                     executingCommitmentId = executingCommitmentId,
                     currentCommitmentStatus = currentCommitmentStatus,
-                )
+                ) || (executingCommitment != null && !commitmentCompletion.success)
 
                 Log.d(TAG, "Proactive message generated: '${replyText.take(100)}...' (${replyText.length} chars), hasToolCalls=$hasToolCalls")
 
@@ -1485,6 +1542,17 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     }
                     if (commitmentResolvedExternally && executingCommitment?.isWakeGoal() == true) {
                         dismissWakeAlarms(assistant.name)
+                    }
+                    if (completedToolExecutions.isNotEmpty()) {
+                        runCatching {
+                            persistProactiveToolEvidence(
+                                assistant = assistant,
+                                toolExecutions = completedToolExecutions,
+                                nowMillis = System.currentTimeMillis(),
+                            )
+                        }.onFailure { error ->
+                            Log.w(TAG, "Failed to persist proactive tool evidence for skipped reply", error)
+                        }
                     }
                 } else {
                     // 有效回复：session 里已有 aiMessage（流式过程已追加），持久化并发通知
@@ -1515,12 +1583,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 executingCommitment?.let { commitment ->
                     val completedAt = System.currentTimeMillis()
                     val actionResult = CompanionActionResult(
-                        success = true,
-                        summary = if (replyText.isProactiveSkipReply()) {
-                            "Reappraised at the promised time; no message was needed"
-                        } else {
-                            "Proactive message delivered"
-                        },
+                        success = commitmentCompletion.success,
+                        summary = commitmentCompletion.summary,
                         completedAt = completedAt,
                         outputReference = conversationId.toString(),
                     )
@@ -1582,7 +1646,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
                 val hasNextTargeted = if (isDurableCommitmentTrigger) {
                     scheduleNextDurableCommitment()
-                } else if (isTargetedTrigger) {
+                } else if (isTargetedTrigger && targetedKind != "always_on_anchor_review") {
                     ProactiveMessageService.popCurrentTargetedAndScheduleNext(
                         context = this@ProactiveMessageTriggerService,
                         setting = proactiveSetting,
@@ -1606,8 +1670,32 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         assistantId = assistantUuid,
                     )
                 }
+                if (targetedKind == "always_on_anchor_review") {
+                    ProactiveMessageService.scheduleAlwaysOnAnchorReview(
+                        context = this@ProactiveMessageTriggerService,
+                        settings = settings,
+                        assistantId = assistantUuid,
+                        nowMillis = System.currentTimeMillis(),
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(ProactiveMessageService.TAG, "Failed to trigger proactive message", e)
+                val failedIntent = intent
+                if (failedIntent?.getStringExtra(ProactiveMessageService.EXTRA_TARGETED_KIND) == "always_on_anchor_review") {
+                    runCatching {
+                        val assistantId = failedIntent.getStringExtra(ProactiveMessageService.EXTRA_ASSISTANT_ID)
+                            ?.let { Uuid.parse(it) }
+                            ?: return@runCatching
+                        ProactiveMessageService.scheduleAlwaysOnAnchorReview(
+                            context = this@ProactiveMessageTriggerService,
+                            settings = settingsStore.settingsFlow.first(),
+                            assistantId = assistantId,
+                            nowMillis = System.currentTimeMillis(),
+                        )
+                    }.onFailure { scheduleError ->
+                        Log.e(TAG, "Failed to reschedule responsibility review", scheduleError)
+                    }
+                }
                 val activeCommitment = executingCommitment
                 if (activeCommitment != null) {
                     runCatching {
@@ -1757,6 +1845,29 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             }
         }
         persistCompanionState(assistant, unifiedState, nowMillis, lifeEvents)
+    }
+
+    private suspend fun persistProactiveToolEvidence(
+        assistant: Assistant,
+        toolExecutions: List<CompanionToolExecution>,
+        nowMillis: Long,
+    ) {
+        val lifeEvents = toolExecutions.mapNotNull { execution ->
+            buildToolLifeEvent(
+                assistantId = assistant.id.toString(),
+                execution = execution,
+                source = CompanionLifeEventSource.TOOL,
+                nowMillis = nowMillis,
+            )
+        }
+        if (lifeEvents.isEmpty()) return
+        companionRuntime.applyTurn(
+            CompanionTurnMutation(
+                assistantId = assistant.id.toString(),
+                lifeEvents = lifeEvents,
+                nowMillis = nowMillis,
+            ),
+        )
     }
 
     private suspend fun persistCompanionState(
@@ -2059,15 +2170,15 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         appendLine("角色名：${name.ifBlank { "当前角色" }}")
         if (systemPrompt.isNotBlank()) {
             appendLine("系统人设：")
-            appendLine(systemPrompt.take(1600))
+            appendLine(systemPrompt)
         }
         if (appearancePrompt.isNotBlank()) {
             appendLine("外貌设定：")
-            appendLine(appearancePrompt.take(500))
+            appendLine(appearancePrompt)
         }
         if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
             appendLine("语言/消息模板：")
-            appendLine(messageTemplate.take(400))
+            appendLine(messageTemplate)
         }
         buildPromptInjectionPlannerContext(
             messages = messages,
@@ -2076,7 +2187,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
             lorebooks = settings.lorebooks,
         ).takeIf(String::isNotBlank)?.let { injectionContext ->
             appendLine("模式与世界书：")
-            appendLine(injectionContext.take(1600))
+            appendLine(injectionContext)
         }
     }.trim()
 
@@ -2189,6 +2300,16 @@ internal fun buildAutonomousPlanPresenceState(
     )
 }
 
+internal fun nextAlwaysOnAnchorReviewAt(
+    nowMillis: Long,
+    zoneId: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+): Long {
+    val now = java.time.Instant.ofEpochMilli(nowMillis).atZone(zoneId)
+    var review = now.toLocalDate().atTime(0, 45).atZone(zoneId)
+    if (!review.isAfter(now)) review = review.plusDays(1)
+    return review.toInstant().toEpochMilli()
+}
+
 private val AUTONOMOUS_SELF_ACTIVITY_TOOLS = setOf("play_companion_game")
 
 internal fun composeProactiveGenerationMessages(
@@ -2211,6 +2332,57 @@ private fun String.isProactiveSkipReply(): Boolean {
     return normalized.isBlank() ||
         normalized.equals("[PASS]", ignoreCase = true) ||
         normalized.equals("[SKIP]", ignoreCase = true)
+}
+
+internal data class ProactiveCommitmentCompletionValidation(
+    val success: Boolean,
+    val summary: String,
+)
+
+internal fun validateProactiveCommitmentCompletion(
+    commitment: CompanionCommitment?,
+    toolExecutions: List<CompanionToolExecution>,
+    replyText: String,
+): ProactiveCommitmentCompletionValidation {
+    if (commitment == null) {
+        return ProactiveCommitmentCompletionValidation(true, "No durable commitment was being executed.")
+    }
+    val requiredTools = buildSet {
+        commitment.actionPlan.toolName?.takeIf(String::isNotBlank)?.let(::add)
+        when (commitment.actionPlan.type) {
+            CompanionActionType.ALARM -> add("set_alarm")
+            CompanionActionType.CALENDAR -> add("calendar_tool")
+            CompanionActionType.TOOL -> commitment.actionPlan.preferredToolNames
+                .filter(String::isNotBlank)
+                .forEach(::add)
+            else -> Unit
+        }
+    }
+    if (requiredTools.isEmpty()) {
+        return ProactiveCommitmentCompletionValidation(
+            success = !replyText.isProactiveSkipReply(),
+            summary = if (replyText.isProactiveSkipReply()) {
+                "The proactive turn was reappraised and no user-facing message was needed."
+            } else {
+                "The promised proactive message was delivered."
+            },
+        )
+    }
+    val successfulTools = toolExecutions
+        .filter { it.toolName in requiredTools && it.isSuccessfulToolExecution() }
+        .map { it.toolName }
+        .distinct()
+    return if (successfulTools.isNotEmpty()) {
+        ProactiveCommitmentCompletionValidation(
+            success = true,
+            summary = "Required action completed: ${successfulTools.joinToString(", ")}",
+        )
+    } else {
+        ProactiveCommitmentCompletionValidation(
+            success = false,
+            summary = "Required tool action was not confirmed: ${requiredTools.joinToString(", ")}",
+        )
+    }
 }
 
 internal fun shouldDiscardProactiveReply(
@@ -2317,6 +2489,11 @@ internal fun buildTargetedProactiveSensingInstruction(
 ): String = buildString {
     val reason = targetedReason.orEmpty()
     when (targetedKind) {
+        "always_on_anchor_review" -> {
+            appendLine("本次目标是检查角色承担的长期责任：逐项判断触发条件是否已满足，再执行真实可用的动作或明确等待，不要把责任复述成空话。")
+            appendLine("优先读取睡眠、应用使用、电量等已授权证据；涉及次日起床时，只有根据真实证据判断出时间后才能调用 set_alarm，不能编造睡眠数据。")
+            appendLine("若用户已经取消某项责任，尊重最新状态，不要继续执行；没有新证据或行动价值时安静结束，并等待下一次真实变化。")
+        }
         "wake" -> {
             appendLine("本次目标是持续叫醒用户：先看目标时间后用户是否发过消息，再看屏幕/应用使用、健康活动、位置移动、天气和电量。")
             appendLine("把承诺中的 last_result 当作上一次观察，与本轮位置和应用状态比较；明显移动、目标时间后新消息或持续主动使用手机可以支持 awake，仍在原地且缺少活动只能判断 asleep/uncertain。")

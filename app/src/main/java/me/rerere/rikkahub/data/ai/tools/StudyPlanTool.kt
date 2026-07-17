@@ -1,7 +1,6 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
@@ -111,24 +110,22 @@ fun createTodayStudyPlanTool(
         if (action == "set_completion") {
             var changedIds = emptySet<String>()
             var updatedState: StudyState? = null
-            runBlocking {
-                store.update { current ->
-                    val result = updateTodayStudyTaskCompletion(
-                        state = current,
-                        completeTaskIds = params.stringSet("complete_task_ids"),
-                        unfinishedTaskIds = params.stringSet("unfinished_task_ids"),
-                        completeAllExceptTitles = params.stringSet("complete_all_except_titles"),
-                    )
-                    changedIds = result.changedTaskIds
-                    updatedState = result.state
-                    result.state
-                }
+            store.update { current ->
+                val result = updateTodayStudyTaskCompletion(
+                    state = current,
+                    completeTaskIds = params.stringSet("complete_task_ids"),
+                    unfinishedTaskIds = params.stringSet("unfinished_task_ids"),
+                    completeAllExceptTitles = params.stringSet("complete_all_except_titles"),
+                )
+                changedIds = result.changedTaskIds
+                updatedState = result.state
+                result.state
             }
             listOf(UIMessagePart.Text(buildJsonObject {
                 put("success", true)
                 put("changed_count", changedIds.size)
                 put("changed_task_ids", buildJsonArray { changedIds.forEach { add(it) } })
-                put("state", buildTodayStudyPlanPayload(updatedState ?: runBlocking { store.state.first() }))
+                put("state", buildTodayStudyPlanPayload(updatedState ?: store.state.first()))
             }.toString()))
         } else if (action == "claim_sleep_reward") {
             val habit = when (params["sleep_habit"]?.jsonPrimitive?.contentOrNull) {
@@ -149,39 +146,37 @@ fun createTodayStudyPlanTool(
                 var rewardTenDrawTickets = 0
                 var resultReason = ""
                 var updatedState: StudyState? = null
-                runBlocking {
-                    store.update { current ->
-                        val selectedAssistantId = current.selectedAssistantId
-                        if (
-                            assistantId != null &&
-                            selectedAssistantId != null &&
-                            assistantId != selectedAssistantId
-                        ) {
-                            blockedByCompanion = true
-                            updatedState = current
-                            current
-                        } else {
-                            val result = StudyRules.claimSleepHabitReward(
-                                state = current,
-                                habit = habit,
-                                assistantName = assistantName,
-                                decisionReason = params["decision_reason"]
-                                    ?.jsonPrimitive
-                                    ?.contentOrNull
-                                    .orEmpty(),
-                                reportedTime = params.reportedSleepClockTime(),
-                            )
-                            alreadyClaimed = result.alreadyClaimed
-                            granted = result.granted
-                            rewardKudos = result.reward.kudos
-                            rewardTenDrawTickets = result.reward.tenDrawTickets
-                            resultReason = result.reason
-                            updatedState = result.state
-                            result.state
-                        }
+                store.update { current ->
+                    val selectedAssistantId = current.selectedAssistantId
+                    if (
+                        assistantId != null &&
+                        selectedAssistantId != null &&
+                        assistantId != selectedAssistantId
+                    ) {
+                        blockedByCompanion = true
+                        updatedState = current
+                        current
+                    } else {
+                        val result = StudyRules.claimSleepHabitReward(
+                            state = current,
+                            habit = habit,
+                            assistantName = assistantName,
+                            decisionReason = params["decision_reason"]
+                                ?.jsonPrimitive
+                                ?.contentOrNull
+                                .orEmpty(),
+                            reportedTime = params.reportedSleepClockTime(),
+                        )
+                        alreadyClaimed = result.alreadyClaimed
+                        granted = result.granted
+                        rewardKudos = result.reward.kudos
+                        rewardTenDrawTickets = result.reward.tenDrawTickets
+                        resultReason = result.reason
+                        updatedState = result.state
+                        result.state
                     }
                 }
-                val finalState = updatedState ?: runBlocking { store.state.first() }
+                val finalState = updatedState ?: store.state.first()
                 listOf(UIMessagePart.Text(buildJsonObject {
                     put("success", !blockedByCompanion)
                     put("granted", !blockedByCompanion && granted)
@@ -198,7 +193,7 @@ fun createTodayStudyPlanTool(
                 }.toString()))
             }
         } else {
-            val state = runBlocking { store.state.first() }
+            val state = store.state.first()
             listOf(UIMessagePart.Text(buildTodayStudyPlanPayload(state).toString()))
         }
     },

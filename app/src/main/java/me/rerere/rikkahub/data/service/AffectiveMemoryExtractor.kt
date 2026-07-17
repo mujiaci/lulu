@@ -300,11 +300,12 @@ object AffectiveMemoryExtractor {
         assistantName: String = "当前角色",
         assistantPersona: String = "",
         stateHistory: List<CompanionStateHistoryEntry> = emptyList(),
+        responsibilityContext: String = "",
     ): String = buildString {
         val name = assistantName.ifBlank { "当前角色" }
         appendLine("你是$name 的记忆整理器。只提取值得以后想起的候选记忆。")
         if (assistantPersona.isNotBlank()) {
-            appendLine("角色设定摘要：${assistantPersona.take(1200)}")
+            appendLine("角色设定摘要：$assistantPersona")
         }
         appendLine("只保存以后召回仍有价值的新事实：稳定用户事实、用户偏好、用户边界、明确承诺及结果、有用户证据的关系变化、高情绪共同事件、用户纠正。")
         appendLine("content 必须是$name 第一人称的自然完整记忆，不要拼接字段标签，也不要粘贴工具 JSON、学习计划原文、单词表、长列表或完整 observation。")
@@ -316,6 +317,12 @@ object AffectiveMemoryExtractor {
         appendLine("每条字段：type, content, roleFeeling, bodySense, unspokenThought, userSignal, relationshipEffect, importance, confidence, tags, embeddingText, sourceMessageNodeIds, evidenceMessageNodeIds, relatedMemoryIds, people, topics, supersededByMemoryId, correctedAt。")
         appendLine("type 只能使用 user_fact, user_preference, user_boundary, promise, relationship, shared_event, correction。")
         appendLine("每条必须提供 sourceMessageNodeIds 或 evidenceMessageNodeIds，并用 userSignal 简述用户原话或真实工具结果证据；无新事实时返回空 memories。")
+        if (responsibilityContext.isNotBlank()) {
+            appendLine("<existing_responsibilities>")
+            appendLine(responsibilityContext.take(5_000))
+            appendLine("这些是角色正在承担的责任，只用于避免遗忘、重复或矛盾；不要把责任本身改写成 private impression，也不要在用户没有新增或纠正时重复提取。")
+            appendLine("</existing_responsibilities>")
+        }
         val visibleStateHistory = stateHistory.filter { entry -> entry.toExtractionContext().isNotBlank() }
         if (visibleStateHistory.isNotEmpty()) {
             appendLine("<character_state_history>")

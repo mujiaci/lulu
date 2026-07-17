@@ -32,11 +32,14 @@ import me.rerere.rikkahub.di.viewModelModule
 import me.rerere.rikkahub.plugin.di.pluginModule
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.service.DailySummaryService
 import me.rerere.rikkahub.data.service.DeviceEventTrackingService
 import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.SupabaseSyncService
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorStatus
+import me.rerere.rikkahub.data.companion.CompanionRuntime
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
 import me.rerere.rikkahub.utils.DatabaseUtil
@@ -163,6 +166,15 @@ class RikkaHubApp : Application() {
                     Log.i(TAG, "Rescheduled proactive message alarm on app start")
                 }
                 ProactiveMessageService.reconcileDurableCommitments(this@RikkaHubApp, settings)
+                val currentAssistant = settings.getCurrentAssistant()
+                val currentSnapshot = get<CompanionRuntime>().snapshot(currentAssistant.id.toString())
+                if (currentSnapshot.alwaysOnAnchors.any { it.status == CompanionAlwaysOnAnchorStatus.ACTIVE }) {
+                    ProactiveMessageService.scheduleAlwaysOnAnchorReview(
+                        context = this@RikkaHubApp,
+                        settings = settings,
+                        assistantId = currentAssistant.id,
+                    )
+                }
             }.onFailure {
                 Log.e(TAG, "rescheduleProactiveMessageIfEnabled failed", it)
             }

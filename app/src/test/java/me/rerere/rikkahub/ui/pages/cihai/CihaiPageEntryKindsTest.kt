@@ -12,10 +12,11 @@ class CihaiPageEntryKindsTest {
         val sections = visibleCihaiSections()
 
         assertEquals(
-            listOf("挂心", "关系", "生活", "日记"),
+            listOf("挂心", "责任", "关系", "生活", "日记"),
             sections.map { it.label },
         )
         assertEquals(null, CihaiSection.CONCERNS.entryKind)
+        assertEquals(null, CihaiSection.RESPONSIBILITIES.entryKind)
         assertEquals(null, CihaiSection.RELATIONSHIP.entryKind)
         assertEquals(null, CihaiSection.LIFE.entryKind)
         assertEquals(CihaiEntryKind.DIARY, CihaiSection.DIARY.entryKind)

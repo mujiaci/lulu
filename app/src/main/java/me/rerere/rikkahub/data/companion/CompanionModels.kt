@@ -19,6 +19,8 @@ data class CompanionSnapshot(
     val stateHistory: List<CompanionStateHistoryEntry> = emptyList(),
     val neuroState: CompanionNeuroState = CompanionNeuroState(),
     val privateImpression: CompanionPrivateImpression = CompanionPrivateImpression(),
+    /** Duties the character must actively remember and act on, separate from its impression of the user. */
+    val alwaysOnAnchors: List<CompanionAlwaysOnAnchor> = emptyList(),
     val goals: List<CompanionGoal> = emptyList(),
     val lifeEvents: List<CompanionLifeEvent> = emptyList(),
     val relationship: CompanionRelationshipState = CompanionRelationshipState(),
@@ -56,6 +58,40 @@ data class CompanionPrivateImpression(
     val recentChanges: List<String> = emptyList(),
     val updatedAt: Long = 0L,
 )
+
+@Serializable
+data class CompanionAlwaysOnAnchor(
+    val id: String = UUID.randomUUID().toString(),
+    val assistantId: String,
+    val kind: CompanionAlwaysOnAnchorKind,
+    val statement: String,
+    val responsibility: String? = null,
+    val triggers: List<String> = emptyList(),
+    val actions: List<String> = emptyList(),
+    val avoid: List<String> = emptyList(),
+    val importance: Int = 5,
+    val status: CompanionAlwaysOnAnchorStatus = CompanionAlwaysOnAnchorStatus.ACTIVE,
+    val sourceConversationId: String? = null,
+    val sourceMessageId: String? = null,
+    val createdAt: Long = System.currentTimeMillis(),
+    val updatedAt: Long = createdAt,
+    val lastConfirmedAt: Long? = null,
+    val expiresAt: Long? = null,
+)
+
+@Serializable
+enum class CompanionAlwaysOnAnchorKind {
+    HEALTH,
+    RESPONSIBILITY,
+}
+
+@Serializable
+enum class CompanionAlwaysOnAnchorStatus {
+    ACTIVE,
+    PAUSED,
+    COMPLETED,
+    CANCELLED,
+}
 
 @Serializable
 data class CompanionGoal(
@@ -117,6 +153,8 @@ data class CompanionLifeEvent(
     val summary: String = "",
     val source: CompanionLifeEventSource = CompanionLifeEventSource.SYSTEM,
     val evidenceReference: String? = null,
+    /** Optional structured evidence, used by the UI to replay real game/tool activity. */
+    val detailsJson: String = "",
     val relatedMemoryIds: List<String> = emptyList(),
     val importance: Int = 2,
     val startedAt: Long = System.currentTimeMillis(),

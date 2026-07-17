@@ -6,6 +6,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.JsonPrimitive
 import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.ModelType
 import me.rerere.ai.provider.ProviderManager
@@ -30,6 +31,7 @@ private const val MEMORY_HEBBIAN_EDGE_DELTA = 0.025
 private const val MEMORY_HEBBIAN_MAX_EDGE_WEIGHT = 1.5
 private const val MEMORY_GRAPH_MIN_RECALL_WEIGHT = 0.08
 private const val MEMORY_GRAPH_DECAY_HALF_LIFE_DAYS = 45.0
+private const val MEMORY_MIN_VECTOR_RELEVANCE = 0.32
 private const val LIGHT_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
 private const val HEAVY_MAINTENANCE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
 private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
@@ -45,6 +47,83 @@ private val PRIVATE_IMPRESSION_MEMORY_KINDS = setOf(
     "relationship",
     "shared_event",
     "correction",
+)
+
+internal fun parseConversationalCorrectionClauses(text: String): List<Pair<String, String>> {
+    val normalized = text.trim().replace(Regex("\\s+"), " ")
+    if (normalized.isBlank()) return emptyList()
+    val markers = listOf("而是", "其实是", "应该是")
+    val marker = markers.firstOrNull { it in normalized } ?: return emptyList()
+    val markerIndex = normalized.indexOf(marker)
+    if (markerIndex <= 0) return emptyList()
+    val before = normalized.substring(0, markerIndex)
+    val explicitOld = before.substringAfterLast("不是", before.substringAfterLast("不对", ""))
+    val correctionTopic = before
+        .takeIf { "纠正" in it }
+        ?.substringAfterLast('，')
+        ?.substringAfterLast(',')
+        .orEmpty()
+    val old = explicitOld.ifBlank { correctionTopic }
+        .trim(' ', '，', ',', '：', ':', '。', '.')
+        .take(120)
+    val replacement = normalized.substring(markerIndex + marker.length)
+        .trim(' ', '，', ',', '：', ':', '。', '.')
+        .take(180)
+    if (old.length < 2 || replacement.length < 2) return emptyList()
+    return listOf(old to replacement)
+}
+
+internal fun selectConversationalCorrectionTargets(
+    active: List<MemoryBankEntity>,
+    correction: MemoryBankEntity,
+    oldClaim: String,
+): List<MemoryBankEntity> {
+    val claim = oldClaim.trim()
+    // A topic alone (for example "民法") is not an old assertion. Deprecating on that basis can
+    // erase an unrelated memory, so only explicit, sufficiently specific old claims are applied.
+    if (claim.normalizedMemoryIdentity().length < 4) return emptyList()
+    return active.asSequence()
+        .filter { candidate ->
+            candidate.id > 0 &&
+                candidate.id != correction.id &&
+                !candidate.deprecated &&
+                (correction.createdAt <= 0L || candidate.createdAt <= correction.createdAt)
+        }
+        .filter { candidate -> candidate.containsAffirmedClaim(claim) }
+        .sortedWith(
+            compareByDescending<MemoryBankEntity> { candidate ->
+                candidate.userSignal.orEmpty().contains(claim, ignoreCase = true)
+            }.thenByDescending { it.lastRecalledAt ?: 0L }
+                .thenByDescending { it.createdAt },
+        )
+        .distinctBy { it.id }
+        .take(8)
+        .toList()
+}
+
+private fun MemoryBankEntity.containsAffirmedClaim(claim: String): Boolean = listOfNotNull(
+    userSignal,
+    content,
+    title,
+    embeddingText,
+).any { text -> text.containsAffirmedClaim(claim) }
+
+private fun String.containsAffirmedClaim(claim: String): Boolean {
+    val index = indexOf(claim, ignoreCase = true)
+    if (index < 0) return false
+    val prefix = substring((index - 6).coerceAtLeast(0), index).lowercase()
+    return CORRECTION_NEGATION_PREFIXES.none { marker -> prefix.endsWith(marker) }
+}
+
+private val CORRECTION_NEGATION_PREFIXES = listOf(
+    "不是",
+    "并不是",
+    "并非",
+    "没有",
+    "不对",
+    "not ",
+    "isn't ",
+    "wasn't ",
 )
 
 class MemoryBankService(
@@ -85,19 +164,35 @@ class MemoryBankService(
         nowMillis: Long = System.currentTimeMillis(),
     ): CompanionPrivateImpression = withContext(Dispatchers.IO) {
         if (assistantId.isBlank()) return@withContext previous
-        val candidates = memoryBankDAO.getMemoriesByAssistant(assistantId)
-            .asSequence()
-            .filter { memory -> !memory.deprecated && memory.confidence >= 0.6 && memory.importance >= 2 }
-            .sortedBy(MemoryBankEntity::createdAt)
-            .toList()
-            .takeLast(STORED_IMPRESSION_MEMORY_LIMIT)
-            .mapNotNull(MemoryBankEntity::toPrivateImpressionCandidate)
         buildCompanionPrivateImpression(
             previous = previous,
-            candidates = candidates,
+            candidates = loadStoredPrivateImpressionCandidates(assistantId),
             nowMillis = nowMillis,
         )
     }
+
+    /** Reprojects the impression from active memories so corrected/deprecated claims disappear. */
+    suspend fun rebuildStoredPrivateImpression(
+        assistantId: String,
+        nowMillis: Long = System.currentTimeMillis(),
+    ): CompanionPrivateImpression = withContext(Dispatchers.IO) {
+        if (assistantId.isBlank()) return@withContext CompanionPrivateImpression()
+        buildCompanionPrivateImpression(
+            previous = CompanionPrivateImpression(),
+            candidates = loadStoredPrivateImpressionCandidates(assistantId),
+            nowMillis = nowMillis,
+        )
+    }
+
+    private suspend fun loadStoredPrivateImpressionCandidates(
+        assistantId: String,
+    ): List<AffectiveMemoryCandidate> = memoryBankDAO.getMemoriesByAssistant(assistantId)
+        .asSequence()
+        .filter { memory -> !memory.deprecated && memory.confidence >= 0.6 && memory.importance >= 2 }
+        .sortedBy(MemoryBankEntity::createdAt)
+        .toList()
+        .takeLast(STORED_IMPRESSION_MEMORY_LIMIT)
+        .mapNotNull(MemoryBankEntity::toPrivateImpressionCandidate)
 
     suspend fun getStats(assistantId: String? = null): MemoryStats = withContext(Dispatchers.IO) {
         val total = if (assistantId != null) {
@@ -236,6 +331,39 @@ class MemoryBankService(
             deprecatedDuplicateCount = deprecated.size,
             createdDailyArchiveCount = dailyArchives.size,
         )
+    }
+
+    /**
+     * Applies explicit conversational corrections to the older memories they contradict. This is
+     * intentionally limited to clear contrast language so ordinary disagreement is not destructive.
+     */
+    suspend fun reconcileConversationalCorrections(
+        assistantId: String,
+        corrections: List<MemoryBankEntity>,
+    ): Int = withContext(Dispatchers.IO) {
+        if (assistantId.isBlank() || corrections.isEmpty()) return@withContext 0
+        val active = memoryBankDAO.getMemoriesByAssistant(assistantId).filter { !it.deprecated }
+        val deprecatedIds = mutableSetOf<Int>()
+        corrections
+            .filter { it.memoryKind == "correction" && it.userSignal.orEmpty().isNotBlank() }
+            .forEach { correction ->
+                parseConversationalCorrectionClauses(correction.userSignal.orEmpty()).forEach { (oldClaim, _) ->
+                    selectConversationalCorrectionTargets(
+                        active = active,
+                        correction = correction,
+                        oldClaim = oldClaim,
+                    ).forEach { target ->
+                        if (!deprecatedIds.add(target.id)) return@forEach
+                        memoryBankDAO.markMemoryDeprecated(
+                            id = target.id,
+                            deprecatedReason = "conversation_correction:${correction.id}",
+                            supersededByMemoryId = correction.id.toString(),
+                            correctedAt = correction.createdAt,
+                        )
+                    }
+                }
+            }
+        deprecatedIds.size
     }
 
     suspend fun runHeavyMaintenance(limit: Int = 800): MaintenanceResult = withContext(Dispatchers.IO) {
@@ -507,7 +635,7 @@ class MemoryBankService(
             )
             learnRecallCooccurrence(selected)
         }
-        buildMemoryRecallContextFromSelected(selected)
+        buildMemoryRecallContextFromSelected(selected, query = query)
     }
 
     private suspend fun buildQueryEmbedding(query: String): List<Float> {
@@ -661,12 +789,13 @@ internal fun buildMemoryRecallContext(
         queryVector = queryVector,
         maxItems = maxItems,
     )
-    return buildMemoryRecallContextFromSelected(selected, maxContentLength)
+    return buildMemoryRecallContextFromSelected(selected, maxContentLength, query)
 }
 
 private fun buildMemoryRecallContextFromSelected(
     selected: List<MemoryBankEntity>,
     maxContentLength: Int = 120,
+    query: String = "",
 ): String {
     if (selected.isEmpty()) return ""
 
@@ -685,6 +814,12 @@ private fun buildMemoryRecallContextFromSelected(
         appendLine("<lulu_memory>")
         appendLine("这些是当前角色此刻自然想起的记忆，只作为联想参考。不要逐条复述，也不要说“我查到记忆”。")
         appendLine("载入这些记忆时必须代入当前角色，把它们当成“我记得/我当时/我没说出口”的内在回忆来理解；后续总结、沉淀和回应都要保持第一人称，不要改写成旁白或第三人称。")
+        appendLine("<memory_use_plan query=${JsonPrimitive(query.take(300))}>")
+        appendLine("- primary_candidate=${selected.first().toRecallLine(maxContentLength)}")
+        appendLine("- 直接提起最多一条真正相关的旧记忆；其余只影响理解、语气和选择，不要逐条展示。")
+        appendLine("- 如果当前陈述与旧记忆冲突，以当前陈述为准并自然确认，不要维护过时记忆。")
+        appendLine("- 不相关时可以完全不说出记忆。自然表现出理解比说‘我记得’更重要。")
+        appendLine("</memory_use_plan>")
         sections.forEach { (title, items) ->
             appendLine("$title：")
             items.forEach { memory ->
@@ -756,8 +891,20 @@ private fun rankMemoryRecallCandidates(
     val idfWeights = buildRecallIdfWeights(memories, queryTerms)
     return memories
         .filter { it.content.isNotBlank() && !it.deprecated }
+        .filter { memory -> memory.hasMinimumRecallRelevance(queryTerms, queryVector) }
         .sortedByDescending { memory -> memory.recallScore(queryTerms, idfWeights, queryVector, nowMillis) }
         .deduplicateNearVectors()
+}
+
+private fun MemoryBankEntity.hasMinimumRecallRelevance(
+    queryTerms: List<String>,
+    queryVector: List<Float>,
+): Boolean {
+    if (queryTerms.isEmpty() && queryVector.isEmpty()) return true
+    val lexicalMatch = queryTerms.any { term -> term in recallSearchText() }
+    if (lexicalMatch) return true
+    if (queryVector.isEmpty()) return false
+    return cosineSimilarity(queryVector, decodeMemoryVector(embeddingVectorJson)) >= MEMORY_MIN_VECTOR_RELEVANCE
 }
 
 internal fun applyMemoryRerankResults(

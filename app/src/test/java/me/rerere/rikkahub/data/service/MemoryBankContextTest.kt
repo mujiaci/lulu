@@ -8,6 +8,41 @@ import org.junit.Test
 
 class MemoryBankContextTest {
     @Test
+    fun `conversational correction parser only accepts explicit contrast`() {
+        assertEquals(
+            listOf("身体不好" to "只是最近累"),
+            parseConversationalCorrectionClauses("不是身体不好，而是只是最近累。"),
+        )
+        assertEquals(
+            listOf("民法" to "五十四章"),
+            parseConversationalCorrectionClauses("纠正一下，民法应该是五十四章。"),
+        )
+        assertTrue(parseConversationalCorrectionClauses("今天有点累，陪我聊聊。").isEmpty())
+    }
+
+    @Test
+    fun `correction targets only explicit old claims and removes duplicates`() {
+        val correction = MemoryBankEntity(
+            id = 99,
+            content = "I remember the correction.",
+            memoryKind = "correction",
+            userSignal = "I am not allergic to milk, but lactose intolerant.",
+            createdAt = 500L,
+        )
+        val active = listOf(
+            MemoryBankEntity(id = 1, content = "I remember you are allergic to milk.", createdAt = 100L),
+            MemoryBankEntity(id = 2, userSignal = "You are allergic to milk.", content = "Old duplicate", createdAt = 200L),
+            MemoryBankEntity(id = 3, content = "I remember you are not allergic to milk.", createdAt = 300L),
+            MemoryBankEntity(id = 4, content = "We discussed milk tea.", createdAt = 400L),
+        )
+
+        val targets = selectConversationalCorrectionTargets(active, correction, "allergic to milk")
+
+        assertEquals(setOf(1, 2), targets.map { it.id }.toSet())
+        assertTrue(selectConversationalCorrectionTargets(active, correction, "law").isEmpty())
+    }
+
+    @Test
     fun `build memory context renders affective role memory sections`() {
         val memories = listOf(
             MemoryBankEntity(
@@ -43,6 +78,8 @@ class MemoryBankContextTest {
         assertTrue(!context.contains("露露当时的感觉"))
         assertTrue(context.contains("胸口发热"))
         assertTrue(context.contains("默认在 master 分支修改"))
+        assertTrue(context.contains("<memory_use_plan"))
+        assertTrue(context.contains("primary_candidate="))
     }
 
     @Test
@@ -250,6 +287,20 @@ class MemoryBankContextTest {
             memories = memories,
             query = "论文大纲卡住了",
             maxItems = 1,
+        )
+
+        assertEquals(listOf(1), selected.map { it.id })
+    }
+
+    @Test
+    fun `nonblank query drops memories without lexical or vector relevance`() {
+        val selected = selectMemoryRecallItems(
+            memories = listOf(
+                MemoryBankEntity(id = 1, content = "The user needs a gentler sleep schedule.", createdAt = 100L),
+                MemoryBankEntity(id = 2, content = "The user's favorite color is green.", importance = 5, createdAt = 200L),
+            ),
+            query = "sleep schedule",
+            maxItems = 5,
         )
 
         assertEquals(listOf(1), selected.map { it.id })

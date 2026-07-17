@@ -142,8 +142,9 @@ internal fun reduceCompanionGoals(
 }
 
 private fun CompanionGoal.acceptsEvidence(event: CompanionLifeEvent): Boolean = when {
-    id.endsWith(":goal:authentic-life") -> event.evidenceReference?.isNotBlank() == true
-    id.endsWith(":goal:memory-continuity") -> event.type in setOf(
+    id.endsWith(":goal:authentic-life") ->
+        event.evidenceReference?.isNotBlank() == true && event.isMeaningfulDigitalLifeEvidence()
+    id.endsWith(":goal:memory-continuity") -> event.isMeaningfulDigitalLifeEvidence() && event.type in setOf(
         CompanionLifeEventType.MEMORY_REVIEW,
         CompanionLifeEventType.JOURNAL,
         CompanionLifeEventType.REFLECTION,

@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onCompletion
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
@@ -100,6 +99,9 @@ import me.rerere.rikkahub.data.datastore.getProactiveMessageSetting
 import me.rerere.rikkahub.data.companion.CompanionActionType
 import me.rerere.rikkahub.data.companion.CompanionConcernChange
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
+import me.rerere.rikkahub.data.companion.detectAlwaysOnAnchorCancellations
+import me.rerere.rikkahub.data.companion.detectAlwaysOnAnchors
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionFollowUpDraft
@@ -113,10 +115,12 @@ import me.rerere.rikkahub.data.companion.buildToolLifeEvent
 import me.rerere.rikkahub.data.companion.buildScheduledToolFollowUp
 import me.rerere.rikkahub.data.companion.CompanionTurnRole
 import me.rerere.rikkahub.data.companion.buildCompanionStateFromTurn
+import me.rerere.rikkahub.data.companion.buildCompanionResponsibilityContext
 import me.rerere.rikkahub.data.companion.commitmentStatusesBySourceMessageId
 import me.rerere.rikkahub.data.companion.isSleepSupervisionGoal
 import me.rerere.rikkahub.data.companion.isWakeGoal
 import me.rerere.rikkahub.data.companion.reconcileCompanionFollowUpDrafts
+import me.rerere.rikkahub.data.companion.toAlwaysOnAnchorOrNull
 import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.companion.wakeTargetAtOrNull
 import me.rerere.rikkahub.data.files.FilesManager
@@ -507,23 +511,6 @@ class ChatService(
     fun sendMessage(conversationId: Uuid, content: List<UIMessagePart>, answer: Boolean = true) {
         if (content.isEmptyInputMessage()) return
 
-        // 用户发送消息时重置主动消息计时器
-        try {
-            val settings = runBlocking { settingsStore.settingsFlow.first() }
-            val currentAssistantId = getOrCreateSession(conversationId).state.value.assistantId
-            val proactiveSetting = settings.getProactiveMessageSetting(currentAssistantId)
-            if (proactiveSetting.enabled) {
-                me.rerere.rikkahub.data.service.ProactiveMessageService.scheduleNext(
-                    context = context,
-                    settings = settings,
-                    minutesSinceLastChat = 0L,
-                    assistantId = currentAssistantId,
-                )
-            }
-        } catch (e: Exception) {
-            android.util.Log.w("ChatService", "Failed to reset proactive timer", e)
-        }
-
         val session = getOrCreateSession(conversationId)
         if (answer) {
             session.getJob()?.cancel()
@@ -533,6 +520,17 @@ class ChatService(
             try {
                 val currentConversation = session.state.value
                 val settings = settingsStore.settingsFlow.first()
+                // Keep timer reset in the same cancellable generation job as the message send.
+                val currentAssistantId = currentConversation.assistantId
+                val proactiveSetting = settings.getProactiveMessageSetting(currentAssistantId)
+                if (proactiveSetting.enabled) {
+                    me.rerere.rikkahub.data.service.ProactiveMessageService.scheduleNext(
+                        context = context,
+                        settings = settings,
+                        minutesSinceLastChat = 0L,
+                        assistantId = currentAssistantId,
+                    )
+                }
                 val assistant = settings.getAssistantById(currentConversation.assistantId)
                     ?: settings.getCurrentAssistant()
                 val processedContent = preprocessUserInputParts(content, assistant)
@@ -953,6 +951,38 @@ class ChatService(
                     ?: turnStartedAt,
                 nowMillis = turnStartedAt,
             )
+            val detectedAlwaysOnAnchors = detectAlwaysOnAnchors(
+                assistantId = assistant.id.toString(),
+                userText = latestUserText,
+                sourceConversationId = conversationId.toString(),
+                sourceMessageId = latestUserMessage?.id?.toString(),
+                nowMillis = turnStartedAt,
+            )
+            val cancelledAlwaysOnAnchorIds = detectAlwaysOnAnchorCancellations(
+                assistantId = assistant.id.toString(),
+                userText = latestUserText,
+            )
+            if (detectedAlwaysOnAnchors.isNotEmpty() || cancelledAlwaysOnAnchorIds.isNotEmpty()) {
+                companionRuntime.applyTurn(
+                    CompanionTurnMutation(
+                        assistantId = assistant.id.toString(),
+                        alwaysOnAnchors = detectedAlwaysOnAnchors,
+                        cancelAlwaysOnAnchorIds = cancelledAlwaysOnAnchorIds,
+                        nowMillis = turnStartedAt,
+                    ),
+                )
+                if (detectedAlwaysOnAnchors.any { anchor ->
+                        anchor.kind == CompanionAlwaysOnAnchorKind.RESPONSIBILITY ||
+                            anchor.kind == CompanionAlwaysOnAnchorKind.HEALTH
+                    }) {
+                    ProactiveMessageService.scheduleAlwaysOnAnchorReview(
+                        context = context,
+                        settings = settings,
+                        assistantId = assistant.id,
+                        nowMillis = turnStartedAt,
+                    )
+                }
+            }
             val allTools = buildAvailableTools(settings, assistant, conversationId)
                 .deduplicateByToolName()
                 .selectRelevantToolsForPrompt(conversation.currentMessages)
@@ -1458,39 +1488,51 @@ class ChatService(
                     ?.let { settings.findModelById(it) }
                     ?.takeIf { it.type == ModelType.CHAT }
                     ?: model
-                val provider = extractionModel.findProvider(settings.providers) ?: return@runCatching
-                val providerImpl = providerManager.getProviderByType(provider)
-                val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
-                    turns = plan.turns,
-                    assistantName = assistant.name,
-                    assistantPersona = assistant.toLuluPlannerPersona(
-                        messages = conversation.currentMessages,
-                        settings = settings,
-                    ),
-                    stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
-                )
-                val chunk = providerImpl.generateText(
-                    providerSetting = provider,
-                    messages = listOf(UIMessage.user(prompt)),
-                    params = TextGenerationParams(
-                        model = extractionModel,
-                        temperature = 0.2f,
-                        topP = 0.8f,
-                        maxTokens = 1200,
-                        reasoningLevel = ReasoningLevel.OFF,
-                        customHeaders = buildList {
-                            addAll(assistant.customHeaders)
-                            addAll(extractionModel.customHeaders)
-                        },
-                        customBody = buildList {
-                            addAll(assistant.customBodies)
-                            addAll(extractionModel.customBodies)
-                        },
-                    ),
-                )
-                val rawText = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
-                val modelCandidates = AffectiveMemoryExtractor.parseExtractionResult(rawText).memories
                 val deterministicCandidates = buildDeterministicMemoryCandidates(plan.turns)
+                val modelCandidates = extractionModel.findProvider(settings.providers)
+                    ?.let { provider ->
+                        runCatching {
+                            val providerImpl = providerManager.getProviderByType(provider)
+                            val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
+                                turns = plan.turns,
+                                assistantName = assistant.name,
+                                assistantPersona = assistant.toLuluPlannerPersona(
+                                    messages = conversation.currentMessages,
+                                    settings = settings,
+                                ),
+                                stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
+                                responsibilityContext = buildCompanionResponsibilityContext(
+                                    companionRuntime.snapshot(assistant.id.toString()).alwaysOnAnchors,
+                                    System.currentTimeMillis(),
+                                ),
+                            )
+                            val chunk = providerImpl.generateText(
+                                providerSetting = provider,
+                                messages = listOf(UIMessage.user(prompt)),
+                                params = TextGenerationParams(
+                                    model = extractionModel,
+                                    temperature = 0.2f,
+                                    topP = 0.8f,
+                                    maxTokens = 1200,
+                                    reasoningLevel = ReasoningLevel.OFF,
+                                    customHeaders = buildList {
+                                        addAll(assistant.customHeaders)
+                                        addAll(extractionModel.customHeaders)
+                                    },
+                                    customBody = buildList {
+                                        addAll(assistant.customBodies)
+                                        addAll(extractionModel.customBodies)
+                                    },
+                                ),
+                            )
+                            val rawText = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
+                            AffectiveMemoryExtractor.parseExtractionResult(rawText).memories
+                        }.onFailure { error ->
+                            if (error is CancellationException) throw error
+                            Log.w(TAG, "Model memory extraction failed; keeping deterministic candidates", error)
+                        }.getOrDefault(emptyList())
+                    }
+                    .orEmpty()
                 val candidates = (modelCandidates + deterministicCandidates)
                     .map { it.normalized() }
                     .filter { it.isDurableMemoryCandidate() }
@@ -1515,17 +1557,28 @@ class ChatService(
                     conversationId = conversationId.toString(),
                     createdAt = System.currentTimeMillis(),
                 )
+                val correctedMemoryCount = memoryBankService.reconcileConversationalCorrections(
+                    assistantId = assistant.id.toString(),
+                    corrections = savedMemories,
+                )
                 val relationshipEvents = buildRelationshipEventsFromMemoryCandidates(
                     candidates = candidates,
                     assistantId = assistant.id.toString(),
                     conversationId = conversationId.toString(),
                     createdAt = System.currentTimeMillis(),
                 )
-                val privateImpression = buildCompanionPrivateImpression(
-                    previous = companionRuntime.snapshot(assistant.id.toString()).privateImpression,
-                    candidates = candidates,
-                    nowMillis = System.currentTimeMillis(),
-                )
+                val privateImpression = if (correctedMemoryCount > 0) {
+                    memoryBankService.rebuildStoredPrivateImpression(
+                        assistantId = assistant.id.toString(),
+                        nowMillis = System.currentTimeMillis(),
+                    )
+                } else {
+                    buildCompanionPrivateImpression(
+                        previous = companionRuntime.snapshot(assistant.id.toString()).privateImpression,
+                        candidates = candidates,
+                        nowMillis = System.currentTimeMillis(),
+                    )
+                }
                 if (relationshipEvents.isNotEmpty() || privateImpression.updatedAt > 0L) {
                     companionRuntime.applyTurn(
                         CompanionTurnMutation(
@@ -1709,8 +1762,7 @@ class ChatService(
             tools = tools,
             observedAt = nowMillis,
         )
-        val companionPerception = companionRuntime.perception(
-            CompanionPerceptionInput(
+        val perceptionInput = CompanionPerceptionInput(
                 assistantId = assistant.id.toString(),
                 assistantName = assistant.name,
                 persona = assistant.toLuluPlannerPersona(
@@ -1740,15 +1792,43 @@ class ChatService(
                 availableToolNames = tools.activeModelTools().map { it.name }.toSet(),
                 memoryContext = memoryContext,
                 nowMillis = nowMillis,
-            ),
         )
-        val unifiedContext = companionPerception.toPromptContext()
+        var companionPerception = companionRuntime.perception(perceptionInput)
         val roleName = assistant.name.ifBlank { "当前角色" }
         val planResult = buildChatTurnPlan(
             settings = settings,
+            assistant = assistant,
             perception = companionPerception,
         )
         val plan = planResult.plan
+        val responsibilityUpserts = plan.responsibilityAnchorUpserts.mapNotNull { draft ->
+            draft.toAlwaysOnAnchorOrNull(
+                assistantId = assistant.id.toString(),
+                sourceConversationId = conversationId.toString(),
+                sourceMessageId = messages.lastOrNull { it.role == MessageRole.USER }?.id?.toString(),
+                nowMillis = nowMillis,
+            )
+        }
+        if (responsibilityUpserts.isNotEmpty() || plan.cancelResponsibilityAnchorIds.isNotEmpty()) {
+            companionRuntime.applyTurn(
+                CompanionTurnMutation(
+                    assistantId = assistant.id.toString(),
+                    alwaysOnAnchors = responsibilityUpserts,
+                    cancelAlwaysOnAnchorIds = plan.cancelResponsibilityAnchorIds,
+                    nowMillis = nowMillis,
+                ),
+            )
+            companionPerception = companionRuntime.perception(perceptionInput)
+            if (responsibilityUpserts.isNotEmpty()) {
+                ProactiveMessageService.scheduleAlwaysOnAnchorReview(
+                    context = context,
+                    settings = settings,
+                    assistantId = assistant.id,
+                    nowMillis = nowMillis,
+                )
+            }
+        }
+        val unifiedContext = companionPerception.toPromptContext()
         val toolExecutions = executeCompanionPlannedTools(
             plan = plan,
             tools = tools,
@@ -1834,10 +1914,12 @@ class ChatService(
 
     private suspend fun buildChatTurnPlan(
         settings: Settings,
+        assistant: Assistant,
         perception: CompanionPerceptionPacket,
     ): ChatTurnPlanResult {
         val input = CompanionChatTurnPlanInput(perception = perception)
-        val modelPlan = settings.luluIntentModelId
+        val plannerModelId = settings.luluIntentModelId ?: assistant.chatModelId ?: settings.chatModelId
+        val modelPlan = plannerModelId
             ?.let { settings.findModelById(it) }
             ?.takeIf { it.type == ModelType.CHAT }
             ?.let { model ->
@@ -1871,15 +1953,15 @@ class ChatService(
         appendLine("角色名：${name.ifBlank { "当前角色" }}")
         if (systemPrompt.isNotBlank()) {
             appendLine("系统人设：")
-            appendLine(systemPrompt.take(1600))
+            appendLine(systemPrompt)
         }
         if (appearancePrompt.isNotBlank()) {
             appendLine("外貌设定：")
-            appendLine(appearancePrompt.take(500))
+            appendLine(appearancePrompt)
         }
         if (messageTemplate.isNotBlank() && messageTemplate != "{{ message }}") {
             appendLine("语言/消息模板：")
-            appendLine(messageTemplate.take(400))
+            appendLine(messageTemplate)
         }
         settings?.let { currentSettings ->
             buildPromptInjectionPlannerContext(
@@ -1889,7 +1971,7 @@ class ChatService(
                 lorebooks = currentSettings.lorebooks,
             ).takeIf(String::isNotBlank)?.let { injectionContext ->
                 appendLine("模式与世界书：")
-                appendLine(injectionContext.take(1600))
+                appendLine(injectionContext)
             }
         }
     }.trim()

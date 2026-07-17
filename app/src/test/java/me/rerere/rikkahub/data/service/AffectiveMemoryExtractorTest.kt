@@ -17,6 +17,7 @@ class AffectiveMemoryExtractorTest {
                 )
             ),
             assistantName = "露露",
+            responsibilityContext = "responsibility_anchors:\n- responsibility=每天设置次日起床闹钟",
         )
 
         assertTrue(prompt.contains("代入露露"))
@@ -24,6 +25,9 @@ class AffectiveMemoryExtractorTest {
         assertTrue(prompt.contains("embeddingText"))
         assertTrue(prompt.contains("不要写成“露露觉得"))
         assertTrue(prompt.contains("角色认为"))
+        assertTrue(prompt.contains("<existing_responsibilities>"))
+        assertTrue(prompt.contains("每天设置次日起床闹钟"))
+        assertTrue(prompt.contains("不要把责任本身改写成 private impression"))
     }
 
     @Test

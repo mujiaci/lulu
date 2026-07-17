@@ -23,6 +23,14 @@ import me.rerere.ai.ui.UIMessage
 import me.rerere.rikkahub.data.ai.ApiUsageSource
 import me.rerere.rikkahub.data.ai.ApiUsageStore
 import me.rerere.rikkahub.data.ai.transformers.transformMessages
+import me.rerere.rikkahub.data.companion.CompanionLifeEvent
+import me.rerere.rikkahub.data.companion.CompanionLifeEventSource
+import me.rerere.rikkahub.data.companion.CompanionLifeEventStatus
+import me.rerere.rikkahub.data.companion.CompanionLifeEventType
+import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
+import me.rerere.rikkahub.data.companion.CompanionRuntime
+import me.rerere.rikkahub.data.companion.CompanionTurnMutation
+import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.repository.GenMediaRepository
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -49,6 +57,7 @@ class StarWishVM(
     private val settingsStore: SettingsStore,
     private val providerManager: ProviderManager,
     private val apiUsageStore: ApiUsageStore,
+    private val companionRuntime: CompanionRuntime,
 ) : ViewModel() {
     val state: StateFlow<StarWishState> = store.state
     val studyState = studyStore.state
@@ -216,7 +225,7 @@ class StarWishVM(
                 val chapters = state.value.theaterChapters[theater].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
                 val guide = state.value.theaterGuides[theater] ?: StarWishRules.defaultTheaterGuide(seed)
                 val nextChapter = chapters.size + 1
-                val content = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim(), guide)
+                val generated = generateTheaterChapterContent(seed, chapters, nextChapter, influence.trim(), guide)
                 studyStore.update { current ->
                     current.copy(
                         inventory = current.inventory.copy(
@@ -224,6 +233,7 @@ class StarWishVM(
                         ),
                     )
                 }
+                var createdChapter: StarWishTheaterChapter? = null
                 store.update { current ->
                     val latestChapters = current.theaterChapters[theater].orEmpty().filterNot { it.isPromptPlaceholder(seed) }
                     val chapter = StarWishTheaterChapter(
@@ -231,11 +241,37 @@ class StarWishVM(
                         theater = theater,
                         chapter = nextChapter,
                         title = "第 $nextChapter 章",
-                        content = content,
+                        content = generated.content,
                         userInfluence = influence.trim(),
                         createdAt = System.currentTimeMillis(),
                     )
+                    createdChapter = chapter
                     current.copy(theaterChapters = current.theaterChapters + (theater to (latestChapters + chapter)))
+                }
+                createdChapter?.let { chapter ->
+                    val nowMillis = System.currentTimeMillis()
+                    companionRuntime.applyTurn(
+                        CompanionTurnMutation(
+                            assistantId = generated.assistantId,
+                            lifeEvents = listOf(
+                                CompanionLifeEvent(
+                                    id = "starwish:${chapter.id}",
+                                    assistantId = generated.assistantId,
+                                    type = CompanionLifeEventType.TOOL_ACTION,
+                                    status = CompanionLifeEventStatus.COMPLETED,
+                                    title = "写入了小剧场新章节",
+                                    summary = "参与完成《${chapter.theater}》第 ${chapter.chapter} 章《${chapter.title}》。",
+                                    source = CompanionLifeEventSource.AGENT,
+                                    evidenceReference = chapter.id,
+                                    importance = 3,
+                                    startedAt = nowMillis,
+                                    endedAt = nowMillis,
+                                    createdAt = nowMillis,
+                                ),
+                            ),
+                            nowMillis = nowMillis,
+                        ),
+                    )
                 }
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
@@ -324,7 +360,7 @@ class StarWishVM(
         nextChapter: Int,
         influence: String,
         guide: StarWishTheaterGuide,
-    ): String {
+    ): GeneratedTheaterChapterContent {
         val settings = settingsStore.settingsFlow.first()
         val selectedModel: Model? = settings.theaterModelId?.let { settings.findModelById(it) }
         val model = selectedModel
@@ -334,6 +370,14 @@ class StarWishVM(
             ?: error("小剧场模型没有找到对应提供商。")
         val provider = providerManager.getProviderByType(providerSetting)
         val assistant = settings.getCurrentAssistant()
+        val companionContext = companionRuntime.perception(
+            CompanionPerceptionInput(
+                assistantId = assistant.id.toString(),
+                assistantName = assistant.name,
+                persona = assistant.systemPrompt,
+                nowMillis = System.currentTimeMillis(),
+            ),
+        ).toPromptContext()
         val prompt = StarWishRules.theaterChapterPrompt(seed, chapters, nextChapter, influence, guide)
         val messages = transformMessages(
             messages = listOf(
@@ -351,8 +395,9 @@ class StarWishVM(
                         appendLine(assistant.appearancePrompt)
                     }
                 }.trim()),
+                companionContext.takeIf(String::isNotBlank)?.let(UIMessage::system),
                 UIMessage.user(prompt),
-            ),
+            ).filterNotNull(),
             assistant = assistant,
             modeInjections = settings.modeInjections,
             lorebooks = settings.lorebooks,
@@ -377,10 +422,19 @@ class StarWishVM(
                 usage = usage,
             )
         }
-        return chunk.choices.firstOrNull()?.message?.toText()?.trim()
+        val content = chunk.choices.firstOrNull()?.message?.toText()?.trim()
             ?.takeIf { it.isNotBlank() }
             ?: error("小剧场 API 没有返回正文。")
+        return GeneratedTheaterChapterContent(
+            content = content,
+            assistantId = assistant.id.toString(),
+        )
     }
+
+    private data class GeneratedTheaterChapterContent(
+        val content: String,
+        val assistantId: String,
+    )
 
     fun addCustomTheater(title: String, prompt: String) {
         val cleanTitle = title.trim()

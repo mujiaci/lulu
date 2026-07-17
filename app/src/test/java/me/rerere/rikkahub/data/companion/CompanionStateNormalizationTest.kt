@@ -71,6 +71,34 @@ class CompanionStateNormalizationTest {
     }
 
     @Test
+    fun `normalization keeps responsibility anchors bounded and separate`() {
+        val normalized = CompanionPersistedState(
+            snapshots = listOf(
+                CompanionSnapshot(
+                    assistantId = "assistant-a",
+                    alwaysOnAnchors = listOf(
+                        CompanionAlwaysOnAnchor(
+                            id = "water",
+                            assistantId = "assistant-a",
+                            kind = CompanionAlwaysOnAnchorKind.RESPONSIBILITY,
+                            statement = "  记得提醒喝水  ",
+                            responsibility = "  学习久了提醒补水  ",
+                            actions = (1..20).map { "动作 $it" },
+                            importance = 20,
+                        ),
+                    ),
+                    privateImpression = CompanionPrivateImpression(summary = "只是角色的印象"),
+                ),
+            ),
+        ).normalizedCompanionState().snapshots.single()
+
+        assertEquals("记得提醒喝水", normalized.alwaysOnAnchors.single().statement)
+        assertEquals(8, normalized.alwaysOnAnchors.single().actions.size)
+        assertEquals(5, normalized.alwaysOnAnchors.single().importance)
+        assertEquals("只是角色的印象", normalized.privateImpression.summary)
+    }
+
+    @Test
     fun `normalization bounds relationship event history`() {
         val normalized = CompanionPersistedState(
             appliedRelationshipEventIds = (1..2_100).map { "event-$it" },

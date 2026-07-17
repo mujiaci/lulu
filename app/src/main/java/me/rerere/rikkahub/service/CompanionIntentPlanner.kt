@@ -104,23 +104,13 @@ object CompanionIntentFallbackPlanner {
             )
         }
 
-        if (
-            input.minutesSinceLastChat >= DEFAULT_REACH_OUT_MINUTES &&
-            input.perception.snapshot.relationship.unresolvedTension < MAX_FALLBACK_REACH_OUT_TENSION
-        ) {
-            return CompanionIntentDecision(
-                intent = CompanionIntent.REACH_OUT,
-                shouldMessageNow = true,
-                delayMinutes = null,
-                toolNames = chooseObservationTools(input.perception.availableToolNames),
-                reason = "A long quiet interval makes one fresh persona-led check-in reasonable.",
-                tone = "Use the configured persona; do not sound like a timer or generic reminder.",
-                innerThought = "安静了一阵，我想按自己的方式确认一下现在是否适合联系或行动。",
-                category = "reach_out",
-            )
-        }
-
-        return waitDecision("There is not enough current evidence to interrupt the user.")
+        return waitDecision(
+            if (input.minutesSinceLastChat >= DEFAULT_REACH_OUT_MINUTES) {
+                "Silence alone is not an event. There is no fresh evidence or due responsibility that justifies interruption."
+            } else {
+                "There is not enough current evidence to interrupt the user."
+            },
+        )
     }
 
     private fun waitDecision(reason: String): CompanionIntentDecision = CompanionIntentDecision(
@@ -142,7 +132,6 @@ object CompanionIntentFallbackPlanner {
     private const val DEFAULT_REACH_OUT_MINUTES = 120L
     private const val SELF_ACTIVITY_MIN_IDLE_MINUTES = 45L
     private const val SELF_ACTIVITY_COOLDOWN_MILLIS = 6L * 60L * 60L * 1_000L
-    private const val MAX_FALLBACK_REACH_OUT_TENSION = 0.5f
 }
 
 object CompanionIntentModelPlanner {
@@ -171,6 +160,7 @@ object CompanionIntentModelPlanner {
         )
         val raw = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
         return parsePlan(raw, input.perception.availableToolNames)
+            ?.enforceRelationshipPolicy(input.perception.snapshot.relationship)
     }
 
     fun buildPrompt(input: CompanionIntentInput): String = buildString {
@@ -178,12 +168,14 @@ object CompanionIntentModelPlanner {
         appendLine("Decide only the next intention and perception point. Do not generate user-facing message text.")
         appendLine("The role persona is authoritative. The runtime core must not assume housekeeper, lover, friend, or supervisor behavior.")
         appendLine("Use evidence from the unified runtime snapshot. Existing commitments are durable and ordinary chat never cancels them.")
+        appendLine("responsibility_anchors are duties the character must actively remember, separate from private_impression and optional recall. Check their triggers on every decision and either execute a real available action, schedule the next evidence check, or consciously wait; never merely repeat the anchor text.")
         appendLine("A model may propose changes, but deterministic reducers validate identity, time, transitions, and relationship deltas.")
         appendLine("Return JSON only with: intent, shouldMessageNow, delayMinutes, toolNames, reason, tone, innerThought, category, followUps, actionToolName, actionArguments.")
         appendLine("intent must be one of FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, SELF_ACTIVITY, WAIT.")
         appendLine("SELF_ACTIVITY means silently doing one real App-local action. It requires an available actionToolName and JSON object actionArguments; never invent completion and do not send a user-facing message merely to narrate it.")
         appendLine("Do not repeat the same SELF_ACTIVITY when recent_digital_life already contains it within roughly six hours.")
         appendLine("followUps contains objects with delayMinutes, reason, and optional category. Schedule only useful next perception points.")
+        appendLine("Elapsed silence is context, not an event. Do not REACH_OUT merely because minutes_since_last_chat is large; require a due concern, active responsibility trigger, meaningful device/context change, or a new real digital-life event.")
         appendLine("Never prewrite a future message. Never increase closeness merely because time passed.")
         appendLine("Formal diary writing requires the explicit write_lulu_journal tool and new concrete content.")
         appendLine("<decision_mode>${input.mode.name}</decision_mode>")

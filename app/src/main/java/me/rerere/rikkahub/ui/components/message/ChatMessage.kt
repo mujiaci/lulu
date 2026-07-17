@@ -80,6 +80,7 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.intOrNull
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.provider.Model
 import me.rerere.ai.ui.UIMessage
@@ -120,7 +121,6 @@ import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.utils.base64Encode
 import me.rerere.rikkahub.utils.openUrl
 import me.rerere.rikkahub.utils.urlDecode
-import java.io.File
 import java.util.Locale
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.milliseconds
@@ -332,26 +332,12 @@ private fun LuluExpressionInlineState(
     descriptionOverride: String?,
     loading: Boolean,
 ) {
-    val context = LocalContext.current
-    val presenceSnapshot = remember(messageKey, message.annotations, message.parts, descriptionOverride) {
-        message.latestLuluPresenceSnapshot(descriptionOverride)
+    val text = remember(messageKey, message.annotations, message.parts, descriptionOverride, loading) {
+        message.luluInlineExpressionText(
+            descriptionOverride = descriptionOverride,
+            loading = loading,
+        )
     }
-    var state by remember(messageKey) { mutableStateOf<LuluExpressionSnapshot?>(presenceSnapshot) }
-
-    LaunchedEffect(messageKey, loading, presenceSnapshot) {
-        if (loading) {
-            state = null
-            return@LaunchedEffect
-        }
-        if (presenceSnapshot != null) {
-            state = presenceSnapshot
-            return@LaunchedEffect
-        }
-        delay(120)
-        state = readLatestLuluExpressionSnapshot(File(context.filesDir, "lulu/lulu_expression_state.jsonl"))
-    }
-
-    val text = state?.toDisplayText().orEmpty()
     if (text.isNotBlank()) {
         Text(
             text = text,
@@ -364,7 +350,7 @@ private fun LuluExpressionInlineState(
     }
 }
 
-private data class LuluExpressionSnapshot(
+internal data class LuluExpressionSnapshot(
     val description: String,
     val emoji: String,
     val sticker: String,
@@ -386,7 +372,7 @@ private data class LuluExpressionSnapshot(
     }
 }
 
-private fun UIMessage.latestLuluPresenceSnapshot(descriptionOverride: String?): LuluExpressionSnapshot? {
+internal fun UIMessage.latestLuluPresenceSnapshot(descriptionOverride: String?): LuluExpressionSnapshot? {
     val metadata = luluPresenceMetadata()?.data
     val description = descriptionOverride
         ?.trim()
@@ -411,19 +397,13 @@ private fun UIMessage.latestLuluPresenceSnapshot(descriptionOverride: String?): 
     } else null
 }
 
-private fun readLatestLuluExpressionSnapshot(file: File): LuluExpressionSnapshot? {
-    if (!file.exists()) return null
-    val line = file.useLines { lines -> lines.lastOrNull { it.isNotBlank() } } ?: return null
-    return runCatching {
-        val obj = JsonInstant.parseToJsonElement(line).jsonObject
-        LuluExpressionSnapshot(
-            description = obj["description"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            emoji = obj["emoji"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            sticker = obj["sticker"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            gesture = obj["gesture"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-            bubblePacing = obj["bubble_pacing"]?.jsonPrimitive?.contentOrNull.orEmpty().ifBlank { "normal" },
-        )
-    }.getOrNull()
+internal fun UIMessage.luluInlineExpressionText(
+    descriptionOverride: String?,
+    loading: Boolean,
+): String = if (loading) {
+    ""
+} else {
+    latestLuluPresenceSnapshot(descriptionOverride)?.toDisplayText().orEmpty()
 }
 
 @OptIn(FlowPreview::class)
@@ -447,7 +427,8 @@ private fun MessagePartsBlock(
     val hapticFeedback = LocalHapticFeedback.current
     val settings = LocalSettings.current
     val bubbleAlpha = 1f - settings.displaySetting.chatBubbleTransparency / 100f
-    val bubbleDelayMillis = remember(annotations) { annotations.luluBubbleDelayMillis() }
+    val bubbleDelayMillis = remember(annotations) { annotations.luluBubblePacingDelayMillis() }
+    val initialBubbleDelayMillis = remember(annotations) { annotations.luluBubbleInitialDelayMillis() }
     val partsState by rememberUpdatedState(parts)
 
     val handleClickCitation: (String) -> Unit = remember {
@@ -564,7 +545,7 @@ private fun MessagePartsBlock(
                                         val visualSegments = remember(displayText, isPresegmentedBubble) {
                                             if (isPresegmentedBubble) listOf(displayText) else displayText.splitIntoVisualBubbles()
                                         }
-                                        var visibleSegmentCount by remember(animateAssistantSegments) {
+                                        var visibleSegmentCount by remember(displayText, animateAssistantSegments) {
                                             mutableIntStateOf(
                                                 if (!animateAssistantSegments) {
                                                     visualSegments.size
@@ -578,6 +559,9 @@ private fun MessagePartsBlock(
                                             animateAssistantSegments,
                                         ) {
                                             if (!animateAssistantSegments) {
+                                                visibleSegmentCount = visualSegments.size
+                                            } else if (isPresegmentedBubble) {
+                                                delay(initialBubbleDelayMillis)
                                                 visibleSegmentCount = visualSegments.size
                                             } else {
                                                 while (visibleSegmentCount < visualSegments.size) {
@@ -816,7 +800,7 @@ private fun MessagePartsBlock(
     }
 }
 
-private fun List<UIMessageAnnotation>.luluBubbleDelayMillis(): Long {
+internal fun List<UIMessageAnnotation>.luluBubblePacingDelayMillis(): Long {
     val pacing = asReversed()
         .asSequence()
         .filterIsInstance<UIMessageAnnotation.Metadata>()
@@ -831,6 +815,20 @@ private fun List<UIMessageAnnotation>.luluBubbleDelayMillis(): Long {
         "slow" -> 360L
         else -> 180L
     }
+}
+
+internal fun List<UIMessageAnnotation>.luluBubbleInitialDelayMillis(): Long {
+    val interval = luluBubblePacingDelayMillis()
+    val segmentIndex = asSequence()
+        .filterIsInstance<UIMessageAnnotation.Metadata>()
+        .firstOrNull { it.type == LULU_BUBBLE_SEGMENT_METADATA_TYPE }
+        ?.data
+        ?.get("index")
+        ?.jsonPrimitive
+        ?.intOrNull
+        ?.coerceAtLeast(0)
+        ?: 0
+    return interval * (segmentIndex + 1L)
 }
 
 @Composable

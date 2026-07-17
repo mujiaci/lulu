@@ -4,7 +4,6 @@ import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -86,9 +85,9 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                     val apiKey = settings.systemToolsSetting.amapApiKey
                     val locationService = LocationService(context, AmapService(apiKey))
                     val locationResult = if (includeAddress) {
-                        runBlocking { locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh) }
+                        locationService.getCurrentLocation(apiKey, forceRefresh = forceRefresh)
                     } else {
-                        runBlocking { locationService.getCoordinatesOnly(forceRefresh = forceRefresh) }
+                        locationService.getCoordinatesOnly(forceRefresh = forceRefresh)
                     }
                     val loc = locationResult.getOrNull()
                     if (loc == null) {

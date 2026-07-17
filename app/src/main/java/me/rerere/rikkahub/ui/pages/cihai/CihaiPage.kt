@@ -47,6 +47,9 @@ import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.cihai.CihaiStore
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchor
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorStatus
 import me.rerere.rikkahub.data.companion.CompanionLifeEvent
 import me.rerere.rikkahub.data.companion.CompanionLifeEventStatus
 import me.rerere.rikkahub.data.companion.CompanionPrivateImpression
@@ -95,6 +98,12 @@ fun CihaiPage(onBack: () -> Unit) {
     val meaningfulLifeEvents = selectedSnapshot.lifeEvents
         .filter { it.isMeaningfulDigitalLifeEvidence() }
         .sortedByDescending { it.endedAt ?: it.startedAt }
+    val activeResponsibilityAnchors = selectedSnapshot.alwaysOnAnchors
+        .filter { anchor ->
+            anchor.status == CompanionAlwaysOnAnchorStatus.ACTIVE &&
+                (anchor.expiresAt == null || anchor.expiresAt > System.currentTimeMillis())
+        }
+        .sortedWith(compareByDescending<CompanionAlwaysOnAnchor> { it.importance }.thenByDescending { it.updatedAt })
 
     LaunchedEffect(selectedAssistantId) {
         if (state.selectedAssistantId != selectedAssistantId) {
@@ -135,7 +144,7 @@ fun CihaiPage(onBack: () -> Unit) {
                 )
             }
             Text(
-                text = "这里放挂心任务和角色主动写下的第一人称日记；长期记忆会从真实事件中自动整理。",
+                text = "挂心、责任、关系与真实生活，都各自留在这里。",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -212,6 +221,34 @@ fun CihaiPage(onBack: () -> Unit) {
                             }
                         }
                     }
+                    CihaiSection.RESPONSIBILITIES -> {
+                        if (activeResponsibilityAnchors.isEmpty()) {
+                            item(key = "empty-responsibilities") {
+                                EmptyCihaiSection(
+                                    title = "角色现在没有长期责任",
+                                    body = "还没有角色主动承担的长期照看或循环职责。",
+                                )
+                            }
+                        } else {
+                            item(key = "responsibility-title") {
+                                Text(
+                                    text = "角色正在承担",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(activeResponsibilityAnchors, key = { it.id }) { anchor ->
+                                ResponsibilityAnchorCard(
+                                    anchor = anchor,
+                                    onCancel = {
+                                        scope.launch {
+                                            companionStore.deleteAlwaysOnAnchor(selectedAssistantId, anchor.id)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                    }
                     CihaiSection.RELATIONSHIP -> {
                         item(key = "relationship-overview") {
                             RelationshipOverview(
@@ -278,6 +315,12 @@ internal enum class CihaiSection(
         emptyTitle = "现在没有挂心任务",
         emptyBody = "这里以后只放持续照看的事，比如考试、起床、身体状态、DDL 或学习节奏。",
     ),
+    RESPONSIBILITIES(
+        label = "责任",
+        entryKind = null,
+        emptyTitle = "角色现在没有长期责任",
+        emptyBody = "还没有角色主动承担的长期照看或循环职责。",
+    ),
     RELATIONSHIP(
         label = "关系",
         entryKind = null,
@@ -300,10 +343,68 @@ internal enum class CihaiSection(
 
 internal fun visibleCihaiSections(): List<CihaiSection> = listOf(
     CihaiSection.CONCERNS,
+    CihaiSection.RESPONSIBILITIES,
     CihaiSection.RELATIONSHIP,
     CihaiSection.LIFE,
     CihaiSection.DIARY,
 )
+
+@Composable
+private fun ResponsibilityAnchorCard(
+    anchor: CompanionAlwaysOnAnchor,
+    onCancel: () -> Unit,
+) {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = if (anchor.kind == CompanionAlwaysOnAnchorKind.HEALTH) "健康照看" else "长期责任",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.weight(1f))
+                IconButton(onClick = onCancel) {
+                    Icon(
+                        imageVector = HugeIcons.Delete01,
+                        contentDescription = "取消这项责任",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text(
+                text = anchor.statement,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+            anchor.responsibility?.takeIf(String::isNotBlank)?.let { responsibility ->
+                Text(
+                    text = responsibility,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
+            ResponsibilityLine("会在", anchor.triggers)
+            ResponsibilityLine("会做", anchor.actions)
+            ResponsibilityLine("不会", anchor.avoid)
+        }
+    }
+}
+
+@Composable
+private fun ResponsibilityLine(label: String, values: List<String>) {
+    if (values.isEmpty()) return
+    Text(
+        text = "$label：${values.joinToString("；")}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+}
 
 internal fun entriesForCihaiSection(
     entries: List<CihaiEntry>,
@@ -451,7 +552,8 @@ private fun PrivateImpressionCard(impression: CompanionPrivateImpression) {
                 impression.summary.isBlank() &&
                 impression.observedTraits.isEmpty() &&
                 impression.preferences.isEmpty() &&
-                impression.boundaries.isEmpty()
+                impression.boundaries.isEmpty() &&
+                impression.recentChanges.isEmpty()
             ) {
                 Text(
                     "还没有形成有证据的私密印象。重要偏好、边界和关系变化会从长期记忆中逐渐沉淀。",

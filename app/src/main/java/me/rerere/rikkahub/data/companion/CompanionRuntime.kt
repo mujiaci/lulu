@@ -154,6 +154,8 @@ data class CompanionTurnMutation(
     val assistantId: String,
     val state: CompanionState? = null,
     val privateImpression: CompanionPrivateImpression? = null,
+    val alwaysOnAnchors: List<CompanionAlwaysOnAnchor> = emptyList(),
+    val cancelAlwaysOnAnchorIds: List<String> = emptyList(),
     val goals: List<CompanionGoal> = emptyList(),
     val lifeEvents: List<CompanionLifeEvent> = emptyList(),
     val concernChanges: List<CompanionConcernChange> = emptyList(),
@@ -398,6 +400,23 @@ fun reduceCompanionRuntimeState(
     val nextPrivateImpression = mutation.privateImpression
         ?.takeIf { it.updatedAt >= existing.privateImpression.updatedAt }
         ?: existing.privateImpression
+    val incomingAlwaysOnAnchors = mutation.alwaysOnAnchors
+        .filter { anchor -> anchor.assistantId == assistantId && anchor.statement.isNotBlank() }
+        .map { anchor -> anchor.copy(status = CompanionAlwaysOnAnchorStatus.ACTIVE) }
+    val nextAlwaysOnAnchors = (existing.alwaysOnAnchors + incomingAlwaysOnAnchors)
+        .filterNot { anchor -> anchor.id in mutation.cancelAlwaysOnAnchorIds }
+        .groupBy { anchor -> anchor.id }
+        .values
+        .map { entries -> entries.maxBy { entry -> entry.updatedAt } }
+        .filter { anchor ->
+            anchor.status == CompanionAlwaysOnAnchorStatus.ACTIVE &&
+                (anchor.expiresAt == null || anchor.expiresAt > mutation.nowMillis)
+        }
+        .sortedWith(
+            compareByDescending<CompanionAlwaysOnAnchor> { it.importance }
+                .thenByDescending { it.updatedAt },
+        )
+        .take(MAX_ALWAYS_ON_ANCHORS)
     val nextGoals = reduceCompanionGoals(
         assistantId = assistantId,
         previous = existing.goals,
@@ -441,6 +460,7 @@ fun reduceCompanionRuntimeState(
         stateHistory = nextStateHistory,
         neuroState = nextNeuroState,
         privateImpression = nextPrivateImpression,
+        alwaysOnAnchors = nextAlwaysOnAnchors,
         goals = nextGoals,
         lifeEvents = (existing.lifeEvents + incomingLifeEvents).distinctBy { it.id },
         relationship = relationshipReduction.relationship,
@@ -938,4 +958,5 @@ private val SCHEDULABLE_COMMITMENT_STATUSES = setOf(
     CompanionCommitmentStatus.RETRY_SCHEDULED,
 )
 
+private const val MAX_ALWAYS_ON_ANCHORS = 32
 private const val STALE_COMMITMENT_EXECUTION_MILLIS = 5L * 60L * 1_000L

@@ -525,7 +525,7 @@ class ExamStudyPlanTest {
         val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 2))
         val taskTitles = plan?.tasks.orEmpty().map { it.title }
 
-        assertTrue(taskTitles.any { it.contains("长难句 1 句") })
+        assertTrue(taskTitles.any { it.contains("英语一真题阅读") })
         assertTrue(taskTitles.any { it.contains("不背单词 120 个（6 组）") })
         assertTrue(taskTitles.any { it.contains("听众合法硕刑法课程") })
         assertFalse(taskTitles.any { it.contains("不背单词 60") || it.contains("不背单词 80") || it.contains("不背单词 100") })
@@ -626,7 +626,7 @@ class ExamStudyPlanTest {
             """
             09:00-09:20｜启动｜整理桌面，确认今天三件事
             09:30-10:20 | 专业课 | 听众合法硕刑法课程第 1 章
-            19:30-20:10｜英语｜不背单词 120 个（6 组）+ 长难句 1 句
+            19:30-20:10｜英语｜不背单词 120 个（6 组）+ 英语一真题阅读 1 篇
             """.trimIndent(),
         )
 
@@ -644,7 +644,7 @@ class ExamStudyPlanTest {
         val septemberTasks = septemberFifteen.tasks
 
         assertTrue(julyTasks.any { it.contains("不背单词 120 个") })
-        assertTrue(julyTasks.any { it.contains("长难句") || it.contains("真题阅读") })
+        assertTrue(julyTasks.any { it.contains("真题阅读") || it.contains("真题完形") })
         assertFalse(julyTasks.any { it.contains("政治") })
         assertTrue(septemberTasks.any { it.kind == StudyPlanTaskKind.English && !it.title.contains("不背单词") })
         assertTrue(septemberTasks.any { it.kind == StudyPlanTaskKind.Politics })
@@ -681,7 +681,7 @@ class ExamStudyPlanTest {
 
         assertEquals(3, ExamStudyPlan.englishReadingPassCount)
         assertTrue(septemberEnglish.count { it.contains("阅读") } >= 3)
-        assertTrue(septemberEnglish.any { it.contains("语法") || it.contains("长难句") })
+        assertTrue(septemberEnglish.any { it.contains("真题阅读") || it.contains("语法") })
         assertTrue(septemberEnglish.any { it.contains("完形") })
         assertTrue(septemberEnglish.any { it.contains("新题型") })
         assertTrue(septemberEnglish.any { it.contains("翻译") })

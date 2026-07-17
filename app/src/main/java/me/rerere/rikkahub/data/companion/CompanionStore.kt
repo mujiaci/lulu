@@ -94,6 +94,13 @@ class CompanionStore(
         }
     }
 
+    suspend fun deleteAlwaysOnAnchor(assistantId: String, anchorId: String) {
+        if (assistantId.isBlank() || anchorId.isBlank()) return
+        updateSnapshot(assistantId) { snapshot ->
+            snapshot.copy(alwaysOnAnchors = snapshot.alwaysOnAnchors.filterNot { it.id == anchorId })
+        }
+    }
+
     private fun decodeState(raw: String?): CompanionPersistedState {
         if (raw.isNullOrBlank()) return CompanionPersistedState()
         return runCatching { json.decodeFromString<CompanionPersistedState>(raw) }
@@ -145,6 +152,10 @@ private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot
     } else {
         privateImpression
     },
+    alwaysOnAnchors = (alwaysOnAnchors + other.alwaysOnAnchors)
+        .groupBy { it.id }
+        .values
+        .map { duplicates -> duplicates.maxBy { it.updatedAt } },
     goals = (goals + other.goals)
         .groupBy { it.id }
         .values
@@ -173,6 +184,23 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
         .filter { it.state.hasVisibleStateContent() },
     neuroState = neuroState.normalizedForStorage(),
     privateImpression = privateImpression.normalizedForStorage(),
+    alwaysOnAnchors = alwaysOnAnchors
+        .filter { anchor -> anchor.assistantId == assistantId && anchor.id.isNotBlank() && anchor.statement.isNotBlank() }
+        .groupBy { it.id }
+        .values
+        .map { duplicates -> duplicates.maxBy { it.updatedAt } }
+        .map { anchor ->
+            anchor.copy(
+                statement = anchor.statement.cleanCompanionHumanText("").take(MAX_STATE_TEXT_LENGTH * 2),
+                responsibility = anchor.responsibility?.cleanCompanionHumanText("")?.take(MAX_STATE_TEXT_LENGTH * 3),
+                triggers = anchor.triggers.cleanImpressionItems(8),
+                actions = anchor.actions.cleanImpressionItems(8),
+                avoid = anchor.avoid.cleanImpressionItems(8),
+                importance = anchor.importance.coerceIn(1, 5),
+            )
+        }
+        .sortedWith(compareBy<CompanionAlwaysOnAnchor> { it.status != CompanionAlwaysOnAnchorStatus.ACTIVE }.thenByDescending { it.importance }.thenByDescending { it.updatedAt })
+        .take(MAX_ALWAYS_ON_ANCHORS_PER_ASSISTANT),
     goals = goals.ifEmpty { defaultCompanionGoals(assistantId) }
         .filter { goal -> goal.assistantId == assistantId && goal.id.isNotBlank() && goal.title.isNotBlank() }
         .groupBy { it.id }
@@ -259,12 +287,12 @@ private fun CompanionLifeEvent.normalizedForStorage(): CompanionLifeEvent = copy
     createdAt = createdAt.coerceAtLeast(0L),
 )
 
-private fun List<String>.cleanImpressionItems(): List<String> = asSequence()
+private fun List<String>.cleanImpressionItems(limit: Int = MAX_PRIVATE_IMPRESSION_ITEMS): List<String> = asSequence()
     .map { it.cleanCompanionHumanText("").take(MAX_PRIVATE_IMPRESSION_ITEM_LENGTH) }
     .filter(String::isNotBlank)
     .distinct()
     .toList()
-    .takeLast(MAX_PRIVATE_IMPRESSION_ITEMS)
+    .takeLast(limit)
 
 private fun CompanionState.normalizedForStorage(): CompanionState = copy(
     statusText = statusText.trim().take(MAX_STATE_TEXT_LENGTH),
@@ -351,6 +379,7 @@ private fun CompanionState.hasVisibleStateContent(): Boolean = listOf(
 private const val MAX_APPLIED_RELATIONSHIP_EVENTS = 2_000
 private const val MAX_CONCERNS_PER_ASSISTANT = 300
 private const val MAX_COMMITMENTS_PER_ASSISTANT = 300
+private const val MAX_ALWAYS_ON_ANCHORS_PER_ASSISTANT = 48
 private const val MAX_STATE_HISTORY_PER_ASSISTANT = 160
 private const val MAX_RELATIONSHIP_HISTORY_PER_ASSISTANT = 160
 private const val MAX_LIFE_EVENTS_PER_ASSISTANT = 300

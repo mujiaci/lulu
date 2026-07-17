@@ -2,6 +2,8 @@ package me.rerere.rikkahub.service
 
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchor
+import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
 import me.rerere.rikkahub.data.companion.CompanionPerceptionAssembler
 import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
 import me.rerere.rikkahub.data.companion.CompanionRelationshipState
@@ -31,7 +33,7 @@ class CompanionIntentPlannerTest {
     }
 
     @Test
-    fun `background fallback may reach out after long silence without persona keyword matching`() {
+    fun `background fallback does not treat long silence as an event`() {
         val decision = CompanionIntentFallbackPlanner.plan(
             CompanionIntentInput(
                 perception = perception(availableTools = setOf("get_battery_info", "get_app_usage")),
@@ -40,9 +42,9 @@ class CompanionIntentPlannerTest {
             ),
         )
 
-        assertEquals(CompanionIntent.REACH_OUT, decision.intent)
-        assertTrue(decision.shouldMessageNow)
-        assertEquals(listOf("get_battery_info", "get_app_usage"), decision.toolNames)
+        assertEquals(CompanionIntent.WAIT, decision.intent)
+        assertFalse(decision.shouldMessageNow)
+        assertTrue(decision.toolNames.isEmpty())
     }
 
     @Test
@@ -127,6 +129,7 @@ class CompanionIntentPlannerTest {
         assertTrue(prompt.contains("<companion_runtime"))
         assertTrue(prompt.contains("FOLLOW_UP, STAY_AVAILABLE, REACH_OUT, OBSERVE, SELF_ACTIVITY, WAIT"))
         assertTrue(prompt.contains("用户曾明确说过早晨很难醒。"))
+        assertTrue(prompt.contains("Elapsed silence is context, not an event"))
         assertFalse(prompt.contains("study-supervisor"))
     }
 
@@ -145,6 +148,56 @@ class CompanionIntentPlannerTest {
         assertEquals("play_companion_game", accepted?.actionToolName)
         assertTrue(accepted?.actionArgumentsJson?.contains("careful") == true)
         assertEquals(null, rejected)
+    }
+
+    @Test
+    fun `high relationship tension suppresses unsolicited reach out`() {
+        val constrained = CompanionIntentDecision(
+            intent = CompanionIntent.REACH_OUT,
+            shouldMessageNow = true,
+            delayMinutes = null,
+            toolNames = listOf("get_notifications"),
+            reason = "Say something casual.",
+            tone = "warm",
+            followUps = listOf(CompanionFollowUpPlan(10, "Try again")),
+            fromModel = true,
+        ).enforceRelationshipPolicy(
+            CompanionRelationshipState(unresolvedTension = 0.8f),
+        )
+
+        assertEquals(CompanionIntent.WAIT, constrained.intent)
+        assertFalse(constrained.shouldMessageNow)
+        assertTrue(constrained.toolNames.isEmpty())
+        assertTrue(constrained.followUps.isEmpty())
+    }
+
+    @Test
+    fun `low boundary confidence blocks intrusive model tools unless user asked`() {
+        val relationship = CompanionRelationshipState(boundaryConfidence = 0.2f)
+        val plan = CompanionChatTurnPlan(
+            toolRequests = listOf(
+                ProactiveToolRequest("camera_capture", "Look around"),
+                ProactiveToolRequest("get_weather", "Check weather"),
+            ),
+        )
+
+        val unprompted = plan.enforceRelationshipPolicy(relationship, latestUserText = "今天怎么样")
+        val requested = plan.enforceRelationshipPolicy(relationship, latestUserText = "打开摄像头看看周围")
+
+        assertEquals(listOf("get_weather"), unprompted.toolRequests.map { it.toolName })
+        assertEquals(listOf("camera_capture", "get_weather"), requested.toolRequests.map { it.toolName })
+    }
+
+    @Test
+    fun `explicit alarm request survives low trust gate`() {
+        val constrained = CompanionChatTurnPlan(
+            toolRequests = listOf(ProactiveToolRequest("set_alarm", "Set requested alarm")),
+        ).enforceRelationshipPolicy(
+            relationship = CompanionRelationshipState(trust = 0.2f),
+            latestUserText = "明早九点给我定个闹钟",
+        )
+
+        assertEquals(listOf("set_alarm"), constrained.toolRequests.map { it.toolName })
     }
 
     @Test
@@ -184,6 +237,7 @@ class CompanionIntentPlannerTest {
         assertTrue(prompt.contains("如果当前角色决定稍后主动找用户"))
         assertTrue(prompt.contains("delayMinutes 永远是从 current_time 开始计算的相对分钟数"))
         assertTrue(prompt.contains("绝不能误排到第二天早晨"))
+        assertTrue(prompt.contains("沉默时长本身不是事件"))
         assertTrue(prompt.contains("不能只写‘注意力还停在对话上’"))
         assertTrue(prompt.contains("<companion_runtime"))
         assertTrue(prompt.contains("安静留意"))
@@ -195,6 +249,41 @@ class CompanionIntentPlannerTest {
         assertFalse(prompt.contains("她现在"))
         assertFalse(prompt.contains("如果她决定"))
         assertFalse(prompt.contains("露露"))
+    }
+
+    @Test
+    fun `chat turn parser accepts durable responsibility proposals and only known cancellations`() {
+        val existing = CompanionAlwaysOnAnchor(
+            id = "assistant-a:responsibility:water",
+            assistantId = "assistant-a",
+            kind = CompanionAlwaysOnAnchorKind.RESPONSIBILITY,
+            statement = "用户希望我记得提醒喝水",
+            responsibility = "在长时间学习后提醒补水",
+            actions = listOf("查看学习时长并自然提醒"),
+        )
+        val plan = CompanionChatTurnModelPlanner.parseChatTurnPlan(
+            rawText = """
+                {
+                  "responsibilityAnchorUpserts": [{
+                    "stableKey": "water",
+                    "kind": "RESPONSIBILITY",
+                    "statement": "用户把规律喝水交给我照看",
+                    "responsibility": "学习时间过长时提醒用户补水",
+                    "triggers": ["连续学习超过两小时"],
+                    "actions": ["读取学习时长", "发送轻提醒"],
+                    "avoid": ["不要高频打扰"],
+                    "importance": 4
+                  }],
+                  "cancelResponsibilityAnchorIds": ["assistant-a:responsibility:water", "unknown"]
+                }
+            """.trimIndent(),
+            availableToolNames = emptySet(),
+            activeResponsibilityAnchorIds = setOf(existing.id),
+        )
+
+        assertEquals(1, plan.responsibilityAnchorUpserts.size)
+        assertEquals("water", plan.responsibilityAnchorUpserts.single().stableKey)
+        assertEquals(listOf(existing.id), plan.cancelResponsibilityAnchorIds)
     }
 
     private fun perception(

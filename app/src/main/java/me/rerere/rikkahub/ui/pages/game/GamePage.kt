@@ -59,6 +59,12 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import me.rerere.asr.ASRStatus
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.provider.ModelType
@@ -78,7 +84,17 @@ import me.rerere.rikkahub.Screen
 import me.rerere.rikkahub.data.ai.ApiUsageSource
 import me.rerere.rikkahub.data.ai.ApiUsageStore
 import me.rerere.rikkahub.data.ai.transformers.transformMessages
+import me.rerere.rikkahub.data.companion.CompanionLifeEvent
+import me.rerere.rikkahub.data.companion.CompanionLifeEventSource
+import me.rerere.rikkahub.data.companion.CompanionLifeEventStatus
+import me.rerere.rikkahub.data.companion.CompanionLifeEventType
+import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
+import me.rerere.rikkahub.data.companion.CompanionRuntime
+import me.rerere.rikkahub.data.companion.CompanionStore
+import me.rerere.rikkahub.data.companion.CompanionTurnMutation
+import me.rerere.rikkahub.data.companion.toPromptContext
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
@@ -87,6 +103,7 @@ import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalSettings
 import me.rerere.rikkahub.ui.context.LocalTTSState
 import me.rerere.rikkahub.ui.theme.CustomColors
+import me.rerere.rikkahub.utils.JsonInstant
 import kotlin.math.abs
 import kotlin.random.Random
 import org.koin.compose.koinInject
@@ -95,15 +112,36 @@ import org.koin.compose.koinInject
 @Composable
 fun GameHubPage() {
     val navController = LocalNavController.current
+    val settings = LocalSettings.current
+    val companionStore = koinInject<CompanionStore>()
+    val companionState by companionStore.state.collectAsState()
+    val latestSignalEvent = companionState.snapshots
+        .asSequence()
+        .flatMap { snapshot -> snapshot.lifeEvents.asSequence() }
+        .filter { event ->
+            event.type == CompanionLifeEventType.GAME &&
+                event.status == CompanionLifeEventStatus.COMPLETED &&
+                event.detailsJson.isNotBlank()
+        }
+        .maxByOrNull { it.endedAt ?: it.startedAt }
+    val latestSignalAssistant = latestSignalEvent?.let { event ->
+        settings.assistants.firstOrNull { it.id.toString() == event.assistantId }
+    }
     val games = remember {
         listOf(
+            GameTile(
+                title = "信号追踪",
+                subtitle = "选择一个角色，一起在 3×3 信号网格里找线索",
+                enabled = true,
+                onClick = { navController.navigate(Screen.SignalHuntGame()) },
+            ),
             GameTile(
                 title = "满分男",
                 subtitle = "满分的人，离谱的缺点，猜对方会扣几分",
                 enabled = true,
                 onClick = { navController.navigate(Screen.PerfectManGame) },
             ),
-        ) + List(7) { index ->
+        ) + List(6) { index ->
             GameTile(
                 title = "小游戏 ${index + 2}",
                 subtitle = "慢慢补充",
@@ -130,6 +168,13 @@ fun GameHubPage() {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             GameHero()
+            if (latestSignalEvent != null) {
+                SignalHuntRecordCard(
+                    assistantName = latestSignalAssistant?.name?.ifBlank { "某个角色" } ?: "某个角色",
+                    event = latestSignalEvent,
+                    onClick = { navController.navigate(Screen.SignalHuntGame(latestSignalEvent.id)) },
+                )
+            }
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
                 modifier = Modifier.fillMaxWidth(),
@@ -146,6 +191,239 @@ fun GameHubPage() {
     }
 }
 
+@Composable
+private fun SignalHuntRecordCard(
+    assistantName: String,
+    event: CompanionLifeEvent,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).clickable(onClick = onClick),
+        color = GameColors.accent.copy(alpha = 0.10f),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("${assistantName}刚刚玩过信号追踪", fontWeight = FontWeight.SemiBold, color = GameColors.accent)
+            Text(event.summary.ifBlank { "点这里观看这一局的完整探测路线。" }, style = MaterialTheme.typography.bodySmall)
+            Text("点击观看记录 →", style = MaterialTheme.typography.labelLarge, color = GameColors.accent)
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SignalHuntGamePage(recordId: String? = null) {
+    val navController = LocalNavController.current
+    val settings = LocalSettings.current
+    val companionStore = koinInject<CompanionStore>()
+    val companionState by companionStore.state.collectAsState()
+    val replayEvent = recordId?.let { id ->
+        companionState.snapshots.asSequence()
+            .flatMap { snapshot -> snapshot.lifeEvents.asSequence() }
+            .firstOrNull { event -> event.id == id }
+    }
+    val replay = remember(replayEvent?.id, replayEvent?.detailsJson) {
+        replayEvent?.let { event ->
+            parseSignalHuntReplay(
+                event = event,
+                assistantName = settings.assistants.firstOrNull { it.id.toString() == event.assistantId }
+                    ?.name
+                    ?.ifBlank { "某个角色" }
+                    ?: "某个角色",
+            )
+        }
+    }
+    val isWatching = replay != null
+    var selectedAssistantId by remember { mutableStateOf(settings.assistantId.toString()) }
+    val selectedAssistant = settings.assistants.firstOrNull { it.id.toString() == selectedAssistantId }
+        ?: settings.getCurrentAssistant()
+    var signalCells by remember { mutableStateOf(emptySet<Int>()) }
+    var moves by remember { mutableStateOf(emptyList<SignalHuntMove>()) }
+    var started by remember { mutableStateOf(false) }
+    var replayStep by remember(replay?.sessionId) { mutableIntStateOf(replay?.moves?.size ?: 0) }
+    val visibleReplayMoves = replay?.moves?.take(replayStep).orEmpty()
+    val activeMoves = if (isWatching) visibleReplayMoves else moves
+    val gameOver = !isWatching && moves.size >= SIGNAL_HUNT_MAX_MOVES
+
+    fun startGame() {
+        signalCells = (0..8).shuffled().take(SIGNAL_HUNT_SIGNAL_COUNT).toSet()
+        moves = emptyList()
+        started = true
+    }
+
+    LaunchedEffect(replay?.sessionId) {
+        if (isWatching && replay != null) {
+            replayStep = 0
+            while (replayStep < replay.moves.size) {
+                delay(700)
+                replayStep += 1
+            }
+        }
+    }
+
+    Scaffold(
+        containerColor = GameColors.background,
+        topBar = {
+            TopAppBar(
+                title = { Text(if (isWatching) "观看信号追踪" else "一起玩：信号追踪") },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(HugeIcons.ArrowLeft02, contentDescription = "返回")
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp).verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            if (isWatching && replay != null) {
+                SignalHuntReplaySummary(replay = replay, visibleMoves = visibleReplayMoves)
+            } else {
+                Text("选择陪你玩的角色", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(settings.assistants, key = { it.id }) { assistant ->
+                        FilterChip(
+                            selected = assistant.id.toString() == selectedAssistantId,
+                            onClick = { selectedAssistantId = assistant.id.toString() },
+                            label = { Text(assistant.name.ifBlank { "未命名角色" }) },
+                        )
+                    }
+                }
+                Text(
+                    "本局由 ${selectedAssistant.name.ifBlank { "当前角色" }} 陪你一起找信号。每局最多探测 5 格，找到 3 个信号就完成。",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            SignalHuntBoard(
+                moves = activeMoves,
+                signalCells = if (isWatching && replayStep >= (replay?.moves?.size ?: 0)) {
+                    replay?.moves?.filter { it.foundSignal }.map { it.cell }.toSet()
+                } else emptySet(),
+                enabled = !isWatching && started && !gameOver,
+                onCellClick = { cell ->
+                    if (cell !in moves.map { it.cell }) {
+                        val found = cell in signalCells
+                        val streak = if (found && moves.lastOrNull()?.foundSignal == true) 2 else 1
+                        moves = moves + SignalHuntMove(cell, found, if (found) 20 + (streak - 1) * 5 else 0)
+                    }
+                },
+            )
+            if (isWatching && replay != null) {
+                Text("${replay.assistantName}的路线已播放完毕。你也可以返回上一页，选择任意角色开启新的一局。", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                val found = moves.count { it.foundSignal }
+                Text("本局进度：找到 $found/$SIGNAL_HUNT_SIGNAL_COUNT 个信号 · 已探测 ${moves.size}/$SIGNAL_HUNT_MAX_MOVES 格")
+                Button(onClick = { startGame() }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(if (moves.isEmpty()) HugeIcons.Play else HugeIcons.Refresh03, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(if (moves.isEmpty()) "开始这一局" else if (gameOver) "再来一局" else "重置本局")
+                }
+                if (gameOver) {
+                    Text(
+                        "这一局结束啦。${selectedAssistant.name.ifBlank { "角色" }}会陪你记住这条路线。",
+                        color = GameColors.success,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SignalHuntReplaySummary(replay: SignalHuntReplay, visibleMoves: List<SignalHuntMove>) {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+            Text("${replay.assistantName}的信号追踪记录", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("得分 ${replay.score}/${replay.maxScore} · 找到 ${visibleMoves.count { it.foundSignal }}/${SIGNAL_HUNT_SIGNAL_COUNT} 个信号")
+            Text(if (visibleMoves.size < replay.moves.size) "正在按角色当时的顺序播放探测路线…" else replay.resultText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun SignalHuntBoard(
+    moves: List<SignalHuntMove>,
+    signalCells: Set<Int>,
+    enabled: Boolean,
+    onCellClick: (Int) -> Unit,
+) {
+    val moveByCell = moves.associateBy { it.cell }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        repeat(3) { row ->
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(3) { column ->
+                    val cell = row * 3 + column
+                    val move = moveByCell[cell]
+                    val revealedSignal = cell in signalCells || move?.foundSignal == true
+                    Surface(
+                        modifier = Modifier.weight(1f).aspectRatio(1f).clip(RoundedCornerShape(16.dp)).then(
+                            if (enabled && move == null) Modifier.clickable { onCellClick(cell) } else Modifier,
+                        ),
+                        color = when {
+                            move?.foundSignal == true || cell in signalCells -> Color(0xFFD9F1E5)
+                            move != null -> Color(0xFFE8EAF0)
+                            else -> Color.White
+                        },
+                        tonalElevation = 2.dp,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                when {
+                                    revealedSignal -> "✦\n信号"
+                                    move != null -> "已探测"
+                                    enabled -> "?"
+                                    else -> "·"
+                                },
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                fontWeight = FontWeight.SemiBold,
+                                color = if (revealedSignal) GameColors.success else GameColors.soft,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class SignalHuntMove(val cell: Int, val foundSignal: Boolean, val points: Int)
+
+private data class SignalHuntReplay(
+    val sessionId: String,
+    val assistantName: String,
+    val score: Int,
+    val maxScore: Int,
+    val resultText: String,
+    val moves: List<SignalHuntMove>,
+)
+
+private fun parseSignalHuntReplay(event: CompanionLifeEvent, assistantName: String): SignalHuntReplay? = runCatching {
+    val json = JsonInstant.parseToJsonElement(event.detailsJson).jsonObject
+    val moves = json["moves"]?.jsonArray.orEmpty().mapNotNull { item ->
+        val obj = item.jsonObject
+        val cell = obj["cell"]?.jsonPrimitive?.intOrNull ?: return@mapNotNull null
+        SignalHuntMove(
+            cell = cell,
+            foundSignal = obj["found_signal"]?.jsonPrimitive?.booleanOrNull == true,
+            points = obj["points"]?.jsonPrimitive?.intOrNull ?: 0,
+        )
+    }
+    if (moves.isEmpty()) return@runCatching null
+    SignalHuntReplay(
+        sessionId = json["session_id"]?.jsonPrimitive?.contentOrNull ?: event.id,
+        assistantName = assistantName,
+        score = json["score"]?.jsonPrimitive?.intOrNull ?: 0,
+        maxScore = json["max_score"]?.jsonPrimitive?.intOrNull ?: 75,
+        resultText = json["result"]?.jsonPrimitive?.contentOrNull ?: event.summary,
+        moves = moves,
+    )
+}.getOrNull()
+
+private const val SIGNAL_HUNT_SIGNAL_COUNT = 3
+private const val SIGNAL_HUNT_MAX_MOVES = 5
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PerfectManGamePage() {
@@ -156,6 +434,7 @@ fun PerfectManGamePage() {
     val settingsStore = koinInject<SettingsStore>()
     val providerManager = koinInject<ProviderManager>()
     val apiUsageStore = koinInject<ApiUsageStore>()
+    val companionRuntime = koinInject<CompanionRuntime>()
     val scope = rememberCoroutineScope()
     val asrState by asr.state.collectAsState()
     var round by remember { mutableIntStateOf(1) }
@@ -247,6 +526,16 @@ fun PerfectManGamePage() {
                     }
                 }.trim()
             }.orEmpty()
+            val companionContext = player?.let { assistant ->
+                companionRuntime.perception(
+                    CompanionPerceptionInput(
+                        assistantId = assistant.id.toString(),
+                        assistantName = assistant.name,
+                        persona = assistant.systemPrompt,
+                        nowMillis = System.currentTimeMillis(),
+                    ),
+                ).toPromptContext()
+            }.orEmpty()
             val messages = buildList {
                 add(UIMessage.system(
                     "你是坐在用户对面一起玩“满分男”的真人玩家，不是主持人、裁判或旁白。" +
@@ -254,6 +543,7 @@ fun PerfectManGamePage() {
                         "不要播报系统结果，不要解释规则。文案短、好猜、有画面感，不要色情，不要羞辱真实群体。",
                 ))
                 if (playerPrompt.isNotBlank()) add(UIMessage.system(playerPrompt))
+                if (companionContext.isNotBlank()) add(UIMessage.system(companionContext))
                 add(UIMessage.user(prompt))
             }.let { baseMessages ->
                 if (player == null) {
@@ -294,6 +584,41 @@ fun PerfectManGamePage() {
         }
     }
 
+    suspend fun recordCompletedRound(
+        playerAssistantId: String?,
+        completedRound: Int,
+        completedPhase: PerfectManPhase,
+        roundResult: RoundResult,
+    ) {
+        val assistantId = playerAssistantId?.takeIf(String::isNotBlank) ?: return
+        val nowMillis = System.currentTimeMillis()
+        val phaseLabel = if (completedPhase == PerfectManPhase.UserGuesses) "角色出题" else "角色猜分"
+        runCatching {
+            companionRuntime.applyTurn(
+                CompanionTurnMutation(
+                    assistantId = assistantId,
+                    lifeEvents = listOf(
+                        CompanionLifeEvent(
+                            id = "perfect-man:$assistantId:$completedRound:$nowMillis",
+                            assistantId = assistantId,
+                            type = CompanionLifeEventType.GAME,
+                            status = CompanionLifeEventStatus.COMPLETED,
+                            title = "一起玩完了一轮满分男",
+                            summary = "$phaseLabel，第 $completedRound 轮相差 ${roundResult.diff} 分。",
+                            source = CompanionLifeEventSource.AGENT,
+                            evidenceReference = "perfect-man-round:$completedRound:$nowMillis",
+                            importance = 3,
+                            startedAt = nowMillis,
+                            endedAt = nowMillis,
+                            createdAt = nowMillis,
+                        ),
+                    ),
+                    nowMillis = nowMillis,
+                ),
+            )
+        }
+    }
+
     fun startUserGuessRound() {
         if (isGenerating) return
         isGenerating = true
@@ -315,6 +640,9 @@ fun PerfectManGamePage() {
     fun submitPartnerGuessRound() {
         val description = userDescription.trim()
         if (description.isBlank() || isGenerating) return
+        val playerAssistantId = selectedPlayer?.id?.toString()
+        val completedRound = round
+        val completedPhase = phase
         isGenerating = true
         opponentLine = "我看完了，等下，我先按感觉猜一下。"
         scope.launch {
@@ -332,13 +660,15 @@ fun PerfectManGamePage() {
                 ?: fallbackGuess
             generatedPrompt = reply
             opponentLine = reply
-            result = RoundResult(
+            val nextResult = RoundResult(
                 guess = guess,
                 score = targetScore,
                 success = abs(guess - targetScore) <= 1,
                 diff = abs(guess - targetScore),
             )
+            result = nextResult
             speak(reply)
+            recordCompletedRound(playerAssistantId, completedRound, completedPhase, nextResult)
             isGenerating = false
         }
     }
@@ -346,6 +676,9 @@ fun PerfectManGamePage() {
     fun submitGuess() {
         val guess = guessText.trim().toFloatOrNull()?.toInt()?.coerceIn(0, 10) ?: return
         if (isGenerating || generatedPrompt.isBlank()) return
+        val playerAssistantId = selectedPlayer?.id?.toString()
+        val completedRound = round
+        val completedPhase = phase
         val diff = abs(guess - targetScore)
         isGenerating = true
         opponentLine = "我看看你猜得准不准。"
@@ -366,6 +699,7 @@ fun PerfectManGamePage() {
             result = nextResult
             opponentLine = reply
             speak(reply)
+            recordCompletedRound(playerAssistantId, completedRound, completedPhase, nextResult)
             isGenerating = false
         }
     }

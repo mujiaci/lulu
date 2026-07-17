@@ -153,12 +153,16 @@
       </intent-filter>
     </service>
 
-    <!-- Proactive Message Receiver (handles both proactive alarm and boot completed) -->
+    <!-- Internal explicit PendingIntent receiver. External apps cannot forge generation extras. -->
     <receiver
       android:name=".data.service.ProactiveMessageReceiver"
+      android:exported="false" />
+
+    <!-- Boot receiver only restores schedules and never forwards broadcast extras. -->
+    <receiver
+      android:name=".data.service.ProactiveBootReceiver"
       android:exported="true">
       <intent-filter>
-        <action android:name="me.rerere.rikkahub.PROACTIVE_MESSAGE" />
         <action android:name="android.intent.action.BOOT_COMPLETED" />
       </intent-filter>
     </receiver>
