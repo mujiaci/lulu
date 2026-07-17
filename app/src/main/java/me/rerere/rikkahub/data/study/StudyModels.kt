@@ -200,6 +200,8 @@ data class StudyDrawResult(
     val fragmentKey: String,
     val title: String,
     val fragmentType: StudyFragmentType? = null,
+    /** This draw is shown, but its blue fragment collection was already full. */
+    val alreadyFull: Boolean = false,
 )
 
 @Serializable

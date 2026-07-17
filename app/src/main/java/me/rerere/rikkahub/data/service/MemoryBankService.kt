@@ -32,6 +32,8 @@ private const val MEMORY_HEBBIAN_MAX_EDGE_WEIGHT = 1.5
 private const val MEMORY_GRAPH_MIN_RECALL_WEIGHT = 0.08
 private const val MEMORY_GRAPH_DECAY_HALF_LIFE_DAYS = 45.0
 private const val MEMORY_MIN_VECTOR_RELEVANCE = 0.32
+private const val TEMPORAL_STATE_MAX_AGE_MS = 36L * 60 * 60 * 1_000
+private val TEMPORAL_STATE_MEMORY_KINDS = setOf("body_sense", "role_emotion")
 private const val LIGHT_MAINTENANCE_INTERVAL_MS = 24L * 60 * 60 * 1000
 private const val HEAVY_MAINTENANCE_INTERVAL_MS = 7L * 24 * 60 * 60 * 1000
 private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
@@ -309,7 +311,14 @@ class MemoryBankService(
     }
 
     suspend fun rebuildIndex() {
-        // No-op: vector index removed. Structured embedding fields are stored for the next memory phase.
+        // The index is stored directly on memory_bank. Rebuilding therefore means retrying all
+        // pending/failed vector jobs, rather than silently doing nothing.
+        withContext(Dispatchers.IO) {
+            memoryBankDAO.getMemoriesByVectorStatus("failed").forEach { memory ->
+                memoryBankDAO.updateVectorStatus(id = memory.id, status = "pending", retryCount = 0)
+            }
+        }
+        processPendingVectors()
     }
 
     suspend fun runLightMaintenance(limit: Int = 200): MaintenanceResult = withContext(Dispatchers.IO) {
@@ -565,6 +574,14 @@ class MemoryBankService(
         )
     }
 
+    /** Lets an explicit user repair retry a conversation that older versions marked too early. */
+    suspend fun resetExtractionCheckpoint(
+        assistantId: String,
+        conversationId: String,
+    ) = withContext(Dispatchers.IO) {
+        memoryBankDAO.deleteExtractionCheckpoint(assistantId, conversationId)
+    }
+
     suspend fun recallMemories(query: String, count: Int): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
         if (query.isNotBlank()) {
             memoryBankDAO.searchMemoriesByKeyword(query, count)
@@ -578,6 +595,7 @@ class MemoryBankService(
         query: String = "",
         commitmentStatusesBySourceId: Map<String, CompanionCommitmentStatus>? = null,
     ): String = withContext(Dispatchers.IO) {
+        val nowMillis = System.currentTimeMillis()
         val memories = buildList {
             if (assistantId != null) {
                 // Recall must be able to reach an old ordinary memory.  The old
@@ -598,6 +616,9 @@ class MemoryBankService(
         }
             .distinctBy { it.id }
             .filter { memory -> memory.isRecallablePromise(commitmentStatusesBySourceId) }
+            // A headache, dizziness, mood, or other body/emotion observation is a historical
+            // event after a short window. It must not silently become today's status.
+            .filter { memory -> memory.isSafeForCurrentRecall(query, nowMillis) }
 
         val queryVector = buildQueryEmbedding(query)
         val rerankCandidateCount = memoryRerankCandidateCount()
@@ -818,6 +839,7 @@ private fun buildMemoryRecallContextFromSelected(
         appendLine("- primary_candidate=${selected.first().toRecallLine(maxContentLength)}")
         appendLine("- 直接提起最多一条真正相关的旧记忆；其余只影响理解、语气和选择，不要逐条展示。")
         appendLine("- 如果当前陈述与旧记忆冲突，以当前陈述为准并自然确认，不要维护过时记忆。")
+        appendLine("- 标有‘发生于’的身体或情绪记忆只是当时发生过的事；不要把它改说成今天仍然不舒服。除非用户明确确认持续存在，否则先询问现在的情况。")
         appendLine("- 不相关时可以完全不说出记忆。自然表现出理解比说‘我记得’更重要。")
         appendLine("</memory_use_plan>")
         sections.forEach { (title, items) ->
@@ -1237,9 +1259,25 @@ private fun MemoryBankEntity.toRecallLine(maxContentLength: Int): String {
                 .toString()
         }.getOrNull()
     }
-    val dated = if (dateLabel != null) "[$dateLabel] " else ""
+    val temporalLabel = when {
+        isTemporalStateMemory() -> "发生于"
+        else -> "记录于"
+    }
+    val dated = if (dateLabel != null) "[$temporalLabel $dateLabel] " else ""
     return dated + (prefix + parts.joinToString("；")).ellipsize(maxContentLength)
 }
+
+private fun MemoryBankEntity.isSafeForCurrentRecall(query: String, nowMillis: Long): Boolean {
+    if (!isTemporalStateMemory()) return true
+    if (createdAt <= 0L || nowMillis - createdAt <= TEMPORAL_STATE_MAX_AGE_MS) return true
+    // Historical questions are allowed to retrieve old state, but the prompt still labels it as
+    // historical so the character can ask whether it is still true now.
+    val historicalMarkers = listOf("之前", "过去", "那次", "上次", "几天前", "以前", "曾经", "历史", "什么时候")
+    return historicalMarkers.any { it in query }
+}
+
+private fun MemoryBankEntity.isTemporalStateMemory(): Boolean =
+    memoryKind in TEMPORAL_STATE_MEMORY_KINDS || !bodySense.isNullOrBlank()
 
 private fun String?.isNotBlankValue(): Boolean = this != null && isNotBlank()
 

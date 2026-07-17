@@ -25,6 +25,8 @@ data class Assistant(
     val temperature: Float? = null,
     val topP: Float? = null,
     val contextMessageSize: Int = 60,
+    /** Number of stable message nodes required before this role summarizes a memory batch. 0 disables automatic extraction. */
+    val memoryExtractionInterval: Int = 20,
     val streamOutput: Boolean = true,
     val autoPlayVoice: Boolean = false,
     val ttsVoiceId: String = "",

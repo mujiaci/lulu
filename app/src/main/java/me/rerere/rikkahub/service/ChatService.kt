@@ -1466,14 +1466,39 @@ class ChatService(
         }
     }.trim()
 
+    fun retryHistoricalMemoryExtraction(assistantId: String? = null): Job = appScope.launch {
+        val settings = settingsStore.settingsFlow.first()
+        val assistants = settings.assistants.filter { assistant ->
+            assistantId == null || assistant.id.toString() == assistantId
+        }
+        val jobs = mutableListOf<Job>()
+        assistants.forEach { assistant ->
+            val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+                ?: return@forEach
+            conversationRepo.getRecentConversations(assistant.id, limit = 8).forEach { conversation ->
+                memoryBankService.resetExtractionCheckpoint(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversation.id.toString(),
+                )
+                jobs += launchAffectiveMemoryExtraction(
+                    conversationId = conversation.id,
+                    conversation = conversation,
+                    assistant = assistant,
+                    settings = settings,
+                    model = model,
+                )
+            }
+        }
+        jobs.forEach { it.join() }
+    }
+
     private fun launchAffectiveMemoryExtraction(
         conversationId: Uuid,
         conversation: Conversation,
         assistant: Assistant,
         settings: Settings,
         model: Model,
-    ) {
-        appScope.launch {
+    ): Job = appScope.launch {
             runCatching {
                 val processedSourceNodeIds = memoryBankService.getProcessedSourceNodeIds(
                     assistantId = assistant.id.toString(),
@@ -1482,6 +1507,7 @@ class ChatService(
                 val plan = buildAffectiveMemoryExtractionPlan(
                     messageNodes = conversation.messageNodes,
                     processedSourceNodeIds = processedSourceNodeIds,
+                    extractionInterval = assistant.memoryExtractionInterval,
                 ) ?: return@runCatching
 
                 val extractionModel = settings.memoryEmbeddingConfig.extractionModelId
@@ -1489,64 +1515,97 @@ class ChatService(
                     ?.takeIf { it.type == ModelType.CHAT }
                     ?: model
                 val deterministicCandidates = buildDeterministicMemoryCandidates(plan.turns)
-                val modelCandidates = extractionModel.findProvider(settings.providers)
-                    ?.let { provider ->
-                        runCatching {
-                            val providerImpl = providerManager.getProviderByType(provider)
-                            val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
-                                turns = plan.turns,
-                                assistantName = assistant.name,
-                                assistantPersona = assistant.toLuluPlannerPersona(
-                                    messages = conversation.currentMessages,
-                                    settings = settings,
-                                ),
-                                stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
-                                responsibilityContext = buildCompanionResponsibilityContext(
-                                    companionRuntime.snapshot(assistant.id.toString()).alwaysOnAnchors,
-                                    System.currentTimeMillis(),
-                                ),
-                            )
-                            val chunk = providerImpl.generateText(
-                                providerSetting = provider,
-                                messages = listOf(UIMessage.user(prompt)),
-                                params = TextGenerationParams(
-                                    model = extractionModel,
-                                    temperature = 0.2f,
-                                    topP = 0.8f,
-                                    maxTokens = 1200,
-                                    reasoningLevel = ReasoningLevel.OFF,
-                                    customHeaders = buildList {
-                                        addAll(assistant.customHeaders)
-                                        addAll(extractionModel.customHeaders)
-                                    },
-                                    customBody = buildList {
-                                        addAll(assistant.customBodies)
-                                        addAll(extractionModel.customBodies)
-                                    },
-                                ),
-                            )
-                            val rawText = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
-                            AffectiveMemoryExtractor.parseExtractionResult(rawText).memories
-                        }.onFailure { error ->
-                            if (error is CancellationException) throw error
-                            Log.w(TAG, "Model memory extraction failed; keeping deterministic candidates", error)
-                        }.getOrDefault(emptyList())
-                    }
-                    .orEmpty()
+                val extractionProvider = extractionModel.findProvider(settings.providers)
+                if (extractionProvider == null) {
+                    Log.w(TAG, "Memory extraction skipped: no provider for model=${extractionModel.id}")
+                    return@runCatching
+                }
+                val modelExtraction = runCatching {
+                    val providerImpl = providerManager.getProviderByType(extractionProvider)
+                    val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
+                        turns = plan.turns,
+                        assistantName = assistant.name,
+                        assistantPersona = assistant.toLuluPlannerPersona(
+                            messages = conversation.currentMessages,
+                            settings = settings,
+                        ),
+                        stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
+                        responsibilityContext = buildCompanionResponsibilityContext(
+                            companionRuntime.snapshot(assistant.id.toString()).alwaysOnAnchors,
+                            System.currentTimeMillis(),
+                        ),
+                    )
+                    val chunk = providerImpl.generateText(
+                        providerSetting = extractionProvider,
+                        messages = listOf(UIMessage.user(prompt)),
+                        params = TextGenerationParams(
+                            model = extractionModel,
+                            temperature = 0.2f,
+                            topP = 0.8f,
+                            maxTokens = 1200,
+                            reasoningLevel = ReasoningLevel.OFF,
+                            customHeaders = buildList {
+                                addAll(assistant.customHeaders)
+                                addAll(extractionModel.customHeaders)
+                            },
+                            customBody = buildList {
+                                addAll(assistant.customBodies)
+                                addAll(extractionModel.customBodies)
+                            },
+                        ),
+                    )
+                    val rawText = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
+                    AffectiveMemoryExtractor.parseExtractionResult(rawText).memories
+                }
+                val modelExtractionSucceeded = modelExtraction.isSuccess
+                val modelCandidates = modelExtraction.getOrElse { error ->
+                    if (error is CancellationException) throw error
+                    Log.w(TAG, "Model memory extraction failed; source messages will be retried", error)
+                    emptyList()
+                }
+                val occurrenceByNodeId = plan.turns.associate { it.nodeId to it.createdAtMillis }
+                val fallbackEvidenceNodeIds = plan.turns
+                    .asReversed()
+                    .filter { it.role.equals("user", ignoreCase = true) }
+                    .take(2)
+                    .map { it.nodeId }
+                    .reversed()
                 val candidates = (modelCandidates + deterministicCandidates)
                     .map { it.normalized() }
+                    .map { candidate ->
+                        val sourceNodeIds = candidate.sourceMessageNodeIds
+                            .ifEmpty { fallbackEvidenceNodeIds }
+                        val evidenceNodeIds = candidate.evidenceMessageNodeIds
+                            .ifEmpty { sourceNodeIds }
+                        candidate.copy(
+                            userSignal = candidate.userSignal ?: candidate.content,
+                            sourceMessageNodeIds = sourceNodeIds,
+                            evidenceMessageNodeIds = evidenceNodeIds,
+                            occurredAtMillis = candidate.occurredAtMillis
+                                ?: sourceNodeIds
+                                    .mapNotNull(occurrenceByNodeId::get)
+                                    .filter { it > 0L }
+                                    .maxOrNull(),
+                        )
+                    }
                     .filter { it.isDurableMemoryCandidate() }
                     .distinctBy { it.content.normalizedMemoryIdentity() }
                     .take(8)
                 if (candidates.isEmpty()) {
-                    memoryBankService.markExtractionProcessed(
-                        assistantId = assistant.id.toString(),
-                        conversationId = conversationId.toString(),
-                        sourceNodeIds = plan.turns.map { it.nodeId },
-                    )
+                    // An explicitly empty result means the model found nothing durable. A
+                    // non-empty result rejected by validation is a compatibility problem and
+                    // must stay retryable instead of permanently skipping this conversation.
+                    val safelyProcessedEmptyResult = modelExtractionSucceeded && modelCandidates.isEmpty()
+                    if (safelyProcessedEmptyResult) {
+                        memoryBankService.markExtractionProcessed(
+                            assistantId = assistant.id.toString(),
+                            conversationId = conversationId.toString(),
+                            sourceNodeIds = plan.turns.map { it.nodeId },
+                        )
+                    }
                     Logging.log(
                         TAG,
-                        "Memory extraction found no durable memories for conversation=$conversationId reason=${plan.reason}",
+                        "Memory extraction found no durable memories for conversation=$conversationId reason=${plan.reason} success=$modelExtractionSucceeded checkpointed=$safelyProcessedEmptyResult",
                     )
                     return@runCatching
                 }
@@ -1589,11 +1648,13 @@ class ChatService(
                         )
                     )
                 }
-                memoryBankService.markExtractionProcessed(
-                    assistantId = assistant.id.toString(),
-                    conversationId = conversationId.toString(),
-                    sourceNodeIds = plan.turns.map { it.nodeId },
-                )
+                if (modelExtractionSucceeded) {
+                    memoryBankService.markExtractionProcessed(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversationId.toString(),
+                        sourceNodeIds = plan.turns.map { it.nodeId },
+                    )
+                }
                 runCatching {
                     memoryBankService.processPendingVectors()
                     memoryBankService.runAutoMaintenanceIfDue()

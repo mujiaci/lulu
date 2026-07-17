@@ -35,6 +35,9 @@ interface MemoryBankDAO {
         conversationId: String,
     ): MemoryExtractionCheckpointEntity?
 
+    @Query("DELETE FROM memory_extraction_checkpoint WHERE assistant_id = :assistantId AND conversation_id = :conversationId")
+    suspend fun deleteExtractionCheckpoint(assistantId: String, conversationId: String)
+
     @Update
     suspend fun updateMemory(memory: MemoryBankEntity)
 

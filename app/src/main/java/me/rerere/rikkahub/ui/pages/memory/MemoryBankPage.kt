@@ -165,6 +165,14 @@ fun MemoryBankPage(
                 )
             }
 
+            item {
+                TextButton(onClick = vm::repairMemoriesFromHistory) {
+                    Icon(HugeIcons.Refresh01, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("重新整理已有聊天")
+                }
+            }
+
             item { Spacer(modifier = Modifier.height(4.dp)) }
 
             item {

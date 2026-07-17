@@ -50,6 +50,8 @@ import me.rerere.rikkahub.data.companion.CompanionSnapshot
 import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchor
 import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
 import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorStatus
+import me.rerere.rikkahub.data.companion.CompanionCommitment
+import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionLifeEvent
 import me.rerere.rikkahub.data.companion.CompanionLifeEventStatus
 import me.rerere.rikkahub.data.companion.CompanionPrivateImpression
@@ -104,6 +106,18 @@ fun CihaiPage(onBack: () -> Unit) {
                 (anchor.expiresAt == null || anchor.expiresAt > System.currentTimeMillis())
         }
         .sortedWith(compareByDescending<CompanionAlwaysOnAnchor> { it.importance }.thenByDescending { it.updatedAt })
+    val visibleCommitments = selectedSnapshot.commitments
+        .filter { commitment ->
+            commitment.status !in setOf(
+                CompanionCommitmentStatus.CANCELLED,
+                CompanionCommitmentStatus.SUPERSEDED,
+            )
+        }
+        .sortedWith(
+            compareBy<CompanionCommitment> { it.commitmentDisplayRank() }
+                .thenBy { it.dueAt }
+                .thenByDescending { it.updatedAt },
+        )
 
     LaunchedEffect(selectedAssistantId) {
         if (state.selectedAssistantId != selectedAssistantId) {
@@ -189,6 +203,54 @@ fun CihaiPage(onBack: () -> Unit) {
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 when (selectedSection) {
+                    CihaiSection.COMMITMENTS -> {
+                        item(key = "commitment-intro") {
+                            Text(
+                                text = "这是他明确答应过你、仍在记得的事。长期照看和下一次具体行动都会放在这里。",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        if (activeResponsibilityAnchors.isNotEmpty()) {
+                            item(key = "commitment-responsibility-title") {
+                                Text(
+                                    text = "长期记得",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(activeResponsibilityAnchors, key = { "commitment-anchor-${it.id}" }) { anchor ->
+                                ResponsibilityAnchorCard(
+                                    anchor = anchor,
+                                    onCancel = {
+                                        scope.launch {
+                                            companionStore.deleteAlwaysOnAnchor(selectedAssistantId, anchor.id)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        if (visibleCommitments.isNotEmpty()) {
+                            item(key = "commitment-action-title") {
+                                Text(
+                                    text = "正在兑现",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(visibleCommitments, key = { "commitment-${it.id}" }) { commitment ->
+                                CommitmentCard(commitment)
+                            }
+                        }
+                        if (activeResponsibilityAnchors.isEmpty() && visibleCommitments.isEmpty()) {
+                            item(key = "empty-commitments") {
+                                EmptyCihaiSection(
+                                    title = "还没有写下的承诺",
+                                    body = "当角色明确答应提醒、陪伴、照看或替你完成一件事后，会在这里留下可见的履约记录。",
+                                )
+                            }
+                        }
+                    }
                     CihaiSection.CONCERNS -> {
                         if (concernCards.isEmpty()) {
                             item(key = "empty-concerns") {
@@ -309,6 +371,12 @@ internal enum class CihaiSection(
     val emptyTitle: String,
     val emptyBody: String,
 ) {
+    COMMITMENTS(
+        label = "承诺",
+        entryKind = null,
+        emptyTitle = "还没有写下的承诺",
+        emptyBody = "角色答应持续照看或替你完成的事，会在这里具象化展示。",
+    ),
     CONCERNS(
         label = "挂心",
         entryKind = null,
@@ -342,12 +410,104 @@ internal enum class CihaiSection(
 }
 
 internal fun visibleCihaiSections(): List<CihaiSection> = listOf(
+    CihaiSection.COMMITMENTS,
     CihaiSection.CONCERNS,
     CihaiSection.RESPONSIBILITIES,
     CihaiSection.RELATIONSHIP,
     CihaiSection.LIFE,
     CihaiSection.DIARY,
 )
+
+@Composable
+private fun CommitmentCard(commitment: CompanionCommitment) {
+    val now = System.currentTimeMillis()
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = commitment.commitmentTitle(),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                ) {
+                    Text(
+                        text = commitment.commitmentStatusText(),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    )
+                }
+            }
+            Text(commitment.promise, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = commitment.dueAt.commitmentScheduleText(now),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (commitment.dueAt <= now && commitment.status != CompanionCommitmentStatus.FULFILLED) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
+            )
+            commitment.actionPlan.userFacingSummary.takeIf(String::isNotBlank)?.let { nextStep ->
+                Text(
+                    text = "接下来会做：$nextStep",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            commitment.lastActionResult?.summary?.takeIf(String::isNotBlank)?.let { result ->
+                Text(
+                    text = "最近一次执行：$result",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun CompanionCommitment.commitmentDisplayRank(): Int = when (status) {
+    CompanionCommitmentStatus.EXECUTING -> 0
+    CompanionCommitmentStatus.DUE -> 1
+    CompanionCommitmentStatus.RETRY_SCHEDULED -> 2
+    CompanionCommitmentStatus.ACTIVE -> 3
+    CompanionCommitmentStatus.PROPOSED -> 4
+    CompanionCommitmentStatus.FAILED -> 5
+    CompanionCommitmentStatus.FULFILLED -> 6
+    CompanionCommitmentStatus.CANCELLED -> 7
+    CompanionCommitmentStatus.SUPERSEDED -> 8
+}
+
+private fun CompanionCommitment.commitmentTitle(): String = when {
+    actionPlan.category.contains("wake", ignoreCase = true) || actionPlan.type.name == "ALARM" -> "起床与睡眠约定"
+    actionPlan.category.contains("study", ignoreCase = true) -> "学习约定"
+    actionPlan.category.contains("health", ignoreCase = true) -> "健康照看"
+    else -> "答应你的事"
+}
+
+private fun CompanionCommitment.commitmentStatusText(): String = when (status) {
+    CompanionCommitmentStatus.PROPOSED -> "等你确认"
+    CompanionCommitmentStatus.ACTIVE -> "一直记得"
+    CompanionCommitmentStatus.DUE -> "该去做了"
+    CompanionCommitmentStatus.EXECUTING -> "正在完成"
+    CompanionCommitmentStatus.FULFILLED -> "已经做到"
+    CompanionCommitmentStatus.FAILED -> "等待处理"
+    CompanionCommitmentStatus.RETRY_SCHEDULED -> "准备再试一次"
+    CompanionCommitmentStatus.CANCELLED -> "已取消"
+    CompanionCommitmentStatus.SUPERSEDED -> "已被新约定替代"
+}
+
+private fun Long.commitmentScheduleText(now: Long): String {
+    val formatted = SimpleDateFormat("M月d日 HH:mm", Locale.getDefault()).format(Date(this))
+    return if (this > now) "下一次：$formatted" else "计划时间：$formatted"
+}
 
 @Composable
 private fun ResponsibilityAnchorCard(

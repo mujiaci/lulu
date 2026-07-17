@@ -42,6 +42,7 @@ class StudyStore(
                     .grantDataLossCompensation()
                     .grantPomodoroInterruptionCompensation()
                     .grantGachaBadLuckCompensation()
+                    .let { StudyRules.refreshShopIfNeeded(it, LocalDate.now(), Random.Default) }
                 if (migrated != current) {
                     prefs.writeState(migrated)
                 }
@@ -77,6 +78,7 @@ class StudyStore(
                 .grantDataLossCompensation()
                 .grantPomodoroInterruptionCompensation()
                 .grantGachaBadLuckCompensation()
+                .let { StudyRules.refreshShopIfNeeded(it, LocalDate.now(), Random.Default) }
             prefs.writeState(
                 transform(migrated)
                     .preserveOfficialEconomy()

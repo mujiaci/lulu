@@ -1900,6 +1900,21 @@ private fun DrawResultSquare(
                 textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center),
             )
+            if (result.alreadyFull) {
+                Surface(
+                    shape = RoundedCornerShape(999.dp),
+                    color = Color.Black.copy(alpha = 0.45f),
+                    modifier = Modifier.align(Alignment.BottomCenter),
+                ) {
+                    Text(
+                        text = "碎片已满",
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                    )
+                }
+            }
         }
     }
 }
@@ -1992,6 +2007,13 @@ private fun DrawRevealCard(result: StudyDrawResult, pulse: Float) {
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Black,
                 )
+                if (result.alreadyFull) {
+                    Text(
+                        text = "该蓝色碎片已集满，已为你展示本次抽取",
+                        color = Color.White.copy(alpha = 0.82f),
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                }
             }
         }
     }
@@ -2832,7 +2854,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
-                "画卷碎片已经集满后再抽到同名蓝色碎片，不进入抽卡结果，也不返夸夸值、抽卡券或其他资源。",
+                "画卷碎片已经集满后再抽到同名蓝色碎片，仍会在抽卡结果中展示，并标记为“碎片已满”；不会重复计入，也不返夸夸值、抽卡券或其他资源。",
                 "蓝色画卷专属碎片 90.15%；紫色 8%（抖音20分钟 5.5% / 剧场碎片 2.5%）。",
                 "金色 1.5%（游戏120分钟 1.2% / 视频解锁卡 0.3%）；彩色番剧3小时 0.35%。",
                 "硬保底：连续 ${StudyRules.NON_NORMAL_PITY_DRAW_COUNT} 抽没有出现紫/金/彩时，第 ${StudyRules.NON_NORMAL_PITY_DRAW_COUNT} 抽必为紫色。",

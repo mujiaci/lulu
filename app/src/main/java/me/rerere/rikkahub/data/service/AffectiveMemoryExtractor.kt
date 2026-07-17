@@ -15,6 +15,7 @@ data class MemoryExtractionTurn(
     val nodeId: String,
     val role: String,
     val text: String,
+    val createdAtMillis: Long = 0L,
 )
 
 @Serializable
@@ -44,6 +45,8 @@ data class AffectiveMemoryCandidate(
     val topics: List<String> = emptyList(),
     val supersededByMemoryId: String? = null,
     val correctedAt: Long? = null,
+    /** The time the source conversation happened, distinct from the time we repaired it. */
+    val occurredAtMillis: Long? = null,
 ) {
     fun normalized(): AffectiveMemoryCandidate = copy(
         type = type.trim().ifBlank { "event" },
@@ -64,6 +67,7 @@ data class AffectiveMemoryCandidate(
         people = people.mapNotNull { it.trim().takeIf(String::isNotBlank) }.distinct(),
         topics = topics.mapNotNull { it.trim().takeIf(String::isNotBlank) }.distinct(),
         supersededByMemoryId = supersededByMemoryId?.trim()?.takeIf { it.isNotBlank() },
+        occurredAtMillis = occurredAtMillis?.takeIf { it > 0L },
     )
 
     fun toEntity(
@@ -99,7 +103,7 @@ data class AffectiveMemoryCandidate(
             correctedAt = normalized.correctedAt,
             assistantId = assistantId,
             conversationId = conversationId,
-            createdAt = createdAt,
+            createdAt = normalized.occurredAtMillis ?: createdAt,
             vectorStatus = "pending",
         )
     }
@@ -116,8 +120,6 @@ internal fun AffectiveMemoryCandidate.isDurableMemoryCandidate(): Boolean {
     val normalized = normalized()
     if (normalized.type.lowercase() !in DURABLE_MEMORY_TYPES) return false
     if (normalized.sourceMessageNodeIds.isEmpty() && normalized.evidenceMessageNodeIds.isEmpty()) return false
-    if (!normalized.content.hasFirstPersonVoice()) return false
-
     val inspectedText = listOfNotNull(
         normalized.content,
         normalized.title,
@@ -201,6 +203,7 @@ private fun MemoryExtractionTurn.toDeterministicMemoryCandidate(): AffectiveMemo
         sourceMessageNodeIds = listOf(nodeId),
         evidenceMessageNodeIds = listOf(nodeId),
         topics = listOf(title),
+        occurredAtMillis = createdAtMillis.takeIf { it > 0L },
     )
 }
 

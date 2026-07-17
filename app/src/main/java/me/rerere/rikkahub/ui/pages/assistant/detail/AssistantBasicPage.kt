@@ -123,6 +123,9 @@ internal fun AssistantBasicContent(
     val context = LocalContext.current
     val historyClearState by vm.historyClearState.collectAsStateWithLifecycle()
     var showClearHistoryDialog by remember { mutableStateOf(false) }
+    var memoryIntervalInput by remember(assistant.memoryExtractionInterval) {
+        mutableStateOf(assistant.memoryExtractionInterval.toString())
+    }
     val faceReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { vm.setFaceReferenceImage(assistant, it) }
     }
@@ -505,6 +508,48 @@ internal fun AssistantBasicContent(
                     ) else stringResource(R.string.assistant_page_context_message_unlimited),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.75f),
+                )
+            }
+            HorizontalDivider()
+            FormItem(
+                modifier = Modifier.padding(8.dp),
+                label = { Text("记忆总结间隔") },
+                description = {
+                    Text("最近 10 条聊天会保留为当前上下文，不参与总结。可读取的旧聊天达到这个数值时，角色才会整理一次长期记忆。0 表示关闭自动整理。")
+                },
+            ) {
+                Slider(
+                    value = assistant.memoryExtractionInterval.coerceIn(0, 100).toFloat(),
+                    onValueChange = { value ->
+                        val interval = value.roundToInt()
+                        memoryIntervalInput = interval.toString()
+                        onUpdate(assistant.copy(memoryExtractionInterval = interval))
+                    },
+                    valueRange = 0f..100f,
+                    steps = 99,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = memoryIntervalInput,
+                    onValueChange = { value ->
+                        memoryIntervalInput = value
+                        value.toIntOrNull()?.coerceIn(0, 500)?.let { interval ->
+                            onUpdate(assistant.copy(memoryExtractionInterval = interval))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("可读取旧聊天达到多少条时提取") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    supportingText = {
+                        Text(
+                            if (assistant.memoryExtractionInterval <= 0) {
+                                "已关闭自动整理"
+                            } else {
+                                "当前：${assistant.memoryExtractionInterval} 条；加上最近保留的 10 条，总聊天达到 ${assistant.memoryExtractionInterval + 10} 条时首次整理。"
+                            },
+                        )
+                    },
                 )
             }
             HorizontalDivider()

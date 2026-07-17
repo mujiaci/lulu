@@ -298,7 +298,7 @@ fun SignalHuntGamePage(recordId: String? = null) {
             SignalHuntBoard(
                 moves = activeMoves,
                 signalCells = if (isWatching && replayStep >= (replay?.moves?.size ?: 0)) {
-                    replay?.moves?.filter { it.foundSignal }.map { it.cell }.toSet()
+                    replay?.moves.orEmpty().filter { it.foundSignal }.map { it.cell }.toSet()
                 } else emptySet(),
                 enabled = !isWatching && started && !gameOver,
                 onCellClick = { cell ->

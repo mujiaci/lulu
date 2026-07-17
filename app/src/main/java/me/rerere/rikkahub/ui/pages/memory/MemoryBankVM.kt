@@ -22,6 +22,7 @@ import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.buildCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.buildDeterministicMemoryCandidatesFromNodes
 import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidates
+import me.rerere.rikkahub.service.ChatService
 import kotlin.uuid.Uuid
 
 class MemoryBankVM(
@@ -29,6 +30,7 @@ class MemoryBankVM(
     private val settingsStore: SettingsStore,
     private val conversationRepository: ConversationRepository,
     private val companionRuntime: CompanionRuntime,
+    private val chatService: ChatService,
 ) : ViewModel() {
     val settings: StateFlow<Settings> = settingsStore.settingsFlow
         .stateIn(viewModelScope, SharingStarted.Lazily, Settings.dummy())
@@ -109,15 +111,11 @@ class MemoryBankVM(
         viewModelScope.launch {
             _loading.value = true
             try {
-                val currentSettings = settingsStore.settingsFlow.first()
-                val recovered = recoverMemoriesFromHistory(currentSettings, _selectedAssistantId.value)
-                _maintenanceMessage.value = if (recovered > 0) {
-                    "已从已有聊天补整理 $recovered 条长期记忆"
-                } else {
-                    "没有发现新的明确偏好、边界或纠正；普通寒暄不会写进长期记忆"
-                }
+                chatService.retryHistoricalMemoryExtraction(_selectedAssistantId.value).join()
+                memoryBankService.processPendingVectors()
+                _maintenanceMessage.value = "已重新扫描最近聊天并重试记忆总结；如果配置了 Embedding 模型，新的记忆也会继续向量化。"
                 attemptedAutomaticHistoryRepair = true
-                refreshMemoryData(currentSettings)
+                refreshMemoryData(settingsStore.settingsFlow.first())
             } catch (error: CancellationException) {
                 throw error
             } catch (error: Throwable) {

@@ -511,21 +511,25 @@ object StudyRules {
         val generatedResults = mutableListOf<StudyDrawResult>()
         val results = buildList {
             repeat(drawCount) {
-                val result = if (drawsSinceNonNormal >= NON_NORMAL_PITY_DRAW_COUNT - 1) {
+                val drawnResult = if (drawsSinceNonNormal >= NON_NORMAL_PITY_DRAW_COUNT - 1) {
                     drawRare(random)
                 } else {
                     drawOne(random)
                 }
+                val alreadyFull = drawnResult.rarity == StudyRarity.Normal &&
+                    inventory.isNormalFragmentFull(drawnResult.fragmentKey)
+                val result = drawnResult.copy(alreadyFull = alreadyFull)
                 generatedResults += result
                 drawsSinceNonNormal = if (result.rarity == StudyRarity.Normal) {
                     drawsSinceNonNormal + 1
                 } else {
                     0
                 }
-                if (result.rarity != StudyRarity.Normal || !inventory.isNormalFragmentFull(result.fragmentKey)) {
+                if (!alreadyFull) {
                     inventory = inventory.addDrawResult(result)
-                    add(result)
                 }
+                // A pull remains visible even if its blue fragment was already full.
+                add(result)
             }
         }
         val refreshed = inventory.refreshUnlockStats()
@@ -558,7 +562,7 @@ object StudyRules {
                 recentEvents = state.recentEvents.addEvent(
                     StudyEventType.Draw,
                     if (drawCount == 10) "十连抽" else "单抽",
-                    "完成 $drawCount 抽；获得 ${results.size} 项，已满的蓝色碎片不返回任何结果",
+                    "完成 $drawCount 抽；获得 ${results.count { !it.alreadyFull }} 项，${results.count { it.alreadyFull }} 枚已满蓝色碎片未重复计入",
                 ),
             ),
             results = results,
@@ -730,6 +734,12 @@ object StudyRules {
     fun refreshShopIfNeeded(state: StudyState, date: LocalDate = LocalDate.now(), random: Random = Random.Default): StudyState {
         val dateText = date.toString()
         if (state.shopDate == dateText && state.shopItems.size == 3) return state
+        // The first daily shelf must be reproducible: the screen may render it before it is
+        // persisted, and its item IDs still need to match the first purchase request.
+        return createShopShelf(state, dateText, Random(dateText.hashCode()))
+    }
+
+    private fun createShopShelf(state: StudyState, dateText: String, random: Random): StudyState {
         val pool = listOf(
             StudyShopItemType.DouyinFragment to 7,
             StudyShopItemType.TheaterFragment to 7,
@@ -748,9 +758,9 @@ object StudyRules {
     fun manualRefreshShop(state: StudyState, date: LocalDate = LocalDate.now(), random: Random = Random.Default): StudyState {
         val dateText = date.toString()
         if (state.manualShopRefreshDate == dateText) return state
-        return refreshShopIfNeeded(
+        return createShopShelf(
             state = state.copy(shopDate = null, manualShopRefreshDate = dateText),
-            date = date,
+            dateText = dateText,
             random = random,
         )
     }
