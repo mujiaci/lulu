@@ -220,7 +220,7 @@ class MemoryBankContextTest {
     }
 
     @Test
-    fun `build memory context removes near duplicate vector memories`() {
+    fun `build memory context removes near duplicates without padding unrelated memories`() {
         val memories = listOf(
             MemoryBankEntity(
                 content = "用户正在写论文大纲，希望露露帮她拆成更小的步骤。",
@@ -254,7 +254,7 @@ class MemoryBankContextTest {
 
         assertTrue(context.contains("拆成更小的步骤"))
         assertTrue(!context.contains("温柔地一步步梳理"))
-        assertTrue(context.contains("参考文献格式"))
+        assertTrue(!context.contains("参考文献格式"))
     }
 
     @Test
