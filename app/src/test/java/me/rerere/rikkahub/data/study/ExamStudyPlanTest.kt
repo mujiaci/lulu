@@ -128,14 +128,15 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun combinedPracticeDaySchedulesPracticeOnlyAfterCourseGate() {
+    fun julyEighteenUsesCourseFirstAndRollingRecitation() {
         val plan = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 18))
         val titles = plan?.tasks.orEmpty().joinToString("\n") { it.title }
 
-        assertTrue(titles.contains("第 3-7 章合并题"))
-        assertTrue(titles.contains("第 7 章"))
-        assertTrue(titles.contains("错题"))
-        assertTrue(titles.contains("正式连接框架图"))
+        assertTrue(plan?.title.orEmpty().contains("4 小时基线"))
+        assertTrue(titles.contains("课程 110-120 分钟"))
+        assertTrue(titles.contains("达到约 70%"))
+        assertTrue(titles.contains("机动复盘缓冲"))
+        assertTrue(titles.contains("每日广播体操"))
     }
 
     @Test
@@ -162,7 +163,7 @@ class ExamStudyPlanTest {
         assertTrue(text.contains("规范表述"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("不能长期停留在“看错题、搞目录”"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("30-40 分钟正式背诵"))
-        assertTrue(ExamStudyPlan.studyHabitReference.contains("3 小时现在是健康状态的最低基线"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("4 小时是当前新基线"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("单纯看框架不算"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("标题写 3.5 小时不能只排 2 小时"))
         assertTrue(ExamStudyPlan.studyHabitReference.contains("播放器四倍速不等于四倍学习效率"))
@@ -195,7 +196,7 @@ class ExamStudyPlanTest {
         assertTrue(habit.contains("法理背诵复线"))
         assertTrue(habit.contains("复线只能是背诵、错题、框架回炉"))
         assertTrue(habit.contains("刑法主线期间不把民法作为新开副线"))
-        assertTrue(habit.contains("3 小时现在是健康状态的最低基线"))
+        assertTrue(habit.contains("4 小时是当前新基线"))
         assertTrue(habit.contains("不能再开另一门新书"))
         assertTrue(habit.contains("不要拆成 4-5 个碎片"))
         assertTrue(subject.contains("不单独安排预习目录"))
@@ -315,7 +316,7 @@ class ExamStudyPlanTest {
     @Test
     fun vocabularyCanBeMovedEarlierAsAvoidanceStartup() {
         val habit = ExamStudyPlan.studyHabitReference
-        val scheduleText = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 9))
+        val scheduleText = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 20))
             .joinToString("\n") { "${it.time} ${it.title} ${it.detail}" }
 
         assertTrue(habit.contains("畏难"))
@@ -328,25 +329,25 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun dailyLoadUsesThreeHoursAsBaselineAndThenGrows() {
-        val firstRampDay = LocalDate.of(2026, 7, 13)
-        val sameWeekDay = LocalDate.of(2026, 7, 15)
-        val secondRampWeek = LocalDate.of(2026, 7, 20)
+    fun dailyLoadUsesFourHoursAsBaselineAndGrowsOnlyByGate() {
         val restDay = LocalDate.of(2026, 7, 19)
 
-        assertEquals(210, ExamStudyPlan.plannedStudyMinutes(firstRampDay))
-        assertEquals(210, ExamStudyPlan.plannedStudyMinutes(sameWeekDay))
-        assertEquals(270, ExamStudyPlan.plannedStudyMinutes(secondRampWeek))
-        assertEquals(330, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 7, 27)))
-        assertEquals(360, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 3)))
-        assertEquals(390, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 10)))
-        assertEquals(420, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 17)))
-        assertEquals(450, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 9, 16)))
-        assertEquals(510, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 10, 1)))
-        assertEquals(480, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 12, 10)))
+        assertEquals(210, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 7, 15)))
+        assertEquals(240, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 7, 20)))
+        assertEquals(270, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 7, 22)))
+        assertEquals(270, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 7, 27)))
+        assertEquals(300, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 3)))
+        assertEquals(330, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 10)))
+        assertEquals(360, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 8, 17)))
+        assertEquals(420, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 9, 16)))
+        assertEquals(450, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 10, 1)))
+        assertEquals(480, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 11, 1)))
+        assertEquals(420, ExamStudyPlan.plannedStudyMinutes(LocalDate.of(2026, 12, 10)))
         assertEquals(0, ExamStudyPlan.plannedStudyMinutes(restDay))
-        assertTrue(ExamStudyPlan.todaySchedule(firstRampDay).first().detail.contains("约 210 分钟"))
-        assertFalse(ExamStudyPlan.studyHabitReference.contains("每天约 3 小时总有效学习"))
+        val schedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 20))
+        assertTrue(schedule.first().title.contains("广播体操"))
+        assertTrue(schedule.joinToString("\n") { it.detail }.contains("固定核心约"))
+        assertTrue(ExamStudyPlan.studyHabitReference.contains("4 小时是当前新基线"))
     }
 
     @Test
@@ -390,8 +391,9 @@ class ExamStudyPlanTest {
         assertTrue(july14.contains("等第 7 章听完后再画"))
         assertFalse(july16.contains("补齐刑法第 3-4 章正式框架图"))
         assertTrue(july16.contains("不画第 3-7 章正式连接框架"))
-        assertTrue(july17.contains("确认第 3-7 章课程全部结束后"))
-        assertTrue(july17.contains("正式连接框架图"))
+        assertTrue(july17.contains("英语翻译/语法深复盘"))
+        assertTrue(july17.contains("课程 65-75 分钟"))
+        assertTrue(july17.contains("机动复盘缓冲"))
     }
 
     @Test
@@ -431,7 +433,7 @@ class ExamStudyPlanTest {
             ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 21)),
             ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 28)),
         ).flatMap { it?.tasks.orEmpty() }.joinToString("\n") { it.title }
-        val scheduleText = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 9))
+        val scheduleText = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 20))
             .joinToString("\n") { "${it.title} ${it.detail}" }
 
         assertTrue(habit.contains("音乐"))
@@ -765,4 +767,23 @@ class ExamStudyPlanTest {
             assertTrue("${current.time} overlaps ${next.time}", !currentEnd.isAfter(nextStart))
         }
     }
+
+    @Test
+    fun dailyScheduleFrontLoadsRecitationAndProtectsReviewBuffer() {
+        val schedule = ExamStudyPlan.todaySchedule(LocalDate.of(2026, 7, 20))
+        val titles = schedule.map { it.title }
+
+        assertTrue(titles.contains("广播体操启动"))
+        assertTrue(titles.contains("午后广播体操"))
+        assertTrue(titles.contains("法理背诵前置"))
+        assertTrue(titles.contains("深复盘/突发缓冲"))
+        val secondCourseIndex = maxOf(titles.indexOf("专业课续段"), titles.indexOf("课程续段"))
+        assertTrue(secondCourseIndex >= 0)
+        assertTrue(titles.indexOf("法理背诵前置") < secondCourseIndex)
+        assertTrue(titles.indexOf("深复盘/突发缓冲") < titles.indexOf("晚饭 + 离桌"))
+        assertTrue(ExamStudyPlan.dailyMovementTaskTitle.contains("完整一套"))
+        assertEquals(85, ExamStudyPlan.plannedCoreLoadPercent)
+        assertEquals(15, ExamStudyPlan.reviewBufferPercent)
+    }
+
 }
