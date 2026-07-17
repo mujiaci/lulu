@@ -1671,7 +1671,7 @@ class ChatService(
                 Log.w(TAG, "Affective memory extraction failed for conversation=$conversationId", error)
             }
         }
-    }
+
 
     // ---- 检查无效消息 ----
 
