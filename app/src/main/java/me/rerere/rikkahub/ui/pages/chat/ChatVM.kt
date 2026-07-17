@@ -333,7 +333,12 @@ class ChatVM(
                 currentConversation.copy(
                     messageNodes = currentConversation.messageNodes.map { existingNode ->
                         if (existingNode.id == node.id) {
-                            existingNode.copy(isFavorite = !currentlyFavorited)
+                            MessageNode(
+                                id = existingNode.id,
+                                messages = existingNode.messages,
+                                selectIndex = existingNode.selectIndex,
+                                isFavorite = !currentlyFavorited,
+                            )
                         } else {
                             existingNode
                         }
