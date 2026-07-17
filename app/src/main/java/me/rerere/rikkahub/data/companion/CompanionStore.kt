@@ -119,7 +119,7 @@ class CompanionStore(
         if (assistantId.isBlank()) return
         updateSnapshot(assistantId) { snapshot ->
             snapshot.copy(
-                privateImpression = snapshot.privateImpression.copy(
+                privateImpression = snapshot.privateImpression.dismissCurrentProfileEvidence().copy(
                     relationshipTitle = "",
                     relationshipNarrative = "",
                     updatedAt = System.currentTimeMillis(),
@@ -132,7 +132,7 @@ class CompanionStore(
         if (assistantId.isBlank()) return
         updateSnapshot(assistantId) { snapshot ->
             snapshot.copy(
-                privateImpression = snapshot.privateImpression.copy(
+                privateImpression = snapshot.privateImpression.dismissCurrentProfileEvidence().copy(
                     summary = "",
                     userPortrait = "",
                     observedTraits = emptyList(),
@@ -148,7 +148,7 @@ class CompanionStore(
         if (assistantId.isBlank()) return
         updateSnapshot(assistantId) { snapshot ->
             snapshot.copy(
-                privateImpression = snapshot.privateImpression.copy(
+                privateImpression = snapshot.privateImpression.dismissCurrentProfileEvidence().copy(
                     interactionUnderstanding = "",
                     updatedAt = System.currentTimeMillis(),
                 ),
@@ -160,7 +160,7 @@ class CompanionStore(
         if (assistantId.isBlank()) return
         updateSnapshot(assistantId) { snapshot ->
             snapshot.copy(
-                privateImpression = snapshot.privateImpression.copy(
+                privateImpression = snapshot.privateImpression.dismissCurrentProfileEvidence().copy(
                     unresolvedMatters = emptyList(),
                     updatedAt = System.currentTimeMillis(),
                 ),
@@ -185,6 +185,12 @@ class CompanionStore(
             )
         }
     }
+
+    private fun CompanionPrivateImpression.dismissCurrentProfileEvidence(): CompanionPrivateImpression = copy(
+        dismissedProfileEvidenceMessageNodeIds = (
+            dismissedProfileEvidenceMessageNodeIds + evidenceMessageNodeIds
+        ).filter(String::isNotBlank).distinct().takeLast(200),
+    )
 
     private fun decodeState(raw: String?): CompanionPersistedState {
         if (raw.isNullOrBlank()) return CompanionPersistedState()
@@ -363,6 +369,7 @@ private fun CompanionPrivateImpression.normalizedForStorage(): CompanionPrivateI
     uncertainties = uncertainties.cleanImpressionItems(8),
     unresolvedMatters = unresolvedMatters.cleanImpressionItems(8),
     evidenceMessageNodeIds = evidenceMessageNodeIds.filter(String::isNotBlank).distinct().takeLast(80),
+    dismissedProfileEvidenceMessageNodeIds = dismissedProfileEvidenceMessageNodeIds.filter(String::isNotBlank).distinct().takeLast(200),
     observedTraits = observedTraits.cleanImpressionItems(),
     preferences = preferences.cleanImpressionItems(),
     boundaries = boundaries.cleanImpressionItems(),
