@@ -102,6 +102,9 @@ import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
 import me.rerere.rikkahub.data.companion.detectAlwaysOnAnchorCancellations
 import me.rerere.rikkahub.data.companion.detectAlwaysOnAnchors
+import me.rerere.rikkahub.data.companion.detectExplicitRecurringResponsibilityAnchors
+import me.rerere.rikkahub.data.companion.detectExplicitRecurringResponsibilityCancellations
+import me.rerere.rikkahub.data.companion.mergeAlwaysOnResponsibilityAnchors
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionFollowUpDraft
@@ -979,17 +982,31 @@ class ChatService(
                     ?: turnStartedAt,
                 nowMillis = turnStartedAt,
             )
-            val detectedAlwaysOnAnchors = detectAlwaysOnAnchors(
-                assistantId = assistant.id.toString(),
-                userText = latestUserText,
-                sourceConversationId = conversationId.toString(),
-                sourceMessageId = latestUserMessage?.id?.toString(),
-                nowMillis = turnStartedAt,
+            val detectedAlwaysOnAnchors = mergeAlwaysOnResponsibilityAnchors(
+                detected = detectAlwaysOnAnchors(
+                    assistantId = assistant.id.toString(),
+                    userText = latestUserText,
+                    sourceConversationId = conversationId.toString(),
+                    sourceMessageId = latestUserMessage?.id?.toString(),
+                    nowMillis = turnStartedAt,
+                ),
+                explicit = detectExplicitRecurringResponsibilityAnchors(
+                    assistantId = assistant.id.toString(),
+                    userText = latestUserText,
+                    sourceConversationId = conversationId.toString(),
+                    sourceMessageId = latestUserMessage?.id?.toString(),
+                    nowMillis = turnStartedAt,
+                ),
             )
-            val cancelledAlwaysOnAnchorIds = detectAlwaysOnAnchorCancellations(
-                assistantId = assistant.id.toString(),
-                userText = latestUserText,
-            )
+            val cancelledAlwaysOnAnchorIds = (
+                detectAlwaysOnAnchorCancellations(
+                    assistantId = assistant.id.toString(),
+                    userText = latestUserText,
+                ) + detectExplicitRecurringResponsibilityCancellations(
+                    assistantId = assistant.id.toString(),
+                    userText = latestUserText,
+                )
+            ).distinct()
             if (detectedAlwaysOnAnchors.isNotEmpty() || cancelledAlwaysOnAnchorIds.isNotEmpty()) {
                 companionRuntime.applyTurn(
                     CompanionTurnMutation(
