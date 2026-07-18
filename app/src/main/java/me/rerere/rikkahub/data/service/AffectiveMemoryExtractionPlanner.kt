@@ -7,8 +7,6 @@ import kotlinx.datetime.toInstant
 
 const val DEFAULT_MEMORY_EXTRACTION_INTERVAL = 20
 const val MEMORY_EXTRACTION_TAIL_BUFFER = 10
-private const val EXTRACTION_WINDOW_SIZE = 30
-private const val EXTRACTION_OVERLAP = 6
 
 data class AffectiveMemoryExtractionPlan(
     val turns: List<MemoryExtractionTurn>,
@@ -23,18 +21,16 @@ fun buildAffectiveMemoryExtractionPlan(
     if (extractionInterval <= 0) return null
     val logicalTurns = messageNodes.toMemoryExtractionTurns()
     val stableTurns = logicalTurns.dropLast(MEMORY_EXTRACTION_TAIL_BUFFER)
-    val processedStableCount = stableTurns.latestProcessedIndex(processedSourceNodeIds) + 1
+    // The interval is the user's exact batch size, not merely a trigger threshold.
+    // Work from the earliest source nodes that have never been checkpointed, so a
+    // retry can repair old partial batches without re-summarising already handled turns.
+    val pendingStableTurns = stableTurns.filterNot { it.nodeId in processedSourceNodeIds }
+    if (pendingStableTurns.size < extractionInterval) return null
 
-    if (stableTurns.size - processedStableCount >= extractionInterval) {
-        val start = (processedStableCount - EXTRACTION_OVERLAP).coerceAtLeast(0)
-        val end = (start + EXTRACTION_WINDOW_SIZE).coerceAtMost(stableTurns.size)
-        val turns = stableTurns.subList(start, end)
-        if (turns.isNotEmpty()) {
-            return AffectiveMemoryExtractionPlan(turns = turns, reason = "interval")
-        }
-    }
-
-    return null
+    return AffectiveMemoryExtractionPlan(
+        turns = pendingStableTurns.take(extractionInterval),
+        reason = "interval",
+    )
 }
 
 internal fun List<MessageNode>.toMemoryExtractionTurns(): List<MemoryExtractionTurn> =
@@ -52,7 +48,3 @@ internal fun List<MessageNode>.toMemoryExtractionTurns(): List<MemoryExtractionT
             }.getOrDefault(0L),
         )
     }
-
-private fun List<MemoryExtractionTurn>.latestProcessedIndex(processedSourceNodeIds: Set<String>): Int =
-    indexOfLast { it.nodeId in processedSourceNodeIds }
-
