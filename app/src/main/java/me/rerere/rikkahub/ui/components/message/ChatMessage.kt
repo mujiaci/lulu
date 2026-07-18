@@ -428,7 +428,6 @@ private fun MessagePartsBlock(
     val settings = LocalSettings.current
     val bubbleAlpha = 1f - settings.displaySetting.chatBubbleTransparency / 100f
     val bubbleDelayMillis = remember(annotations) { annotations.luluBubblePacingDelayMillis() }
-    val initialBubbleDelayMillis = remember(annotations) { annotations.luluBubbleInitialDelayMillis() }
     val partsState by rememberUpdatedState(parts)
 
     val handleClickCitation: (String) -> Unit = remember {
@@ -545,32 +544,44 @@ private fun MessagePartsBlock(
                                         val visualSegments = remember(displayText, isPresegmentedBubble) {
                                             if (isPresegmentedBubble) listOf(displayText) else displayText.splitIntoVisualBubbles()
                                         }
-                                        var visibleSegmentCount by remember(displayText, animateAssistantSegments) {
+                                        var visibleSegmentCount by remember(
+                                            displayText,
+                                            animateAssistantSegments,
+                                            isPresegmentedBubble,
+                                        ) {
                                             mutableIntStateOf(
-                                                if (!animateAssistantSegments) {
-                                                    visualSegments.size
-                                                } else {
-                                                    0
-                                                }
+                                                initialVisibleAssistantBubbleCount(
+                                                    segmentCount = visualSegments.size,
+                                                    animate = animateAssistantSegments,
+                                                    isPresegmented = isPresegmentedBubble,
+                                                )
                                             )
                                         }
                                         LaunchedEffect(
+                                            displayText,
                                             visualSegments.size,
                                             animateAssistantSegments,
+                                            isPresegmentedBubble,
                                         ) {
-                                            if (!animateAssistantSegments) {
-                                                visibleSegmentCount = visualSegments.size
-                                            } else if (isPresegmentedBubble) {
-                                                delay(initialBubbleDelayMillis)
-                                                visibleSegmentCount = visualSegments.size
-                                            } else {
-                                                while (visibleSegmentCount < visualSegments.size) {
-                                                    delay(bubbleDelayMillis)
-                                                    visibleSegmentCount += 1
-                                                }
-                                                if (visibleSegmentCount > visualSegments.size) {
+                                            when {
+                                                !animateAssistantSegments || isPresegmentedBubble -> {
+                                                    // Text must never wait behind TTS or another user turn.
                                                     visibleSegmentCount = visualSegments.size
                                                 }
+                                                visibleSegmentCount == 0 && visualSegments.isNotEmpty() -> {
+                                                    visibleSegmentCount = 1
+                                                }
+                                            }
+                                            while (
+                                                animateAssistantSegments &&
+                                                !isPresegmentedBubble &&
+                                                visibleSegmentCount < visualSegments.size
+                                            ) {
+                                                delay(bubbleDelayMillis)
+                                                visibleSegmentCount += 1
+                                            }
+                                            if (visibleSegmentCount > visualSegments.size) {
+                                                visibleSegmentCount = visualSegments.size
                                             }
                                         }
                                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -800,6 +811,16 @@ private fun MessagePartsBlock(
     }
 }
 
+internal fun initialVisibleAssistantBubbleCount(
+    segmentCount: Int,
+    animate: Boolean,
+    isPresegmented: Boolean,
+): Int = when {
+    segmentCount <= 0 -> 0
+    !animate || isPresegmented -> segmentCount
+    else -> 1
+}
+
 internal fun List<UIMessageAnnotation>.luluBubblePacingDelayMillis(): Long {
     val pacing = asReversed()
         .asSequence()
@@ -815,20 +836,6 @@ internal fun List<UIMessageAnnotation>.luluBubblePacingDelayMillis(): Long {
         "slow" -> 360L
         else -> 180L
     }
-}
-
-internal fun List<UIMessageAnnotation>.luluBubbleInitialDelayMillis(): Long {
-    val interval = luluBubblePacingDelayMillis()
-    val segmentIndex = asSequence()
-        .filterIsInstance<UIMessageAnnotation.Metadata>()
-        .firstOrNull { it.type == LULU_BUBBLE_SEGMENT_METADATA_TYPE }
-        ?.data
-        ?.get("index")
-        ?.jsonPrimitive
-        ?.intOrNull
-        ?.coerceAtLeast(0)
-        ?: 0
-    return interval * (segmentIndex + 1L)
 }
 
 @Composable
