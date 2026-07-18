@@ -157,6 +157,7 @@ import kotlin.time.Duration.Companion.minutes
 import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
+private const val MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION = 200
 
 internal fun buildDirectFactAnswerGuard(
     userText: String,
@@ -1471,25 +1472,66 @@ class ChatService(
         val assistants = settings.assistants.filter { assistant ->
             assistantId == null || assistant.id.toString() == assistantId
         }
-        val jobs = mutableListOf<Job>()
+        var completedBatchCount = 0
         assistants.forEach { assistant ->
             val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
                 ?: return@forEach
-            conversationRepo.getRecentConversations(assistant.id, limit = 8).forEach { conversation ->
+            // "Reorganise existing chats" must cover every conversation, not only the
+            // most recent eight. Process oldest first so recovered memory stays chronological.
+            val conversations = conversationRepo.getConversationsOfAssistant(assistant.id)
+                .first()
+                .mapNotNull { summary -> conversationRepo.getConversationById(summary.id) }
+                .sortedBy { it.createAt }
+            conversations.forEach { conversation ->
                 memoryBankService.resetExtractionCheckpoint(
                     assistantId = assistant.id.toString(),
                     conversationId = conversation.id.toString(),
                 )
-                jobs += launchAffectiveMemoryExtraction(
-                    conversationId = conversation.id,
-                    conversation = conversation,
-                    assistant = assistant,
-                    settings = settings,
-                    model = model,
-                )
+                var completedConversationBatches = 0
+                while (completedConversationBatches < MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION) {
+                    val processedBefore = memoryBankService.getProcessedSourceNodeIds(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    )
+                    val plan = buildAffectiveMemoryExtractionPlan(
+                        messageNodes = conversation.messageNodes,
+                        processedSourceNodeIds = processedBefore,
+                        extractionInterval = assistant.memoryExtractionInterval,
+                    ) ?: break
+                    launchAffectiveMemoryExtraction(
+                        conversationId = conversation.id,
+                        conversation = conversation,
+                        assistant = assistant,
+                        settings = settings,
+                        model = model,
+                    ).join()
+                    val processedAfter = memoryBankService.getProcessedSourceNodeIds(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    )
+                    val batchNodeIds = plan.turns.map { it.nodeId }
+                    if (!processedAfter.containsAll(batchNodeIds)) {
+                        // A provider, parsing, or validation failure deliberately leaves the
+                        // batch retryable. Stop this conversation instead of silently claiming
+                        // that historical memory has been fully rebuilt.
+                        Log.w(
+                            TAG,
+                            "Historical memory extraction paused for conversation=${conversation.id}; batch remains retryable",
+                        )
+                        break
+                    }
+                    completedConversationBatches += 1
+                    completedBatchCount += 1
+                }
+                if (completedConversationBatches >= MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION) {
+                    Log.w(
+                        TAG,
+                        "Historical memory extraction reached the safety limit for conversation=${conversation.id}",
+                    )
+                }
             }
         }
-        jobs.forEach { it.join() }
+        Logging.log(TAG, "Historical memory extraction completed $completedBatchCount batches")
     }
 
     private fun launchAffectiveMemoryExtraction(
