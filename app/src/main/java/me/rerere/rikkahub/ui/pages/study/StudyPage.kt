@@ -160,6 +160,7 @@ import kotlin.uuid.Uuid
 private enum class StudySection(val label: String) {
     Companion("陪伴"),
     Today("今日"),
+    Plan("计划"),
     Gacha("抽卡"),
     Collection("收藏"),
     Achievements("成就"),
@@ -182,7 +183,6 @@ private enum class DailyDashboardView(val label: String) {
     Plan("今日计划"),
     Tomorrow("明日待办"),
     Tips("Tips"),
-    Overview("周月计划"),
 }
 
 private const val DEFAULT_RAINBOW_DRAW_VIDEO_URI = "raw:star_wish_rainbow_draw"
@@ -341,6 +341,13 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                                 onClaimNormal = { vm.claimSuperMoment(SuperMomentChoice.NormalFragments) },
                                 onClaimRare = { vm.claimSuperMoment(SuperMomentChoice.RareFragment) },
                             )
+                        }
+                    }
+                    StudySection.Plan -> {
+                        item {
+                            StudyCard {
+                                PlanOverviewContent()
+                            }
                         }
                     }
                     StudySection.Gacha -> {
@@ -1012,7 +1019,6 @@ private fun DailyStudyDashboard(
             )
             DailyDashboardView.Tomorrow -> TomorrowPlanContent(tomorrowPlan = tomorrowPlan)
             DailyDashboardView.Tips -> StudyTipsContent(tips = tips)
-            DailyDashboardView.Overview -> PlanOverviewContent()
         }
     }
 }
