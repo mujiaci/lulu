@@ -39,7 +39,7 @@ class AffectiveMemoryExtractionPlannerTest {
     }
 
     @Test
-    fun `planner overlaps six messages after the latest processed source node`() {
+    fun `planner selects the next unprocessed interval without overlap`() {
         val conversation = nodes(56)
         val processed = (1..20).map { idOf(it) }.toSet()
 
@@ -49,8 +49,27 @@ class AffectiveMemoryExtractionPlannerTest {
         )
 
         requireNotNull(plan)
-        assertEquals(idOf(15), plan.turns.first().nodeId)
-        assertEquals(idOf(44), plan.turns.last().nodeId)
+        assertEquals(20, plan.turns.size)
+        assertEquals(idOf(21), plan.turns.first().nodeId)
+        assertEquals(idOf(40), plan.turns.last().nodeId)
+        assertFalse(plan.turns.any { it.nodeId in processed })
+    }
+
+    @Test
+    fun `planner respects a forty message interval after keeping the newest ten`() {
+        val conversation = nodes(90)
+        val processed = (1..40).map { idOf(it) }.toSet()
+
+        val plan = buildAffectiveMemoryExtractionPlan(
+            messageNodes = conversation,
+            processedSourceNodeIds = processed,
+            extractionInterval = 40,
+        )
+
+        requireNotNull(plan)
+        assertEquals(40, plan.turns.size)
+        assertEquals(idOf(41), plan.turns.first().nodeId)
+        assertEquals(idOf(80), plan.turns.last().nodeId)
     }
 
     @Test
