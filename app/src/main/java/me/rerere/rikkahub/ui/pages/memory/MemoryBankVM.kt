@@ -14,6 +14,7 @@ import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelType
 import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
+import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.companion.CompanionRuntime
 import me.rerere.rikkahub.data.companion.CompanionTurnMutation
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
@@ -23,6 +24,7 @@ import me.rerere.rikkahub.data.service.buildCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.buildDeterministicMemoryCandidatesFromNodes
 import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidates
 import me.rerere.rikkahub.service.ChatService
+import me.rerere.rikkahub.service.MemoryReorganizationMode
 import kotlin.uuid.Uuid
 
 class MemoryBankVM(
@@ -58,7 +60,9 @@ class MemoryBankVM(
 
     private val _maintenanceMessage = MutableStateFlow<String?>(null)
     val maintenanceMessage: StateFlow<String?> = _maintenanceMessage.asStateFlow()
+    val reorganizationProgress = chatService.memoryReorganizationProgress
     private var attemptedAutomaticHistoryRepair = false
+    private var initializedAssistantFilter = false
 
     init {
         loadMemories()
@@ -90,6 +94,10 @@ class MemoryBankVM(
     }
 
     private suspend fun refreshMemoryData(currentSettings: Settings) {
+        if (!initializedAssistantFilter) {
+            _selectedAssistantId.value = currentSettings.getCurrentAssistant().id.toString()
+            initializedAssistantFilter = true
+        }
         val configuredAssistantIds = currentSettings.assistants.map { it.id.toString() }
         val storedAssistantIds = memoryBankService.getAssistantIds()
         _assistantIds.value = (configuredAssistantIds + storedAssistantIds).distinct()
@@ -107,13 +115,22 @@ class MemoryBankVM(
         )
     }
 
-    fun repairMemoriesFromHistory() {
+    fun repairMemoriesFromHistory() = reorganizeMemories(MemoryReorganizationMode.RECENT_BATCH)
+
+    fun continueHistoricalMemoryRepair() = reorganizeMemories(MemoryReorganizationMode.CONTINUE_HISTORY)
+
+    fun rebuildAllHistoricalMemories() = reorganizeMemories(MemoryReorganizationMode.FULL_REBUILD)
+
+    private fun reorganizeMemories(mode: MemoryReorganizationMode) {
         viewModelScope.launch {
             _loading.value = true
             try {
-                chatService.retryHistoricalMemoryExtraction(_selectedAssistantId.value).join()
+                chatService.retryHistoricalMemoryExtraction(
+                    assistantId = _selectedAssistantId.value,
+                    mode = mode,
+                ).join()
                 memoryBankService.processPendingVectors()
-                _maintenanceMessage.value = "已重新扫描最近聊天并重试记忆总结；如果配置了 Embedding 模型，新的记忆也会继续向量化。"
+                _maintenanceMessage.value = chatService.memoryReorganizationProgress.value.message
                 attemptedAutomaticHistoryRepair = true
                 refreshMemoryData(settingsStore.settingsFlow.first())
             } catch (error: CancellationException) {

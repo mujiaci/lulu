@@ -134,6 +134,7 @@ import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.MemoryBankService
+import me.rerere.rikkahub.data.service.MemoryExtractionDirection
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
 import me.rerere.rikkahub.data.service.buildDeterministicMemoryCandidates
@@ -142,6 +143,7 @@ import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidat
 import me.rerere.rikkahub.data.service.isDurableMemoryCandidate
 import me.rerere.rikkahub.data.service.normalizedMemoryIdentity
 import me.rerere.rikkahub.data.service.syncCompanionPrivateImpression
+import me.rerere.rikkahub.data.service.toMemoryExtractionTurns
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -158,6 +160,27 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "ChatService"
 private const val MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION = 200
+private const val MEMORY_OCCURRENCE_FUTURE_TOLERANCE_MS = 24L * 60 * 60 * 1_000
+
+enum class MemoryReorganizationMode {
+    RECENT_BATCH,
+    CONTINUE_HISTORY,
+    FULL_REBUILD,
+}
+
+data class MemoryReorganizationProgress(
+    val running: Boolean = false,
+    val mode: MemoryReorganizationMode = MemoryReorganizationMode.RECENT_BATCH,
+    val assistantId: String? = null,
+    val totalConversations: Int = 0,
+    val currentConversation: Int = 0,
+    val completedBatches: Int = 0,
+    val failedBatches: Int = 0,
+    val currentBatchStartAt: Long? = null,
+    val currentBatchEndAt: Long? = null,
+    val repairedTemporalRows: Int = 0,
+    val message: String = "",
+)
 
 internal fun buildDirectFactAnswerGuard(
     userText: String,
@@ -321,6 +344,10 @@ class ChatService(
     // 错误状态
     private val _errors = MutableStateFlow<List<ChatError>>(emptyList())
     val errors: StateFlow<List<ChatError>> = _errors.asStateFlow()
+
+    private val _memoryReorganizationProgress = MutableStateFlow(MemoryReorganizationProgress())
+    val memoryReorganizationProgress: StateFlow<MemoryReorganizationProgress> =
+        _memoryReorganizationProgress.asStateFlow()
 
     fun addError(
         error: Throwable,
@@ -1467,53 +1494,130 @@ class ChatService(
         }
     }.trim()
 
-    fun retryHistoricalMemoryExtraction(assistantId: String? = null): Job = appScope.launch {
-        val settings = settingsStore.settingsFlow.first()
-        val assistants = settings.assistants.filter { assistant ->
-            assistantId == null || assistant.id.toString() == assistantId
-        }
-        var completedBatchCount = 0
-        assistants.forEach { assistant ->
-            val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
-                ?: return@forEach
-            // "Reorganise existing chats" must cover every conversation, not only the
-            // most recent eight. Process oldest first so recovered memory stays chronological.
-            val conversations = conversationRepo.getConversationsOfAssistant(assistant.id)
-                .first()
-                .mapNotNull { summary -> conversationRepo.getConversationById(summary.id) }
-                .sortedBy { it.createAt }
-            conversations.forEach { conversation ->
-                memoryBankService.resetExtractionCheckpoint(
+    fun retryHistoricalMemoryExtraction(
+        assistantId: String? = null,
+        mode: MemoryReorganizationMode = MemoryReorganizationMode.RECENT_BATCH,
+    ): Job = appScope.launch {
+        if (_memoryReorganizationProgress.value.running) return@launch
+        val initialProgress = MemoryReorganizationProgress(
+            running = true,
+            mode = mode,
+            assistantId = assistantId,
+            message = "正在读取聊天记录…",
+        )
+        _memoryReorganizationProgress.value = initialProgress
+        runCatching {
+            val settings = settingsStore.settingsFlow.first()
+            val targets = settings.assistants
+                .filter { assistant -> assistantId == null || assistant.id.toString() == assistantId }
+                .flatMap { assistant ->
+                    val model = settings.findModelById(assistant.chatModelId ?: settings.chatModelId)
+                    if (model == null) {
+                        emptyList()
+                    } else {
+                        val conversations = conversationRepo.getConversationsOfAssistant(assistant.id)
+                            .first()
+                            .mapNotNull { summary -> conversationRepo.getConversationById(summary.id) }
+                            .let { items ->
+                                if (mode == MemoryReorganizationMode.RECENT_BATCH) {
+                                    items.sortedByDescending { it.createAt }
+                                } else {
+                                    items.sortedBy { it.createAt }
+                                }
+                            }
+                        conversations.map { conversation -> Triple(assistant, model, conversation) }
+                    }
+                }
+            _memoryReorganizationProgress.value = initialProgress.copy(
+                totalConversations = targets.size,
+                message = if (targets.isEmpty()) "没有找到这个角色的聊天记录" else "正在检查可整理批次…",
+            )
+
+            if (mode == MemoryReorganizationMode.FULL_REBUILD) {
+                targets.forEach { (assistant, _, conversation) ->
+                    memoryBankService.resetExtractionCheckpoint(
+                        assistantId = assistant.id.toString(),
+                        conversationId = conversation.id.toString(),
+                    )
+                }
+            }
+
+            val direction = if (mode == MemoryReorganizationMode.RECENT_BATCH) {
+                MemoryExtractionDirection.RECENT_FIRST
+            } else {
+                MemoryExtractionDirection.OLDEST_FIRST
+            }
+            val maximumTotalBatches = if (mode == MemoryReorganizationMode.FULL_REBUILD) {
+                Int.MAX_VALUE
+            } else {
+                1
+            }
+            var completedBatchCount = 0
+            var failedBatchCount = 0
+            var repairedTemporalRows = 0
+
+            targetLoop@ for ((targetIndex, target) in targets.withIndex()) {
+                val (assistant, model, conversation) = target
+                val sourceTimesByNodeId = conversation.messageNodes.toMemoryExtractionTurns()
+                    .associate { turn -> turn.nodeId to turn.createdAtMillis }
+                    .filterValues { it > 0L }
+                repairedTemporalRows += memoryBankService.repairTemporalMetadata(
                     assistantId = assistant.id.toString(),
                     conversationId = conversation.id.toString(),
+                    sourceTimesByNodeId = sourceTimesByNodeId,
                 )
+                repairedTemporalRows += companionRuntime.repairRelationshipEventTimes(
+                    assistantId = assistant.id.toString(),
+                    sourceTimesByNodeId = sourceTimesByNodeId,
+                )
+
                 var completedConversationBatches = 0
-                while (completedConversationBatches < MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION) {
+                while (
+                    completedConversationBatches < MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION &&
+                    completedBatchCount < maximumTotalBatches
+                ) {
+                    val includeSavedMemories = mode != MemoryReorganizationMode.FULL_REBUILD
                     val processedBefore = memoryBankService.getProcessedSourceNodeIds(
                         assistantId = assistant.id.toString(),
                         conversationId = conversation.id.toString(),
+                        includeSavedMemories = includeSavedMemories,
                     )
                     val plan = buildAffectiveMemoryExtractionPlan(
                         messageNodes = conversation.messageNodes,
                         processedSourceNodeIds = processedBefore,
                         extractionInterval = assistant.memoryExtractionInterval,
+                        direction = direction,
                     ) ?: break
+                    _memoryReorganizationProgress.value = MemoryReorganizationProgress(
+                        running = true,
+                        mode = mode,
+                        assistantId = assistant.id.toString(),
+                        totalConversations = targets.size,
+                        currentConversation = targetIndex + 1,
+                        completedBatches = completedBatchCount,
+                        failedBatches = failedBatchCount,
+                        currentBatchStartAt = plan.turns.firstOrNull()?.createdAtMillis,
+                        currentBatchEndAt = plan.turns.lastOrNull()?.createdAtMillis,
+                        repairedTemporalRows = repairedTemporalRows,
+                        message = "正在整理第 ${completedBatchCount + 1} 批（${plan.turns.size} 条）",
+                    )
                     launchAffectiveMemoryExtraction(
                         conversationId = conversation.id,
                         conversation = conversation,
                         assistant = assistant,
                         settings = settings,
                         model = model,
+                        direction = direction,
+                        includeSavedMemorySources = includeSavedMemories,
                     ).join()
                     val processedAfter = memoryBankService.getProcessedSourceNodeIds(
                         assistantId = assistant.id.toString(),
                         conversationId = conversation.id.toString(),
+                        includeSavedMemories = includeSavedMemories,
                     )
                     val batchNodeIds = plan.turns.map { it.nodeId }
                     if (!processedAfter.containsAll(batchNodeIds)) {
-                        // A provider, parsing, or validation failure deliberately leaves the
-                        // batch retryable. Stop this conversation instead of silently claiming
-                        // that historical memory has been fully rebuilt.
+                        failedBatchCount += 1
                         Log.w(
                             TAG,
                             "Historical memory extraction paused for conversation=${conversation.id}; batch remains retryable",
@@ -1523,15 +1627,34 @@ class ChatService(
                     completedConversationBatches += 1
                     completedBatchCount += 1
                 }
-                if (completedConversationBatches >= MAX_HISTORICAL_MEMORY_BATCHES_PER_CONVERSATION) {
-                    Log.w(
-                        TAG,
-                        "Historical memory extraction reached the safety limit for conversation=${conversation.id}",
-                    )
-                }
+                if (completedBatchCount >= maximumTotalBatches) break@targetLoop
             }
+
+            val finalMessage = when {
+                targets.isEmpty() -> "没有找到这个角色的聊天记录"
+                failedBatchCount > 0 -> "本批整理失败，进度未跳过，下次可继续重试"
+                completedBatchCount == 0 && repairedTemporalRows > 0 -> "没有新的完整批次，已修复 $repairedTemporalRows 条旧时间"
+                completedBatchCount == 0 -> "暂无可整理的完整批次；最新 10 条仍保留在当前上下文"
+                mode == MemoryReorganizationMode.FULL_REBUILD -> "完整重建完成：$completedBatchCount 批，修复 $repairedTemporalRows 条时间"
+                else -> "已整理 $completedBatchCount 批；下一批会从未处理位置继续"
+            }
+            _memoryReorganizationProgress.value = _memoryReorganizationProgress.value.copy(
+                running = false,
+                completedBatches = completedBatchCount,
+                failedBatches = failedBatchCount,
+                repairedTemporalRows = repairedTemporalRows,
+                message = finalMessage,
+            )
+            Logging.log(TAG, "Historical memory extraction completed $completedBatchCount batches")
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            Log.w(TAG, "Historical memory extraction failed", error)
+            _memoryReorganizationProgress.value = _memoryReorganizationProgress.value.copy(
+                running = false,
+                failedBatches = _memoryReorganizationProgress.value.failedBatches + 1,
+                message = error.message?.let { "整理失败：$it" } ?: "整理失败，进度未跳过",
+            )
         }
-        Logging.log(TAG, "Historical memory extraction completed $completedBatchCount batches")
     }
 
     private fun launchAffectiveMemoryExtraction(
@@ -1540,16 +1663,20 @@ class ChatService(
         assistant: Assistant,
         settings: Settings,
         model: Model,
+        direction: MemoryExtractionDirection = MemoryExtractionDirection.OLDEST_FIRST,
+        includeSavedMemorySources: Boolean = true,
     ): Job = appScope.launch {
             runCatching {
                 val processedSourceNodeIds = memoryBankService.getProcessedSourceNodeIds(
                     assistantId = assistant.id.toString(),
                     conversationId = conversationId.toString(),
+                    includeSavedMemories = includeSavedMemorySources,
                 )
                 val plan = buildAffectiveMemoryExtractionPlan(
                     messageNodes = conversation.messageNodes,
                     processedSourceNodeIds = processedSourceNodeIds,
                     extractionInterval = assistant.memoryExtractionInterval,
+                    direction = direction,
                 ) ?: return@runCatching
 
                 val extractionModel = settings.memoryEmbeddingConfig.extractionModelId
@@ -1619,15 +1746,23 @@ class ChatService(
                             .ifEmpty { fallbackEvidenceNodeIds }
                         val evidenceNodeIds = candidate.evidenceMessageNodeIds
                             .ifEmpty { sourceNodeIds }
+                        val sourceMessageAt = (sourceNodeIds + evidenceNodeIds)
+                            .mapNotNull(occurrenceByNodeId::get)
+                            .filter { it > 0L }
+                            .maxOrNull()
+                        val modelOccurrence = candidate.occurredAtMillis
+                            ?.takeIf { occurredAt ->
+                                occurredAt > 0L && (
+                                    sourceMessageAt == null ||
+                                        occurredAt <= sourceMessageAt + MEMORY_OCCURRENCE_FUTURE_TOLERANCE_MS
+                                    )
+                            }
                         candidate.copy(
                             userSignal = candidate.userSignal ?: candidate.content,
                             sourceMessageNodeIds = sourceNodeIds,
                             evidenceMessageNodeIds = evidenceNodeIds,
-                            occurredAtMillis = candidate.occurredAtMillis
-                                ?: sourceNodeIds
-                                    .mapNotNull(occurrenceByNodeId::get)
-                                    .filter { it > 0L }
-                                    .maxOrNull(),
+                            sourceMessageAtMillis = sourceMessageAt,
+                            occurredAtMillis = modelOccurrence ?: sourceMessageAt,
                         )
                     }
                     .filter { it.isDurableMemoryCandidate() }

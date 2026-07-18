@@ -73,6 +73,25 @@ class AffectiveMemoryExtractionPlannerTest {
     }
 
     @Test
+    fun `recent planner selects newest complete aligned forty message batch`() {
+        val conversation = nodes(335)
+
+        val plan = buildAffectiveMemoryExtractionPlan(
+            messageNodes = conversation,
+            processedSourceNodeIds = emptySet(),
+            extractionInterval = 40,
+            direction = MemoryExtractionDirection.RECENT_FIRST,
+        )
+
+        requireNotNull(plan)
+        assertEquals("recent_interval", plan.reason)
+        assertEquals(40, plan.turns.size)
+        assertEquals(idOf(281), plan.turns.first().nodeId)
+        assertEquals(idOf(320), plan.turns.last().nodeId)
+        assertFalse(plan.turns.any { it.nodeId == idOf(321) })
+    }
+
+    @Test
     fun `planner uses role configured interval and zero disables automatic extraction`() {
         val conversation = nodes(22)
 

@@ -253,6 +253,9 @@ data class CompanionRelationshipEvent(
     val tensionDelta: Float = 0f,
     val evidence: String,
     val createdAt: Long = System.currentTimeMillis(),
+    val sourceMessageAt: Long? = null,
+    val occurredAt: Long? = null,
+    val extractedAt: Long? = null,
 )
 
 @Serializable

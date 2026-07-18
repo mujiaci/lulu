@@ -13,23 +13,40 @@ data class AffectiveMemoryExtractionPlan(
     val reason: String,
 )
 
+enum class MemoryExtractionDirection {
+    OLDEST_FIRST,
+    RECENT_FIRST,
+}
+
 fun buildAffectiveMemoryExtractionPlan(
     messageNodes: List<MessageNode>,
     processedSourceNodeIds: Set<String>,
     extractionInterval: Int = DEFAULT_MEMORY_EXTRACTION_INTERVAL,
+    direction: MemoryExtractionDirection = MemoryExtractionDirection.OLDEST_FIRST,
 ): AffectiveMemoryExtractionPlan? {
     if (extractionInterval <= 0) return null
     val logicalTurns = messageNodes.toMemoryExtractionTurns()
     val stableTurns = logicalTurns.dropLast(MEMORY_EXTRACTION_TAIL_BUFFER)
+    // Only complete, interval-aligned windows are eligible. For example, with 335
+    // logical turns and an interval of 40, turns 321..325 remain pending after the
+    // newest ten are protected, while 281..320 is the newest complete window.
+    val alignedStableTurns = stableTurns.take(
+        (stableTurns.size / extractionInterval) * extractionInterval,
+    )
     // The interval is the user's exact batch size, not merely a trigger threshold.
     // Work from the earliest source nodes that have never been checkpointed, so a
     // retry can repair old partial batches without re-summarising already handled turns.
-    val pendingStableTurns = stableTurns.filterNot { it.nodeId in processedSourceNodeIds }
+    val pendingStableTurns = alignedStableTurns.filterNot { it.nodeId in processedSourceNodeIds }
     if (pendingStableTurns.size < extractionInterval) return null
 
+    val selectedTurns = when (direction) {
+        MemoryExtractionDirection.OLDEST_FIRST -> pendingStableTurns.take(extractionInterval)
+        MemoryExtractionDirection.RECENT_FIRST -> pendingStableTurns.takeLast(extractionInterval)
+    }
+
     return AffectiveMemoryExtractionPlan(
-        turns = pendingStableTurns.take(extractionInterval),
-        reason = "interval",
+        turns = selectedTurns,
+        reason = if (direction == MemoryExtractionDirection.RECENT_FIRST) "recent_interval" else "interval",
     )
 }
 

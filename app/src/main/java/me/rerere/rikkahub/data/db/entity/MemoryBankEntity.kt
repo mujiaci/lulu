@@ -107,6 +107,18 @@ data class MemoryBankEntity(
     @ColumnInfo("created_at")
     val createdAt: Long = System.currentTimeMillis(),
 
+    /** Timestamp of the source message that taught the character this memory. */
+    @ColumnInfo("source_message_at")
+    val sourceMessageAt: Long? = null,
+
+    /** Timestamp when the remembered event actually happened. */
+    @ColumnInfo("occurred_at")
+    val occurredAt: Long? = null,
+
+    /** Timestamp when extraction/backfill wrote the memory. */
+    @ColumnInfo("extracted_at", defaultValue = "0")
+    val extractedAt: Long = 0L,
+
     @ColumnInfo("date_group")
     val dateGroup: String? = null,
 

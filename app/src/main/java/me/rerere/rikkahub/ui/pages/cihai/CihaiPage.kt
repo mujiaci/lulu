@@ -560,6 +560,11 @@ private fun CommitmentCard(
                     MaterialTheme.colorScheme.primary
                 },
             )
+            Text(
+                text = "记下于：${formatTime(commitment.createdAt)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
             commitment.actionPlan.userFacingSummary.takeIf(String::isNotBlank)?.let { nextStep ->
                 Text(
                     text = "接下来会做：$nextStep",
@@ -657,6 +662,11 @@ private fun ResponsibilityAnchorCard(
             ResponsibilityLine("会在", anchor.triggers)
             ResponsibilityLine("会做", anchor.actions)
             ResponsibilityLine("不会", anchor.avoid)
+            Text(
+                text = "记下于：${formatTime(anchor.createdAt)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

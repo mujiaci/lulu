@@ -96,7 +96,10 @@ private fun AffectiveMemoryCandidate.toRelationshipEventOrNull(
         boundaryDelta = effect.boundary,
         tensionDelta = effect.tension,
         evidence = inspected.take(500),
-        createdAt = createdAt,
+        createdAt = normalized.occurredAtMillis ?: normalized.sourceMessageAtMillis ?: createdAt,
+        sourceMessageAt = normalized.sourceMessageAtMillis,
+        occurredAt = normalized.occurredAtMillis ?: normalized.sourceMessageAtMillis,
+        extractedAt = createdAt,
     )
 }
 

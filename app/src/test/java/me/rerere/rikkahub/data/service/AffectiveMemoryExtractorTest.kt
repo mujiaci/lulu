@@ -14,6 +14,7 @@ class AffectiveMemoryExtractorTest {
                     nodeId = "user-1",
                     role = "user",
                     text = "我明天早上十点考试，怕睡过头。",
+                    createdAtMillis = 1_700_000_000_000L,
                 )
             ),
             assistantName = "露露",
@@ -28,6 +29,9 @@ class AffectiveMemoryExtractorTest {
         assertTrue(prompt.contains("<existing_responsibilities>"))
         assertTrue(prompt.contains("每天设置次日起床闹钟"))
         assertTrue(prompt.contains("不要把责任本身改写成 private impression"))
+        assertTrue(prompt.contains("sourceTimeMillis=1700000000000"))
+        assertTrue(prompt.contains("相对于该消息发送时间"))
+        assertTrue(prompt.contains("occurredAtMillis"))
     }
 
     @Test
@@ -108,6 +112,8 @@ class AffectiveMemoryExtractorTest {
         assertTrue(entity.topicsJson!!.contains("记忆系统"))
         assertEquals("memory-3", entity.supersededByMemoryId)
         assertEquals(5678L, entity.correctedAt)
+        assertEquals(1234L, entity.occurredAt)
+        assertEquals(1234L, entity.extractedAt)
     }
 
     @Test

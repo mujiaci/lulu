@@ -261,12 +261,16 @@ class MemoryBankService(
             memoryBankDAO.searchMemoriesByAssistantKeywordAndType(assistantId, keyword, type, limit)
         } else if (keyword.isNotBlank() && type.isNotBlank()) {
             memoryBankDAO.searchMemoriesByKeywordAndType(keyword, type, limit)
+        } else if (keyword.isNotBlank() && assistantId != null) {
+            memoryBankDAO.searchMemoriesByAssistantAndKeyword(assistantId, keyword, limit)
         } else if (keyword.isNotBlank()) {
             memoryBankDAO.searchMemoriesByKeyword(keyword, limit)
         } else if (type.isNotBlank() && assistantId != null) {
             memoryBankDAO.getMemoriesByAssistantAndTypeLimit(assistantId, type, limit)
         } else if (type.isNotBlank()) {
             memoryBankDAO.getMemoriesByTypeLimit(type, limit)
+        } else if (assistantId != null) {
+            memoryBankDAO.getRecentMemoriesByAssistant(assistantId, limit)
         } else {
             memoryBankDAO.getRecentMemories(limit)
         }
@@ -318,11 +322,11 @@ class MemoryBankService(
                 memoryBankDAO.updateVectorStatus(id = memory.id, status = "pending", retryCount = 0)
             }
         }
-        processPendingVectors()
+        processPendingVectors(recentFirst = false)
     }
 
     suspend fun runLightMaintenance(limit: Int = 200): MaintenanceResult = withContext(Dispatchers.IO) {
-        processPendingVectors()
+        processPendingVectors(recentFirst = false)
         val memories = memoryBankDAO.getRecentMemories(limit)
             .filter { !it.deprecated && it.content.isNotBlank() }
         val deprecated = selectNearDuplicateMemoriesForDeprecation(memories)
@@ -441,7 +445,7 @@ class MemoryBankService(
         }
     }
 
-    suspend fun processPendingVectors() {
+    suspend fun processPendingVectors(recentFirst: Boolean = true) {
         val settingsStore = settingsStore ?: return
         val providerManager = providerManager ?: return
         withContext(Dispatchers.IO) {
@@ -452,7 +456,12 @@ class MemoryBankService(
             val model = settings.findModelById(modelId)?.takeIf { it.type == ModelType.EMBEDDING } ?: return@withContext
             val provider = model.findProvider(settings.providers) ?: return@withContext
             val providerImpl = providerManager.getProviderByType(provider)
-            val pending = memoryBankDAO.getPendingVectorMemories(maxRetry = 3, limit = config.batchSize.coerceIn(1, 64))
+            val batchLimit = config.batchSize.coerceIn(1, 64)
+            val pending = if (recentFirst) {
+                memoryBankDAO.getPendingVectorMemories(maxRetry = 3, limit = batchLimit)
+            } else {
+                memoryBankDAO.getPendingVectorMemoriesOldest(maxRetry = 3, limit = batchLimit)
+            }
             if (pending.isEmpty()) return@withContext
 
             val inputs = pending.map { memory -> memory.embeddingText?.takeIf { it.isNotBlank() } ?: memory.content }
@@ -491,9 +500,13 @@ class MemoryBankService(
     }
 
     suspend fun saveManualMemory(content: String): MemoryBankEntity = withContext(Dispatchers.IO) {
+        val now = System.currentTimeMillis()
         val entity = MemoryBankEntity(
             content = content,
-            type = "manual"
+            type = "manual",
+            occurredAt = now,
+            extractedAt = now,
+            createdAt = now,
         )
         val id = memoryBankDAO.insertMemory(entity).toInt()
         entity.copy(id = id)
@@ -534,11 +547,12 @@ class MemoryBankService(
     suspend fun getProcessedSourceNodeIds(
         assistantId: String,
         conversationId: String,
+        includeSavedMemories: Boolean = true,
     ): Set<String> = withContext(Dispatchers.IO) {
         val checkpointIds = memoryBankDAO.getExtractionCheckpoint(assistantId, conversationId)
             ?.processedSourceNodeIdsJson
             .decodeMemoryNodeIds()
-        val memoryIds = memoryBankDAO.getMemoriesByAssistant(assistantId)
+        val memoryIds = if (includeSavedMemories) memoryBankDAO.getMemoriesByAssistant(assistantId)
             .asSequence()
             .filter { it.conversationId == conversationId && !it.sourceMessageNodeIdsJson.isNullOrBlank() }
             .flatMap { memory ->
@@ -546,8 +560,47 @@ class MemoryBankService(
                     JsonInstant.decodeFromString<List<String>>(memory.sourceMessageNodeIdsJson.orEmpty())
                 }.getOrDefault(emptyList()).asSequence()
             }
-            .toSet()
+            .toSet() else emptySet()
         checkpointIds + memoryIds
+    }
+
+    /** Repairs legacy rows that used extraction time as event time, using local source-node timestamps. */
+    suspend fun repairTemporalMetadata(
+        assistantId: String,
+        conversationId: String,
+        sourceTimesByNodeId: Map<String, Long>,
+    ): Int = withContext(Dispatchers.IO) {
+        if (sourceTimesByNodeId.isEmpty()) return@withContext 0
+        var repaired = 0
+        memoryBankDAO.getMemoriesByAssistant(assistantId)
+            .asSequence()
+            .filter { it.conversationId == conversationId }
+            .forEach { memory ->
+                val evidenceIds = memory.sourceMessageNodeIdsJson.decodeMemoryNodeIds() +
+                    memory.evidenceMessageNodeIdsJson.decodeMemoryNodeIds()
+                val sourceAt = evidenceIds.mapNotNull(sourceTimesByNodeId::get)
+                    .filter { it > 0L }
+                    .maxOrNull()
+                    ?: return@forEach
+                val legacyExtractionTimeWasUsed = memory.sourceMessageAt == null &&
+                    memory.createdAt > sourceAt + TEMPORAL_STATE_MAX_AGE_MS
+                val occurredAt = when {
+                    legacyExtractionTimeWasUsed -> sourceAt
+                    memory.occurredAt != null && memory.occurredAt > 0L -> memory.occurredAt
+                    else -> memory.createdAt.takeIf { it > 0L } ?: sourceAt
+                }
+                val updated = memory.copy(
+                    sourceMessageAt = sourceAt,
+                    occurredAt = occurredAt,
+                    extractedAt = memory.extractedAt.takeIf { it > 0L } ?: memory.createdAt,
+                    createdAt = occurredAt,
+                )
+                if (updated != memory) {
+                    memoryBankDAO.updateMemory(updated)
+                    repaired += 1
+                }
+            }
+        repaired
     }
 
     suspend fun markExtractionProcessed(

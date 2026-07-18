@@ -320,6 +320,50 @@ class CompanionRuntime(
         store.clearAssistant(assistantId)
     }
 
+    /** Rewrites legacy relationship dates from their original source messages. */
+    suspend fun repairRelationshipEventTimes(
+        assistantId: String,
+        sourceTimesByNodeId: Map<String, Long>,
+        repairedAt: Long = System.currentTimeMillis(),
+    ): Int {
+        if (assistantId.isBlank() || sourceTimesByNodeId.isEmpty()) return 0
+        var repairedCount = 0
+        var repairedSnapshot: CompanionSnapshot? = null
+        store.updateSnapshot(assistantId) { snapshot ->
+            val history = snapshot.relationshipHistory.map { event ->
+                val sourceAt = sourceTimesByNodeId[event.sourceId]
+                    ?.takeIf { it > 0L }
+                    ?: return@map event
+                val occurredAt = event.occurredAt
+                    ?.takeIf { it > 0L && it <= sourceAt + RELATIONSHIP_TIME_FUTURE_TOLERANCE_MS }
+                    ?: sourceAt
+                val updated = event.copy(
+                    sourceMessageAt = sourceAt,
+                    occurredAt = occurredAt,
+                    extractedAt = event.extractedAt ?: repairedAt,
+                    createdAt = occurredAt,
+                )
+                if (updated != event) repairedCount += 1
+                updated
+            }
+            if (repairedCount == 0) return@updateSnapshot snapshot
+            val rebuilt = CompanionRelationshipReducer.apply(
+                assistantId = assistantId,
+                current = CompanionRelationshipState(),
+                appliedEventIds = emptySet(),
+                events = history,
+                nowMillis = repairedAt,
+            )
+            snapshot.copy(
+                relationship = rebuilt.relationship,
+                relationshipHistory = history,
+                updatedAt = maxOf(snapshot.updatedAt, repairedAt),
+            ).also { repairedSnapshot = it }
+        }
+        repairedSnapshot?.let(::remember)
+        return repairedCount
+    }
+
     private fun remember(snapshot: CompanionSnapshot) {
         recentSnapshots.compute(snapshot.assistantId) { _, current ->
             if (current == null || snapshot.updatedAt >= current.updatedAt) snapshot else current
@@ -795,9 +839,18 @@ fun fulfillCompanionCommitmentFromEvidence(
 private fun List<CompanionRelationshipEvent>.appendRelationshipEvents(
     events: List<CompanionRelationshipEvent>,
 ): List<CompanionRelationshipEvent> = (this + events)
-    .distinctBy { event -> "${event.assistantId}:${event.sourceId}:${event.kind.name}" }
+    .groupBy { event -> "${event.assistantId}:${event.sourceId}:${event.kind.name}" }
+    .values
+    .map { duplicates ->
+        duplicates.maxWith(
+            compareBy<CompanionRelationshipEvent> { it.extractedAt ?: 0L }
+                .thenBy { it.sourceMessageAt ?: 0L },
+        )
+    }
     .sortedWith(compareBy<CompanionRelationshipEvent> { it.createdAt }.thenBy { it.id })
     .takeLast(160)
+
+private const val RELATIONSHIP_TIME_FUTURE_TOLERANCE_MS = 24L * 60 * 60 * 1_000
 
 fun continueCompanionCommitment(
     current: CompanionPersistedState,

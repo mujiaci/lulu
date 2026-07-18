@@ -64,7 +64,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun MemoryBankPage(
     onBack: () -> Unit,
@@ -80,6 +80,7 @@ fun MemoryBankPage(
     val stats by vm.stats.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val maintenanceMessage by vm.maintenanceMessage.collectAsStateWithLifecycle()
+    val reorganizationProgress by vm.reorganizationProgress.collectAsStateWithLifecycle()
     val embeddingModels = remember(settings.providers) { vm.embeddingModels(settings) }
     val assistantLabels = remember(assistantIds, settings.assistants) {
         buildMemoryAssistantLabels(assistantIds, settings.assistants)
@@ -90,6 +91,7 @@ fun MemoryBankPage(
     var showClearAllDialog by remember { mutableStateOf(false) }
     var editMemory by remember { mutableStateOf<MemoryBankEntity?>(null) }
     var correctionMemory by remember { mutableStateOf<MemoryBankEntity?>(null) }
+    var showFullRebuildDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -166,10 +168,58 @@ fun MemoryBankPage(
             }
 
             item {
-                TextButton(onClick = vm::repairMemoriesFromHistory) {
-                    Icon(HugeIcons.Refresh01, contentDescription = null)
-                    Spacer(Modifier.width(6.dp))
-                    Text("重新整理已有聊天")
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text("整理聊天记忆", style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "每次只处理一个完整批次，最新 10 条不会被抽走，也不会重复整理已经完成的批次。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(
+                                enabled = !reorganizationProgress.running,
+                                onClick = vm::repairMemoriesFromHistory,
+                            ) {
+                                Icon(HugeIcons.Refresh01, contentDescription = null)
+                                Spacer(Modifier.width(6.dp))
+                                Text("整理最近一批")
+                            }
+                            TextButton(
+                                enabled = !reorganizationProgress.running,
+                                onClick = vm::continueHistoricalMemoryRepair,
+                            ) {
+                                Text("继续补齐旧记录")
+                            }
+                            TextButton(
+                                enabled = !reorganizationProgress.running,
+                                onClick = { showFullRebuildDialog = true },
+                            ) {
+                                Text("完整重建")
+                            }
+                        }
+                        if (reorganizationProgress.message.isNotBlank()) {
+                            Text(
+                                text = reorganizationProgress.message,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (reorganizationProgress.failedBatches > 0) {
+                                    MaterialTheme.colorScheme.error
+                                } else {
+                                    MaterialTheme.colorScheme.primary
+                                },
+                            )
+                        }
+                        if (reorganizationProgress.running) {
+                            Text(
+                                "进度：${reorganizationProgress.currentConversation}/${reorganizationProgress.totalConversations} 个对话，已完成 ${reorganizationProgress.completedBatches} 批",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                 }
             }
 
@@ -244,7 +294,7 @@ fun MemoryBankPage(
                             TextButton(onClick = vm::repairMemoriesFromHistory) {
                                 Icon(HugeIcons.Refresh01, contentDescription = null)
                                 Spacer(Modifier.width(6.dp))
-                                Text("重新整理已有聊天")
+                                Text("整理最近一批")
                             }
                         }
                     }
@@ -272,6 +322,25 @@ fun MemoryBankPage(
                     Text("取消")
                 }
             }
+        )
+    }
+
+    if (showFullRebuildDialog) {
+        AlertDialog(
+            onDismissRequest = { showFullRebuildDialog = false },
+            title = { Text("完整重建记忆？") },
+            text = {
+                Text("这会重新扫描当前筛选角色的全部完整批次，用于修复旧版本的时间和投影错误。已有聊天不会被删除，但可能调用多次模型。")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showFullRebuildDialog = false
+                    vm.rebuildAllHistoricalMemories()
+                }) { Text("开始重建") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showFullRebuildDialog = false }) { Text("取消") }
+            },
         )
     }
 
@@ -758,12 +827,13 @@ private fun MemoryCard(
                         }
                     }
 
-                    val timeStr = remember(memory.createdAt) {
+                    val displayTime = memory.occurredAt ?: memory.createdAt
+                    val timeStr = remember(displayTime) {
                         SimpleDateFormat("MM/dd HH:mm", Locale.getDefault())
-                            .format(Date(memory.createdAt))
+                            .format(Date(displayTime))
                     }
                     Text(
-                        text = timeStr,
+                        text = "发生 $timeStr",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -839,6 +909,8 @@ private fun MemoryMetaInfo(memory: MemoryBankEntity) {
         add("可信度：${"%.2f".format(memory.confidence)}")
         if (memory.recallCount > 0) add("召回：${memory.recallCount}")
         memory.lastRecalledAt?.let { add("上次召回：${formatShortTime(it)}") }
+        memory.sourceMessageAt?.let { add("得知于：${formatShortTime(it)}") }
+        memory.extractedAt.takeIf { it > 0L }?.let { add("整理于：${formatShortTime(it)}") }
         memory.relatedMemoryIdsJson?.takeIf { it.isNotBlank() && it != "[]" }?.let { add("关联：$it") }
         memory.sourceMessageNodeIdsJson?.takeIf { it.isNotBlank() && it != "[]" }?.let { add("来源：$it") }
         memory.evidenceMessageNodeIdsJson?.takeIf { it.isNotBlank() && it != "[]" }?.let { add("证据：$it") }

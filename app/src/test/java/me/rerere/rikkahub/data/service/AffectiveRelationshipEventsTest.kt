@@ -47,6 +47,29 @@ class AffectiveRelationshipEventsTest {
         assertTrue(event.trustDelta > 0f)
     }
 
+    @Test
+    fun `relationship event uses occurrence time instead of extraction time`() {
+        val events = buildRelationshipEventsFromMemoryCandidates(
+            candidates = listOf(
+                candidate(
+                    type = "relationship",
+                    content = "我记得那天她认真纠正了我的理解。",
+                ).copy(
+                    sourceMessageAtMillis = 200L,
+                    occurredAtMillis = 100L,
+                )
+            ),
+            assistantId = "assistant-a",
+            conversationId = "conversation-a",
+            createdAt = 999L,
+        )
+
+        val event = events.single()
+        assertEquals(100L, event.createdAt)
+        assertEquals(200L, event.sourceMessageAt)
+        assertEquals(999L, event.extractedAt)
+    }
+
     private fun candidate(
         type: String,
         content: String,

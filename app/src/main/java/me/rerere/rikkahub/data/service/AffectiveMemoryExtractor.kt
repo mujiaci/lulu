@@ -9,6 +9,9 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.data.companion.CompanionStateHistoryEntry
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Serializable
 data class MemoryExtractionTurn(
@@ -47,6 +50,8 @@ data class AffectiveMemoryCandidate(
     val correctedAt: Long? = null,
     /** The time the source conversation happened, distinct from the time we repaired it. */
     val occurredAtMillis: Long? = null,
+    /** The exact timestamp of the source message; populated from local data, not trusted to the model. */
+    val sourceMessageAtMillis: Long? = null,
 ) {
     fun normalized(): AffectiveMemoryCandidate = copy(
         type = type.trim().ifBlank { "event" },
@@ -68,6 +73,7 @@ data class AffectiveMemoryCandidate(
         topics = topics.mapNotNull { it.trim().takeIf(String::isNotBlank) }.distinct(),
         supersededByMemoryId = supersededByMemoryId?.trim()?.takeIf { it.isNotBlank() },
         occurredAtMillis = occurredAtMillis?.takeIf { it > 0L },
+        sourceMessageAtMillis = sourceMessageAtMillis?.takeIf { it > 0L },
     )
 
     fun toEntity(
@@ -103,7 +109,10 @@ data class AffectiveMemoryCandidate(
             correctedAt = normalized.correctedAt,
             assistantId = assistantId,
             conversationId = conversationId,
-            createdAt = normalized.occurredAtMillis ?: createdAt,
+            sourceMessageAt = normalized.sourceMessageAtMillis,
+            occurredAt = normalized.occurredAtMillis ?: normalized.sourceMessageAtMillis ?: createdAt,
+            extractedAt = createdAt,
+            createdAt = normalized.occurredAtMillis ?: normalized.sourceMessageAtMillis ?: createdAt,
             vectorStatus = "pending",
         )
     }
@@ -320,9 +329,10 @@ object AffectiveMemoryExtractor {
         appendLine("关系档案必须服从角色设定：冷淡、傲娇、理性、朋友或恋人都应保持自己的口吻和距离，禁止统一写成温柔客服或默认恋爱关系。没有足够证据时不要创建 relationship 候选。普通寒暄、聊天次数和沉默时长不能单独证明关系升级。")
         appendLine("如果确有未说开的冲突，在 tags 加入“未解”；如果只是推测，在 tags 加入“不确定”。已经说开或修复时不要继续沿用旧的未解判断。")
         appendLine("返回 JSON，格式为 {\"memories\":[...]}。不要输出解释。")
-        appendLine("每条字段：type, content, roleFeeling, bodySense, unspokenThought, userSignal, relationshipEffect, importance, confidence, tags, embeddingText, sourceMessageNodeIds, evidenceMessageNodeIds, relatedMemoryIds, people, topics, supersededByMemoryId, correctedAt。")
+        appendLine("每条字段：type, content, roleFeeling, bodySense, unspokenThought, userSignal, relationshipEffect, importance, confidence, tags, embeddingText, sourceMessageNodeIds, evidenceMessageNodeIds, relatedMemoryIds, people, topics, supersededByMemoryId, correctedAt, occurredAtMillis。")
         appendLine("type 只能使用 user_fact, user_preference, user_boundary, promise, relationship, shared_event, correction。")
         appendLine("每条必须提供 sourceMessageNodeIds 或 evidenceMessageNodeIds，并用 userSignal 简述用户原话或真实工具结果证据；无新事实时返回空 memories。")
+        appendLine("时间必须以每条 conversation_turn 的 sourceTime 为基准：‘今天/昨天/三天前’都相对于该消息发送时间，而不是本次整理时间。occurredAtMillis 写事情实际发生时间；无法确定时留空，程序会回退到来源消息时间。禁止把整理时间当成发生时间。")
         if (responsibilityContext.isNotBlank()) {
             appendLine("<existing_responsibilities>")
             appendLine(responsibilityContext.take(5_000))
@@ -340,7 +350,7 @@ object AffectiveMemoryExtractor {
         }
         appendLine("<conversation_turns>")
         turns.forEach { turn ->
-            appendLine("[${turn.nodeId}] ${turn.role}: ${turn.text.trim()}")
+            appendLine("[${turn.nodeId}][sourceTimeMillis=${turn.createdAtMillis}][sourceLocalTime=${turn.sourceTimeLabel()}] ${turn.role}: ${turn.text.trim()}")
         }
         append("</conversation_turns>")
     }
@@ -359,6 +369,15 @@ object AffectiveMemoryExtractor {
                 .filter { it.content.isNotBlank() }
         )
     }
+}
+
+private fun MemoryExtractionTurn.sourceTimeLabel(): String {
+    if (createdAtMillis <= 0L) return "unknown"
+    return runCatching {
+        DateTimeFormatter.ISO_OFFSET_DATE_TIME.format(
+            Instant.ofEpochMilli(createdAtMillis).atZone(ZoneId.systemDefault()),
+        )
+    }.getOrDefault("unknown")
 }
 
 private fun CompanionStateHistoryEntry.toExtractionContext(): String = buildList {

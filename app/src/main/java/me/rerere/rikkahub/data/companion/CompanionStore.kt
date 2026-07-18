@@ -258,7 +258,9 @@ private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot
         relationship
     },
     relationshipHistory = (relationshipHistory + other.relationshipHistory)
-        .distinctBy { it.timelineKey() },
+        .groupBy { it.timelineKey() }
+        .values
+        .map { duplicates -> duplicates.maxBy { it.extractedAt ?: 0L } },
     concerns = (concerns + other.concerns).distinctBy { it.id },
     commitments = (commitments + other.commitments).distinctBy { it.id },
     updatedAt = maxOf(updatedAt, other.updatedAt),
@@ -327,7 +329,9 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
                 event.id.isNotBlank() &&
                 event.sourceId.isNotBlank()
         }
-        .distinctBy { it.timelineKey() }
+        .groupBy { it.timelineKey() }
+        .values
+        .map { duplicates -> duplicates.maxBy { it.extractedAt ?: 0L } }
         .sortedWith(compareBy<CompanionRelationshipEvent> { it.createdAt }.thenBy { it.id })
         .takeLast(MAX_RELATIONSHIP_HISTORY_PER_ASSISTANT),
     concerns = concerns
