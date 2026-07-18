@@ -262,7 +262,11 @@ class MemoryBankService(
         } else if (keyword.isNotBlank() && type.isNotBlank()) {
             memoryBankDAO.searchMemoriesByKeywordAndType(keyword, type, limit)
         } else if (keyword.isNotBlank() && assistantId != null) {
-            memoryBankDAO.searchMemoriesByAssistantAndKeyword(assistantId, keyword, limit)
+            memoryBankDAO.getMemoriesByAssistant(assistantId)
+                .asSequence()
+                .filter { memory -> !memory.deprecated && memory.content.contains(keyword, ignoreCase = true) }
+                .take(limit)
+                .toList()
         } else if (keyword.isNotBlank()) {
             memoryBankDAO.searchMemoriesByKeyword(keyword, limit)
         } else if (type.isNotBlank() && assistantId != null) {
@@ -270,7 +274,11 @@ class MemoryBankService(
         } else if (type.isNotBlank()) {
             memoryBankDAO.getMemoriesByTypeLimit(type, limit)
         } else if (assistantId != null) {
-            memoryBankDAO.getRecentMemoriesByAssistant(assistantId, limit)
+            memoryBankDAO.getMemoriesByAssistant(assistantId)
+                .asSequence()
+                .filter { memory -> !memory.deprecated }
+                .take(limit)
+                .toList()
         } else {
             memoryBankDAO.getRecentMemories(limit)
         }
@@ -460,7 +468,12 @@ class MemoryBankService(
             val pending = if (recentFirst) {
                 memoryBankDAO.getPendingVectorMemories(maxRetry = 3, limit = batchLimit)
             } else {
-                memoryBankDAO.getPendingVectorMemoriesOldest(maxRetry = 3, limit = batchLimit)
+                memoryBankDAO.getMemoriesByVectorStatus("pending")
+                    .asSequence()
+                    .filter { memory -> memory.vectorRetryCount < 3 }
+                    .sortedBy { memory -> memory.occurredAt ?: memory.createdAt }
+                    .take(batchLimit)
+                    .toList()
             }
             if (pending.isEmpty()) return@withContext
 

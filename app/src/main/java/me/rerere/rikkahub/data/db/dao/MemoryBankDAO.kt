@@ -113,9 +113,6 @@ interface MemoryBankDAO {
     @Query("SELECT * FROM memory_bank WHERE vector_status = 'pending' AND vector_retry_count < :maxRetry ORDER BY COALESCE(occurred_at, created_at) DESC LIMIT :limit")
     suspend fun getPendingVectorMemories(maxRetry: Int, limit: Int = 50): List<MemoryBankEntity>
 
-    @Query("SELECT * FROM memory_bank WHERE vector_status = 'pending' AND vector_retry_count < :maxRetry ORDER BY COALESCE(occurred_at, created_at) ASC LIMIT :limit")
-    suspend fun getPendingVectorMemoriesOldest(maxRetry: Int, limit: Int = 50): List<MemoryBankEntity>
-
     @Query("SELECT COUNT(*) FROM memory_bank WHERE type = 'message' AND created_at > :sinceTimestamp")
     suspend fun getMessageCountSince(sinceTimestamp: Long): Int
 
@@ -149,9 +146,6 @@ interface MemoryBankDAO {
     @Query("SELECT * FROM memory_bank WHERE deprecated = 0 ORDER BY created_at DESC LIMIT :limit")
     suspend fun getRecentMemories(limit: Int): List<MemoryBankEntity>
 
-    @Query("SELECT * FROM memory_bank WHERE deprecated = 0 AND assistant_id = :assistantId ORDER BY created_at DESC LIMIT :limit")
-    suspend fun getRecentMemoriesByAssistant(assistantId: String, limit: Int): List<MemoryBankEntity>
-
     @Query("SELECT * FROM memory_bank WHERE deprecated = 1 ORDER BY corrected_at DESC, created_at DESC LIMIT :limit")
     suspend fun getDeprecatedMemories(limit: Int): List<MemoryBankEntity>
 
@@ -160,13 +154,6 @@ interface MemoryBankDAO {
 
     @Query("SELECT * FROM memory_bank WHERE deprecated = 0 AND content LIKE '%' || :keyword || '%' ORDER BY created_at DESC LIMIT :limit")
     suspend fun searchMemoriesByKeyword(keyword: String, limit: Int = 20): List<MemoryBankEntity>
-
-    @Query("SELECT * FROM memory_bank WHERE deprecated = 0 AND assistant_id = :assistantId AND content LIKE '%' || :keyword || '%' ORDER BY created_at DESC LIMIT :limit")
-    suspend fun searchMemoriesByAssistantAndKeyword(
-        assistantId: String,
-        keyword: String,
-        limit: Int = 20,
-    ): List<MemoryBankEntity>
 
     @Query("SELECT * FROM memory_bank WHERE deprecated = 1 AND content LIKE '%' || :keyword || '%' ORDER BY corrected_at DESC, created_at DESC LIMIT :limit")
     suspend fun searchDeprecatedMemoriesByKeyword(keyword: String, limit: Int = 20): List<MemoryBankEntity>

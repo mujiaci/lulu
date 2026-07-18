@@ -557,7 +557,6 @@ private class RecordingMemoryBankDAO(
 
     override suspend fun getMemoriesByVectorStatus(status: String): List<MemoryBankEntity> = unsupported()
     override suspend fun getPendingVectorMemories(maxRetry: Int, limit: Int): List<MemoryBankEntity> = unsupported()
-    override suspend fun getPendingVectorMemoriesOldest(maxRetry: Int, limit: Int): List<MemoryBankEntity> = unsupported()
     override suspend fun getMessageCountSince(sinceTimestamp: Long): Int = unsupported()
     override suspend fun getTotalMessageCount(): Int = 0
     override suspend fun getTotalCount(): Int = 0
@@ -572,10 +571,6 @@ private class RecordingMemoryBankDAO(
     override suspend fun getCountByAssistantAndVectorStatus(assistantId: String, status: String): Int =
         assistantMemories.count { it.assistantId == assistantId && it.vectorStatus == status }
     override suspend fun getRecentMemories(limit: Int): List<MemoryBankEntity> = recentMemories.take(limit)
-    override suspend fun getRecentMemoriesByAssistant(
-        assistantId: String,
-        limit: Int,
-    ): List<MemoryBankEntity> = recentMemories.filter { it.assistantId == assistantId }.take(limit)
     override suspend fun getDeprecatedMemories(limit: Int): List<MemoryBankEntity> =
         recentMemories.filter { it.deprecated }.take(limit)
 
@@ -585,13 +580,6 @@ private class RecordingMemoryBankDAO(
     ): List<MemoryBankEntity> = recentMemories.filter { it.assistantId == assistantId && it.deprecated }.take(limit)
 
     override suspend fun searchMemoriesByKeyword(keyword: String, limit: Int): List<MemoryBankEntity> = emptyList()
-    override suspend fun searchMemoriesByAssistantAndKeyword(
-        assistantId: String,
-        keyword: String,
-        limit: Int,
-    ): List<MemoryBankEntity> = recentMemories
-        .filter { it.assistantId == assistantId && !it.deprecated && keyword in it.content }
-        .take(limit)
     override suspend fun searchDeprecatedMemoriesByKeyword(
         keyword: String,
         limit: Int,
