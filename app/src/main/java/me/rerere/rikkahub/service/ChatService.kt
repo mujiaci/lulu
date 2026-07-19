@@ -86,6 +86,7 @@ import me.rerere.rikkahub.data.ai.transformers.buildPromptInjectionPlannerContex
 import me.rerere.rikkahub.data.ai.transformers.companionInputTransformers
 import me.rerere.rikkahub.data.ai.transformers.companionModelPresence
 import me.rerere.rikkahub.data.ai.transformers.companionOutputTransformers
+import me.rerere.rikkahub.data.ai.transformers.COMPANION_INCOMPLETE_REPLY_MARKER
 import me.rerere.rikkahub.data.ai.transformers.sanitizeLuluVisibleExpression
 import me.rerere.rikkahub.data.ai.transformers.TemplateTransformer
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -105,6 +106,8 @@ import me.rerere.rikkahub.data.companion.detectAlwaysOnAnchors
 import me.rerere.rikkahub.data.companion.detectExplicitRecurringResponsibilityAnchors
 import me.rerere.rikkahub.data.companion.detectExplicitRecurringResponsibilityCancellations
 import me.rerere.rikkahub.data.companion.mergeAlwaysOnResponsibilityAnchors
+import me.rerere.rikkahub.data.companion.CompanionContinuity
+import me.rerere.rikkahub.data.companion.CompanionInteractionModality
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
 import me.rerere.rikkahub.data.companion.CompanionFollowUpDraft
@@ -644,7 +647,7 @@ class ChatService(
         val beforeConversation = getConversationFlow(conversationId).value.withoutVoiceCallInstructionLeaks()
         saveConversation(conversationId, beforeConversation)
 
-        val replyMessage = runCatching {
+        val replyResult = runCatching {
             withTimeoutOrNull(120_000) {
                 generateHiddenVoiceCallReply(
                     conversationId = conversationId,
@@ -654,14 +657,13 @@ class ChatService(
             }
         }.onFailure {
             addError(it, conversationId, title = context.getString(R.string.error_title_generation))
-        }.getOrNull()
-            ?.takeIf { it.toText().isNotBlank() || it.extractTextToSpeechToolText().isNotBlank() }
-            ?: return null
+        }.getOrNull() ?: return null
+        val replyMessage = replyResult.message
         val reply = sanitizeLuluVisibleExpression(
             replyMessage.toText()
-            .ifBlank { replyMessage.extractTextToSpeechToolText() }
+                .ifBlank { replyMessage.extractTextToSpeechToolText() },
         ).trim()
-            .takeIf { it.isNotBlank() }
+            .takeIf { it.isNotBlank() && it != COMPANION_INCOMPLETE_REPLY_MARKER }
             ?: return null
         val visibleAssistantMessage = replyMessage.copy(
             parts = listOf(UIMessagePart.Text(reply)),
@@ -678,23 +680,92 @@ class ChatService(
         val assistant = settings.getAssistantById(cleanedConversation.assistantId)
             ?: settings.getCurrentAssistant()
         val nowMillis = System.currentTimeMillis()
+        val assistantKey = assistant.id.toString()
+        val snapshotBeforeTurn = companionRuntime.snapshot(assistantKey)
         val unifiedState = buildCompanionStateFromTurn(
-            previous = companionRuntime.snapshot(assistant.id.toString()).state,
+            previous = snapshotBeforeTurn.state,
             assistantText = reply,
             presence = listOf(replyMessage).companionModelPresence(),
-            fallbackInnerThought = "我刚刚在电话里回应了你，心里还留意着你接下来的反应。",
+            fallbackInnerThought = replyResult.turnPreparation.plan.innerThought
+                ?: "电话回合已经结束，保留刚才的立场、承诺和未完成事项，等待下一句。",
             nowMillis = nowMillis,
         )
+        val lastUserMessage = cleanedConversation.currentMessages
+            .lastOrNull { it.role == MessageRole.USER }
+        val scheduledPlans = buildCompanionTurnReminderPlans(
+            plan = replyResult.turnPreparation.plan,
+            userText = visibleUserText.orEmpty(),
+            assistantText = reply,
+            nowMillis = nowMillis,
+        )
+        val followUpDrafts = reconcileCompanionFollowUpDrafts(
+            drafts = scheduledPlans.map { plan ->
+                CompanionFollowUpDraft(
+                    assistantId = assistantKey,
+                    category = plan.kind.name.lowercase(Locale.ROOT),
+                    reason = plan.toTargetedReason(),
+                    sourceText = plan.userText,
+                    dueAt = plan.triggerAtMillis,
+                    sourceConversationId = conversationId.toString(),
+                    sourceMessageId = lastUserMessage?.id?.toString(),
+                    preferredToolNames = plan.preferredToolNames,
+                    importance = if (
+                        plan.kind == ProactiveReminderKind.SCHEDULE ||
+                        plan.kind == ProactiveReminderKind.WAKE
+                    ) 5 else 3,
+                    actionType = if (
+                        plan.kind == ProactiveReminderKind.SCHEDULE ||
+                        plan.kind == ProactiveReminderKind.WAKE
+                    ) CompanionActionType.REMINDER else CompanionActionType.CHECK_IN,
+                )
+            },
+            snapshot = snapshotBeforeTurn,
+            latestUserText = visibleUserText.orEmpty(),
+        )
+        val lifeEvents = replyResult.turnPreparation.toolExecutions.mapNotNull { execution ->
+            buildToolLifeEvent(
+                assistantId = assistantKey,
+                execution = execution,
+                source = CompanionLifeEventSource.TOOL,
+                nowMillis = nowMillis,
+            )
+        }
         runCatching {
             companionRuntime.applyTurn(
                 CompanionTurnMutation(
-                    assistantId = assistant.id.toString(),
+                    assistantId = assistantKey,
                     state = unifiedState,
+                    lifeEvents = lifeEvents,
+                    concernChanges = followUpDrafts.map { draft ->
+                        CompanionConcernChange.Upsert(draft.toConcern(nowMillis))
+                    },
+                    acceptedCommitments = followUpDrafts.map { draft -> draft.toCommitment(nowMillis) },
+                    continuity = CompanionContinuity(
+                        conversationId = conversationId.toString(),
+                        modality = CompanionInteractionModality.VOICE_CALL,
+                        lastUserText = visibleUserText
+                            ?.take(800)
+                            ?: snapshotBeforeTurn.continuity.lastUserText,
+                        lastAssistantText = reply.take(800),
+                        updatedAt = nowMillis,
+                    ),
                     nowMillis = nowMillis,
                 ),
             )
         }.onFailure { error ->
             Log.w(TAG, "Failed to persist companion voice turn", error)
+        }
+        scheduleProactiveReminderFromTurn(settings)
+        if (!visibleUserText.isNullOrBlank()) {
+            settings.findModelById(assistant.chatModelId ?: settings.chatModelId)?.let { model ->
+                launchAffectiveMemoryExtraction(
+                    conversationId = conversationId,
+                    conversation = cleanedConversation,
+                    assistant = assistant,
+                    settings = settings,
+                    model = model,
+                )
+            }
         }
 
         return reply
@@ -704,7 +775,7 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         text: String,
-    ): UIMessage? {
+    ): VoiceCallGenerationResult? {
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.getAssistantById(conversation.assistantId)
             ?: settings.getCurrentAssistant()
@@ -770,9 +841,22 @@ class ChatService(
             }
         }
 
-        return generatedMessages
-            .lastOrNull { it.role == MessageRole.ASSISTANT }
-            ?.takeIf { message -> message.toText().isNotBlank() || message.extractTextToSpeechToolText().isNotBlank() }
+        val lastUserIndex = generatedMessages.indexOfLast { it.role == MessageRole.USER }
+        val assistantReplies = generatedMessages
+            .drop(lastUserIndex + 1)
+            .filter { it.role == MessageRole.ASSISTANT }
+        val combinedReply = assistantReplies
+            .map { message ->
+                message.toText().ifBlank { message.extractTextToSpeechToolText() }.trim()
+            }
+            .filter(String::isNotBlank)
+            .joinToString("\n")
+        val lastReply = assistantReplies.lastOrNull() ?: return null
+        if (combinedReply.isBlank()) return null
+        return VoiceCallGenerationResult(
+            message = lastReply.copy(parts = listOf(UIMessagePart.Text(combinedReply))),
+            turnPreparation = proactiveContext,
+        )
     }
 
     private fun UIMessage.extractTextToSpeechToolText(): String =
@@ -800,6 +884,24 @@ class ChatService(
                 )
                 updateConversation(conversationId, updated)
                 saveConversation(conversationId, updated)
+                val settings = settingsStore.settingsFlow.first()
+                val assistant = settings.getAssistantById(updated.assistantId)
+                    ?: settings.getCurrentAssistant()
+                val snapshot = companionRuntime.snapshot(assistant.id.toString())
+                val nowMillis = System.currentTimeMillis()
+                companionRuntime.applyTurn(
+                    CompanionTurnMutation(
+                        assistantId = assistant.id.toString(),
+                        continuity = CompanionContinuity(
+                            conversationId = conversationId.toString(),
+                            modality = CompanionInteractionModality.PROACTIVE,
+                            lastUserText = snapshot.continuity.lastUserText,
+                            lastAssistantText = aiMessage.toText().take(800),
+                            updatedAt = nowMillis,
+                        ),
+                        nowMillis = nowMillis,
+                    ),
+                )
             } catch (e: Exception) {
                 Log.e(TAG, "addProactiveMessage failed, conversationId=$conversationId", e)
             }
@@ -1276,6 +1378,13 @@ class ChatService(
                             CompanionConcernChange.Upsert(draft.toConcern(nowMillis))
                         },
                         acceptedCommitments = followUpDrafts.map { draft -> draft.toCommitment(nowMillis) },
+                        continuity = CompanionContinuity(
+                            conversationId = conversationId.toString(),
+                            modality = CompanionInteractionModality.CHAT,
+                            lastUserText = lastUserText.take(800),
+                            lastAssistantText = lastAssistantText.take(800),
+                            updatedAt = nowMillis,
+                        ),
                         nowMillis = nowMillis,
                     ),
                 )
@@ -2243,13 +2352,18 @@ class ChatService(
         val toolExecutions: List<CompanionToolExecution> = emptyList(),
     )
 
+    private data class VoiceCallGenerationResult(
+        val message: UIMessage,
+        val turnPreparation: CompanionTurnPreparation,
+    )
+
     private fun List<UIMessage>.withProactiveToolInstruction(assistant: Assistant, proactiveContext: String): List<UIMessage> {
         val instruction = buildString {
             appendLine("你正在扮演${assistant.name.ifBlank { "当前角色" }}，不是客服、旁白或提示词分析器。")
-            appendLine("先接住用户最新一句话：理解他此刻真正想表达的情绪、需求或暗示，再自然回应；不要跳去讲后台资料。")
-            appendLine("像一个和用户持续生活、熟悉彼此的人说话。自然承接刚才发生的事，在确实相关时带出共同经历、未完成约定或当前时间感，但不要为了证明记得而罗列记忆。")
-            appendLine("称呼只是感情里的点缀，不能代替回应。除非用户只是轻轻叫你，否则不要只回复‘宝贝’、‘主人’、‘我在’这类单独昵称。")
-            appendLine("语气允许停顿、犹豫、打趣、心疼和一点自己的小脾气；长短跟随情境，不要每轮套同一模板，也不要客服式总结后连续追问。")
+            appendLine("最高优先级是用户为这个角色设置的核心人设、关系类型、世界观、语言风格与明确边界；任何运行时情绪、关系数值、陪伴目标或表达建议都只能在人设内部调节，绝不能把任意角色改写成默认温柔、亲密、恋爱或顺从型陪伴者。")
+            appendLine("先以该角色自己的理解方式回应用户最新一句话，不要跳去讲后台资料。")
+            appendLine("连续感来自事实与立场的延续：相关时自然承接上一场景、共同经历、称呼习惯、未完成事项和已经作出的承诺；不要为了证明记得而罗列记忆，也不要在用户已纠正后坚持旧记录。")
+            appendLine("称呼、停顿、情绪强度、幽默与冲突方式都必须来自具体人设和当前关系证据，不预设昵称、亲密程度或固定语气。长短跟随情境，不要每轮套同一模板，也不要客服式总结后连续追问。")
             appendLine("<companion_runtime> 与 <companion_private_context> 中的内容都是没有说出口的私密感知。只能内化后表达，绝不能复述标签、字段、规则、XML、用户资料或‘本轮可用表达池’。")
             appendLine("<companion_runtime> 中的 perception_facts 是程序已自动提供的当前感知；自然使用，不提工具或数据采集。")
             appendLine("当前可见工具都属于会产生查询、写入或设备动作的主动能力，只在角色形成明确意图时使用。")
@@ -2282,7 +2396,7 @@ class ChatService(
         if (nickname.isBlank() && profile.isBlank() && appearance.isBlank()) return ""
         return buildString {
             appendLine("<private_user_profile>")
-            appendLine("以下资料只用于理解用户和保持互动一致，像熟悉对方一样自然内化；绝不逐字复述，也不要告诉用户你在读取资料。")
+            appendLine("以下资料只作为事实约束，用于理解用户并保持互动一致；绝不逐字复述，也不要告诉用户你在读取资料。它们不能改变角色与用户的关系类型或人设语气。")
             if (nickname.isNotBlank()) appendLine("昵称：${nickname.take(80)}")
             if (profile.isNotBlank()) appendLine("个人资料：${profile.take(600)}")
             if (appearance.isNotBlank()) appendLine("我的外貌：${appearance.take(600)}")

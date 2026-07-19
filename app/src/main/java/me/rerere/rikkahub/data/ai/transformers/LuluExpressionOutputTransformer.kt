@@ -229,8 +229,8 @@ private fun kotlinx.serialization.json.JsonObject.toCompanionModelPresence(): Co
             presence.bubblePacing.orEmpty().isNotBlank()
     }
 
-private const val COMPANION_LEAK_FALLBACK =
-    "我在呀。刚才脑袋打了个结，没把想说的话说好……你再跟我说一句，我会好好接住的。"
+internal const val COMPANION_INCOMPLETE_REPLY_MARKER =
+    "（本轮回复生成不完整，请重试）"
 
 private val COMPANION_PRIVATE_BLOCK_REGEX =
     Regex(
@@ -295,23 +295,28 @@ internal fun sanitizeLuluVisibleExpression(text: String): String {
             .drop(lastInternalLine + 1)
             .joinToString("\n")
             .trim()
-            .ifBlank { COMPANION_LEAK_FALLBACK }
+            .ifBlank { COMPANION_INCOMPLETE_REPLY_MARKER }
     } else {
         normalized
     }
 
-    return candidate
-        .lineSequence()
-        .map { it.trim() }
-        .filterNot { line ->
-            line.isNotBlank() &&
-                COMPANION_INTERNAL_LINE_PREFIXES.any { prefix -> line.startsWith(prefix) }
-        }
-        .joinToString("\n")
+    val visibleCandidate = if (containsInternalLeak || hadPrivateContext) {
+        candidate
+            .lineSequence()
+            .map { it.trim() }
+            .filterNot { line ->
+                line.isNotBlank() &&
+                    COMPANION_INTERNAL_LINE_PREFIXES.any { prefix -> line.startsWith(prefix) }
+            }
+            .joinToString("\n")
+    } else {
+        candidate
+    }
+    return visibleCandidate
         .replace(Regex("\n{3,}"), "\n\n")
         .trim()
         .ifBlank {
-            if (containsInternalLeak || hadPrivateContext) COMPANION_LEAK_FALLBACK else ""
+            if (containsInternalLeak || hadPrivateContext) COMPANION_INCOMPLETE_REPLY_MARKER else ""
         }
 }
 

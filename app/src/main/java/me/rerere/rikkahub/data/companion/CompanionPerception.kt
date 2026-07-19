@@ -200,6 +200,16 @@ fun CompanionPerceptionPacket.toPromptContext(): String = buildString {
         .atZone(zoneId)
         .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss XXX", Locale.ROOT))
     appendLine("current_time=$absoluteTime timezone=${zoneId.id} epoch_ms=$nowMillis")
+    appendLine("persona_priority=The user-defined core persona, relationship type, worldview, speaking style, and explicit boundaries are immutable highest-priority constraints. Runtime mood and relationship values may only modulate behavior inside that persona; they must never replace it with a generic affectionate companion.")
+    snapshot.continuity.takeIf { continuity ->
+        continuity.updatedAt > 0L &&
+            (continuity.lastUserText.isNotBlank() || continuity.lastAssistantText.isNotBlank())
+    }?.let { continuity ->
+        appendLine("cross_modal_continuity conversation=${continuity.conversationId.orEmpty()} modality=${continuity.modality.name} at=${continuity.updatedAt}")
+        continuity.lastUserText.takeIf(String::isNotBlank)?.let { appendLine("- previous_user=${it.take(800)}") }
+        continuity.lastAssistantText.takeIf(String::isNotBlank)?.let { appendLine("- previous_assistant=${it.take(800)}") }
+        appendLine("- instruction=Continue naturally when the latest input follows this exchange. Preserve prior stance, promises, unresolved threads, and forms of address unless the user corrects them. Never recite this record.")
+    }
     appendLine(
         "relationship trust=${snapshot.relationship.trust} closeness=${snapshot.relationship.closeness} " +
             "reliability=${snapshot.relationship.reliability} tension=${snapshot.relationship.unresolvedTension}",
@@ -293,5 +303,5 @@ fun CompanionPerceptionPacket.toPromptContext(): String = buildString {
         }
     }
     appendLine("</companion_runtime>")
-    append("Treat this runtime snapshot as current business truth. Ordinary chat never cancels unrelated commitments.")
+    append("Treat this runtime snapshot as current business truth. Ordinary chat never cancels unrelated commitments. It supplies continuity and evidence only; it does not authorize changing the configured persona or inventing intimacy.")
 }.trim()

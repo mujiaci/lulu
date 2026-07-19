@@ -98,10 +98,43 @@ class VoiceCallRepository(
         storageFile.writeText(JsonInstant.encodeToString(sessions.sortedByDescending { it.startedAt }))
     }
 
+    fun recentAssistantOpenings(
+        conversationId: String,
+        assistantId: String,
+        limit: Int = 6,
+    ): List<String> = selectRecentAssistantOpenings(
+        sessions = getSessions(),
+        conversationId = conversationId,
+        assistantId = assistantId,
+        limit = limit,
+    )
+
     fun getSummary(): VoiceCallStatsSummary {
         return summarizeVoiceCallSessions(getSessions())
     }
 }
+
+internal fun selectRecentAssistantOpenings(
+    sessions: List<VoiceCallSession>,
+    conversationId: String,
+    assistantId: String,
+    limit: Int = 6,
+): List<String> = sessions
+    .asSequence()
+    .filter { session ->
+        session.conversationId == conversationId &&
+            session.assistantId == assistantId
+    }
+    .sortedByDescending(VoiceCallSession::startedAt)
+    .mapNotNull { session ->
+        session.transcript
+            .firstOrNull { line -> line.role == VoiceCallRole.Assistant && line.text.isNotBlank() }
+            ?.text
+            ?.trim()
+    }
+    .distinct()
+    .take(limit.coerceAtLeast(0))
+    .toList()
 
 fun VoiceCallSession.hasUserFacingContent(): Boolean {
     return sleepMode || transcript.any { it.role == VoiceCallRole.User && it.text.isNotBlank() }

@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.companion
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-const val CURRENT_COMPANION_SCHEMA_VERSION = 5
+const val CURRENT_COMPANION_SCHEMA_VERSION = 6
 
 @Serializable
 data class CompanionPersistedState(
@@ -27,11 +27,29 @@ data class CompanionSnapshot(
     val relationshipHistory: List<CompanionRelationshipEvent> = emptyList(),
     val concerns: List<CompanionConcern> = emptyList(),
     val commitments: List<CompanionCommitment> = emptyList(),
+    /** Last cross-modal exchange, kept small so a new chat or call can resume naturally. */
+    val continuity: CompanionContinuity = CompanionContinuity(),
     val updatedAt: Long = 0L,
 ) {
     companion object {
         fun empty(assistantId: String): CompanionSnapshot = CompanionSnapshot(assistantId = assistantId)
     }
+}
+
+@Serializable
+data class CompanionContinuity(
+    val conversationId: String? = null,
+    val modality: CompanionInteractionModality = CompanionInteractionModality.CHAT,
+    val lastUserText: String = "",
+    val lastAssistantText: String = "",
+    val updatedAt: Long = 0L,
+)
+
+@Serializable
+enum class CompanionInteractionModality {
+    CHAT,
+    VOICE_CALL,
+    PROACTIVE,
 }
 
 /**

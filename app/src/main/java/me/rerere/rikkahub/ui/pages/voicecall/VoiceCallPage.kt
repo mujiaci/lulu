@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -129,7 +130,7 @@ fun VoiceCallPage(
     val ttsProvider = remember(settings, assistant) {
         assistant?.let { settings.getAssistantTTSProvider(it.id) }
     }
-    val assistantName = assistant?.name?.ifBlank { "Lulu" } ?: "Lulu"
+    val assistantName = assistant?.name?.ifBlank { "对方" } ?: "对方"
     val isHistoryOnly = sessionId != null
     var session by remember(sessionId, conversationId, assistantId) { mutableStateOf<VoiceCallSession?>(null) }
     var stage by remember(sessionId) { mutableStateOf(if (isHistoryOnly) CallStage.Ended else CallStage.Idle) }
@@ -192,23 +193,46 @@ fun VoiceCallPage(
         stage = CallStage.Connecting
         scope.launch {
             assistantTurnInProgress = true
-            try {
-                val opening = chatService.sendVoiceCallTurn(
+            val recentOpenings = repository.recentAssistantOpenings(
+                conversationId = conversationId,
+                assistantId = assistantId,
+            )
+            val opening = try {
+                chatService.sendVoiceCallTurn(
                     conversationId = Uuid.parse(conversationId),
-                    text = buildVoiceCallOpeningPrompt(assistantName),
+                    text = buildVoiceCallOpeningPrompt(
+                        assistantName = assistantName,
+                        recentOpenings = recentOpenings,
+                        variationSeed = System.currentTimeMillis(),
+                    ),
                     visibleUserText = null,
-                )
-                stage = CallStage.Active
-                assistantSay(
-                    text = opening?.takeIf { it.isNotBlank() }
-                        ?: "${assistantName}接到电话了。我在这里陪着你，慢慢说就好。",
-                    replayable = true,
-                )
+                ).takeIf(::isUsableVoiceCallReply)
+                    ?: chatService.sendVoiceCallTurn(
+                        conversationId = Uuid.parse(conversationId),
+                        text = buildVoiceCallOpeningPrompt(
+                            assistantName = assistantName,
+                            recentOpenings = recentOpenings,
+                            variationSeed = System.currentTimeMillis() + 1L,
+                            retry = true,
+                        ),
+                        visibleUserText = null,
+                    ).takeIf(::isUsableVoiceCallReply)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
             } catch (_: Throwable) {
-                stage = CallStage.Active
-                assistantSay(
-                    text = "${assistantName}接到电话了。我在这里陪着你，慢慢说就好。",
-                    replayable = true,
+                null
+            }
+            stage = CallStage.Active
+            if (opening != null) {
+                assistantSay(text = opening, replayable = true)
+            } else {
+                assistantTurnInProgress = false
+                saveLine(
+                    VoiceCallLine(
+                        role = VoiceCallRole.System,
+                        text = "开场回复生成失败，已恢复倾听。",
+                        replayable = false,
+                    ),
                 )
             }
         }
@@ -224,7 +248,7 @@ fun VoiceCallPage(
             lastTranscript = text
             silenceJob?.cancel()
             silenceJob = scope.launch {
-                delay(2_000)
+                delay(voiceCallEndOfSpeechDelayMillis(text))
                 asr.stop()
                 val finalText = lastTranscript.trim()
                 if (finalText.isNotBlank()) {
@@ -235,14 +259,29 @@ fun VoiceCallPage(
                             conversationId = Uuid.parse(conversationId),
                             text = "$finalText\n\n$VOICE_CALL_REPLY_PROMPT",
                             visibleUserText = finalText,
-                        )
+                        ).takeIf(::isUsableVoiceCallReply)
+                            ?: chatService.sendVoiceCallTurn(
+                                conversationId = Uuid.parse(conversationId),
+                                text = "$finalText\n\n$VOICE_CALL_RETRY_PROMPT",
+                                visibleUserText = null,
+                            ).takeIf(::isUsableVoiceCallReply)
+                    } catch (cancellation: CancellationException) {
+                        throw cancellation
                     } catch (_: Throwable) {
                         null
                     }
-                    assistantSay(
-                        text = reply ?: "我刚刚有点没接住，你再轻轻说一遍，好不好？",
-                        replayable = true,
-                    )
+                    if (reply != null) {
+                        assistantSay(text = reply, replayable = true)
+                    } else {
+                        assistantTurnInProgress = false
+                        saveLine(
+                            VoiceCallLine(
+                                role = VoiceCallRole.System,
+                                text = "这一轮回复生成失败，已恢复倾听。",
+                                replayable = false,
+                            ),
+                        )
+                    }
                 }
             }
         }
@@ -302,17 +341,32 @@ fun VoiceCallPage(
         session = updated
         sleepJob = scope.launch {
             val deadline = System.currentTimeMillis() + sleepMinutes * 60_000
-            val segments = buildSleepTalkSegments(assistantName)
             var index = 0
             while (isActive && System.currentTimeMillis() < deadline) {
                 if (stage != CallStage.Active || !sleepMode) return@launch
-                val segment = segments[index % segments.size]
+                val segment = try {
+                    chatService.sendVoiceCallTurn(
+                        conversationId = Uuid.parse(conversationId),
+                        text = buildSleepTalkPrompt(
+                            assistantName = assistantName,
+                            sequence = index,
+                        ),
+                        visibleUserText = null,
+                    ).takeIf(::isUsableVoiceCallReply)
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (_: Throwable) {
+                    null
+                }
+                if (segment == null) {
+                    delay(1_200)
+                    continue
+                }
                 saveAssistantSleepLine(segment)
                 segment.cleanRoleLineForUser().extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
-                    tts.speak(it, flushCalled = true, providerOverride = ttsProvider)
+                    speakInSegments(tts, it, ttsProvider)
                 }
-                waitForTtsPlayback(tts)
-                delay(180)
+                delay(500)
                 index++
             }
             if (stage == CallStage.Active && sleepMode) endCall()
@@ -455,18 +509,30 @@ fun VoiceCallPage(
                         isSpeaking = isSpeaking,
                         asrStatus = asrState.status,
                     )
+                    val canInterruptAssistant =
+                        stage == CallStage.Active && !sleepMode && (isSpeaking || assistantTurnInProgress)
                     FilledTonalButton(
                         onClick = {
-                            if (asrState.status == ASRStatus.Idle || asrState.status == ASRStatus.Error) {
+                            if (canInterruptAssistant) {
+                                silenceJob?.cancel()
+                                tts.stop()
+                                assistantTurnInProgress = false
+                            } else if (asrState.status == ASRStatus.Idle || asrState.status == ASRStatus.Error) {
                                 startListening()
                             } else {
                                 asr.stop()
                             }
                         },
-                        enabled = asrState.status == ASRStatus.Listening || canStartListening,
+                        enabled = asrState.status == ASRStatus.Listening || canStartListening || canInterruptAssistant,
                     ) {
                         Icon(HugeIcons.VolumeHigh, contentDescription = null)
-                        Text(if (asrState.status == ASRStatus.Listening) "停止倾听" else "开始倾听")
+                        Text(
+                            when {
+                                canInterruptAssistant -> "打断并说话"
+                                asrState.status == ASRStatus.Listening -> "停止倾听"
+                                else -> "开始倾听"
+                            },
+                        )
                     }
                     FilledIconButton(
                         onClick = { endCall() },
@@ -915,30 +981,16 @@ private suspend fun speakInSegments(
     }
 }
 
-private fun buildSleepTalkSegments(assistantName: String): List<String> {
-    return listOf(
-        "${assistantName}在这里陪着你。你不需要回答，闭上眼睛听就好。",
-        "今晚可以不用再那么用力了。你是安全的，也有人好好惦记着你。",
-        "轻轻吸一口气，停一小会儿，再慢慢呼出去。",
-        "今天已经撑过来了，这样就够了。把身体的重量交给床吧。",
-        "想象一个暖暖的小房间，窗外有很轻的雨声。",
-        "被子拉到肩膀旁边，旁边还有一盏很柔和的小灯。",
-        "如果脑子里还有没做完的事，就先让它们在门口等一等。",
-        "不需要急着睡着，也不需要回应我。",
-        "额头放松一点，下巴松开一点，肩膀也慢慢落下来。",
-        "手可以不用攥着了，胸口可以软一点，腿和脚都变得沉沉的。",
-        "我给你讲一个小画面。我们晚上沿着很安静的湖边散步。",
-        "水面那边有暖暖的窗灯，每一步都很慢，很轻。",
-        "现在你不用表现得很好，也不用解释什么，更不用证明自己有用。",
-        "被在乎不是要靠努力换来的。你只是待在这里，也很珍贵。",
-        "如果有念头冒出来，就让它像一小片云一样飘过去。",
-        "你可以回到我的声音里，回到枕头上，回到下一次慢慢的呼吸里。",
-        "如果困意来了，就顺着它走。",
-        "如果睡意还远，我也不会催你。",
-        "我会轻轻地、近近地陪着你。没有刺耳的东西，也没有着急的事。",
-        "只剩下暖和、安全，还有有人在你身边停着的感觉。",
-    )
-}
+private fun buildSleepTalkPrompt(
+    assistantName: String,
+    sequence: Int,
+): String =
+    """
+    你正在以用户设定的“$assistantName”角色进行一通持续的语音通话，用户开启了哄睡模式。
+    最高优先级：始终遵守该角色原本的人设、关系类型、边界、世界观和说话方式；“哄睡”只是当前场景，不能把角色改写成默认温柔、亲密或恋爱型陪伴者。
+    结合此前聊天与本次电话已经发生的内容，自然接着说一小段适合该角色的睡前话。可以安静、讲故事、闲聊或停顿，但不要重复上一段。
+    这是第${sequence + 1}段。只输出真正说出口的话，1到3句，不要动作、心理、旁白、标签或后台说明。
+    """.trimIndent()
 
 private fun miniStatusText(stage: CallStage, isSpeaking: Boolean): String {
     if (isSpeaking) return "正在说话"
@@ -950,15 +1002,48 @@ private fun miniStatusText(stage: CallStage, isSpeaking: Boolean): String {
     }
 }
 
-private fun buildVoiceCallOpeningPrompt(assistantName: String): String =
-    """
-    这是一个来自用户的语音电话，现在电话已经接通。
-    你是$assistantName，请你主动先开口和用户说第一句话，不要等用户先说话。
-    请只输出你要说出口的话，不要复述这段说明，不要输出动作、心理、环境、感受，也不要加标签。
+internal fun buildVoiceCallOpeningPrompt(
+    assistantName: String,
+    recentOpenings: List<String> = emptyList(),
+    variationSeed: Long = 0L,
+    retry: Boolean = false,
+): String {
+    val recent = recentOpenings
+        .take(6)
+        .joinToString("\n") { "- ${it.take(180)}" }
+        .ifBlank { "- 无" }
+    return """
+        这是用户刚打来的一通语音电话，现在已经接通。
+        你是用户设定的“$assistantName”。最高优先级是完整遵守该角色原本的人设、关系类型、边界、世界观和说话方式；电话场景不能把角色改写成默认温柔、亲密或恋爱型陪伴者。
+        请结合跨聊天与电话的最近上下文，像同一个人自然接起电话。若上次有未说完的话、明确立场或承诺，可以顺势承接，但不要复述记忆资料。
+        主动说第一句话，1到2句，只输出真正说出口的话，不要动作、心理、环境、标签或后台说明。
+        最近用过的开场如下，避免相同句式、相同问法和相同节奏：
+        $recent
+        变化种子：$variationSeed。重试：$retry。
     """.trimIndent()
+}
 
 private const val VOICE_CALL_REPLY_PROMPT =
-    "请只输出你要说出口的话，不要输出动作、心理、环境、感受，也不要加标签。"
+    "保持用户设定的人设、关系类型和说话方式，承接刚才与更早的有效上下文；直接回应用户最后一句。只输出1到3句真正说出口的话，不要动作、心理、环境、感受、标签或后台说明。"
+
+private const val VOICE_CALL_RETRY_PROMPT =
+    "上一轮电话回复生成不完整。保持原人设与连续上下文，直接回应用户刚才那句话；只输出1到2句说出口的话，不要解释故障，不要让用户重复，也不要说没听清。"
+
+internal fun isUsableVoiceCallReply(text: String?): Boolean {
+    val clean = text?.cleanRoleLineForUser().orEmpty()
+    return clean.isNotBlank() &&
+        clean != "（本轮回复生成不完整，请重试）"
+}
+
+internal fun voiceCallEndOfSpeechDelayMillis(transcript: String): Long {
+    val clean = transcript.trim()
+    if (clean.lastOrNull() in setOf('。', '！', '？', '.', '!', '?')) return 850L
+    return when {
+        clean.length <= 4 -> 1_450L
+        clean.length <= 12 -> 1_200L
+        else -> 1_000L
+    }
+}
 
 private fun String.cleanRoleLineForUser(): String =
     sanitizeLuluVisibleExpression(this)

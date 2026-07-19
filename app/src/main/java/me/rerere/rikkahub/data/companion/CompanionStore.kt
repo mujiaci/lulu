@@ -263,10 +263,20 @@ private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot
         .map { duplicates -> duplicates.maxBy { it.extractedAt ?: 0L } },
     concerns = (concerns + other.concerns).distinctBy { it.id },
     commitments = (commitments + other.commitments).distinctBy { it.id },
+    continuity = if (other.continuity.updatedAt >= continuity.updatedAt) {
+        other.continuity
+    } else {
+        continuity
+    },
     updatedAt = maxOf(updatedAt, other.updatedAt),
 )
 
 private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
+    continuity = continuity.copy(
+        conversationId = continuity.conversationId?.trim()?.takeIf(String::isNotBlank),
+        lastUserText = continuity.lastUserText.trim().take(800),
+        lastAssistantText = continuity.lastAssistantText.trim().take(800),
+    ),
     state = state.normalizedForStorage(),
     stateHistory = stateHistory
         .filter { it.recordedAt > 0L && it.state.hasVisibleStateContent() }

@@ -35,4 +35,36 @@ class VoiceCallRepositorySummaryTest {
         assertEquals(2, summary.sessionCount)
         assertEquals(2, summary.visibleLineCount)
     }
+    @Test
+    fun `selects distinct recent openings for the same role and conversation`() {
+        val sessions = listOf(
+            session("new", 30L, "新的开场"),
+            session("duplicate", 20L, "新的开场"),
+            session("old", 10L, "旧的开场"),
+            session("other", 40L, "别的会话", conversationId = "conversation-2"),
+        )
+
+        assertEquals(
+            listOf("新的开场", "旧的开场"),
+            selectRecentAssistantOpenings(
+                sessions = sessions,
+                conversationId = "conversation-1",
+                assistantId = "assistant-1",
+            ),
+        )
+    }
+
+    private fun session(
+        id: String,
+        startedAt: Long,
+        opening: String,
+        conversationId: String = "conversation-1",
+    ) = VoiceCallSession(
+        id = id,
+        conversationId = conversationId,
+        assistantId = "assistant-1",
+        assistantName = "角色",
+        startedAt = startedAt,
+        transcript = listOf(VoiceCallLine(role = VoiceCallRole.Assistant, text = opening)),
+    )
 }

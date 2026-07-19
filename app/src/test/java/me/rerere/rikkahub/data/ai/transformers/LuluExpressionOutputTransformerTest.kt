@@ -306,7 +306,7 @@ class LuluExpressionOutputTransformerTest {
     }
 
     @Test
-    fun `uses a warm recovery instead of exposing an internal-only reply`() {
+    fun `uses a neutral retry marker instead of exposing an internal-only reply`() {
         val leaked = """
             本轮露露自己的表达打算：温柔和宠溺，简短一句就好。
             这只是后台表达方向，不要把它原样说给用户。
@@ -315,7 +315,7 @@ class LuluExpressionOutputTransformerTest {
         """.trimIndent()
 
         assertEquals(
-            "我在呀。刚才脑袋打了个结，没把想说的话说好……你再跟我说一句，我会好好接住的。",
+            "（本轮回复生成不完整，请重试）",
             sanitizeLuluVisibleExpression(leaked),
         )
     }
@@ -339,7 +339,7 @@ class LuluExpressionOutputTransformerTest {
     }
 
     @Test
-    fun `uses a warm recovery when a provider echoes only a private block`() {
+    fun `uses a neutral retry marker when a provider echoes only a private block`() {
         val leaked = """
             <companion_private_context>
             <private_user_profile>
@@ -349,8 +349,16 @@ class LuluExpressionOutputTransformerTest {
         """.trimIndent()
 
         assertEquals(
-            "我在呀。刚才脑袋打了个结，没把想说的话说好……你再跟我说一句，我会好好接住的。",
+            "（本轮回复生成不完整，请重试）",
             sanitizeLuluVisibleExpression(leaked),
+        )
+    }
+
+    @Test
+    fun `keeps ordinary role speech that happens to start with a profile label`() {
+        assertEquals(
+            "昵称：夜航员。",
+            sanitizeLuluVisibleExpression("昵称：夜航员。"),
         )
     }
 

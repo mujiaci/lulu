@@ -161,6 +161,7 @@ data class CompanionTurnMutation(
     val concernChanges: List<CompanionConcernChange> = emptyList(),
     val acceptedCommitments: List<CompanionCommitment> = emptyList(),
     val relationshipEvents: List<CompanionRelationshipEvent> = emptyList(),
+    val continuity: CompanionContinuity? = null,
     val nowMillis: Long,
 )
 
@@ -487,6 +488,12 @@ fun reduceCompanionRuntimeState(
         ?.takeIf { candidate -> candidate.updatedAt >= existing.state.updatedAt }
         ?.copy(updatedAt = maxOf(mutation.state.updatedAt, mutation.nowMillis))
         ?: existing.state
+    val nextContinuity = mutation.continuity
+        ?.takeIf { candidate -> candidate.updatedAt >= existing.continuity.updatedAt }
+        ?.let { candidate ->
+            candidate.copy(updatedAt = maxOf(candidate.updatedAt, mutation.nowMillis))
+        }
+        ?: existing.continuity
     val nextStateHistory = if (
         mutation.state != null &&
         nextState.hasVisibleStateContent() &&
@@ -521,6 +528,7 @@ fun reduceCompanionRuntimeState(
             changes = acceptedCommitmentChanges,
             nowMillis = mutation.nowMillis,
         ),
+        continuity = nextContinuity,
         updatedAt = maxOf(existing.updatedAt, mutation.nowMillis),
     )
     return current.withUpdatedSnapshot(
