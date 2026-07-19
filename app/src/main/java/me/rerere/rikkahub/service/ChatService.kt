@@ -150,6 +150,7 @@ import me.rerere.rikkahub.data.service.isDurableMemoryCandidate
 import me.rerere.rikkahub.data.service.normalizedMemoryIdentity
 import me.rerere.rikkahub.data.service.syncCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.toMemoryExtractionTurns
+import me.rerere.rikkahub.data.voicecall.VoiceCallStreamSegmenter
 import me.rerere.rikkahub.web.BadRequestException
 import me.rerere.rikkahub.web.NotFoundException
 import me.rerere.rikkahub.utils.applyPlaceholders
@@ -639,6 +640,7 @@ class ChatService(
         conversationId: Uuid,
         text: String,
         visibleUserText: String? = text,
+        onPartialReply: (suspend (String) -> Unit)? = null,
     ): String? {
         val trimmed = text.trim()
         if (trimmed.isBlank()) return null
@@ -653,6 +655,7 @@ class ChatService(
                     conversationId = conversationId,
                     conversation = beforeConversation,
                     text = trimmed,
+                    onPartialReply = onPartialReply,
                 )
             }
         }.onFailure {
@@ -775,6 +778,7 @@ class ChatService(
         conversationId: Uuid,
         conversation: Conversation,
         text: String,
+        onPartialReply: (suspend (String) -> Unit)?,
     ): VoiceCallGenerationResult? {
         val settings = settingsStore.settingsFlow.first()
         val assistant = settings.getAssistantById(conversation.assistantId)
@@ -815,6 +819,7 @@ class ChatService(
             .withConciseToolDescriptions()
             .withHumanLikeToolPrompts()
         var generatedMessages = hiddenMessages
+        val streamSegmenter = onPartialReply?.let { VoiceCallStreamSegmenter() }
 
         generationHandler.generateText(
             settings = settings,
@@ -837,7 +842,13 @@ class ChatService(
             apiUsageTitle = "电话：${assistant.name.ifBlank { "当前角色" }}",
         ).collect { chunk ->
             when (chunk) {
-                is GenerationChunk.Messages -> generatedMessages = chunk.messages
+                is GenerationChunk.Messages -> {
+                    generatedMessages = chunk.messages
+                    val partialText = generatedMessages.voiceCallAssistantReplyText()
+                    streamSegmenter?.offer(partialText).orEmpty().forEach { segment ->
+                        onPartialReply?.invoke(segment)
+                    }
+                }
             }
         }
 
@@ -845,18 +856,27 @@ class ChatService(
         val assistantReplies = generatedMessages
             .drop(lastUserIndex + 1)
             .filter { it.role == MessageRole.ASSISTANT }
-        val combinedReply = assistantReplies
-            .map { message ->
-                message.toText().ifBlank { message.extractTextToSpeechToolText() }.trim()
-            }
-            .filter(String::isNotBlank)
-            .joinToString("\n")
+        val combinedReply = generatedMessages.voiceCallAssistantReplyText()
+        streamSegmenter?.finish(combinedReply).orEmpty().forEach { segment ->
+            onPartialReply?.invoke(segment)
+        }
         val lastReply = assistantReplies.lastOrNull() ?: return null
         if (combinedReply.isBlank()) return null
         return VoiceCallGenerationResult(
             message = lastReply.copy(parts = listOf(UIMessagePart.Text(combinedReply))),
             turnPreparation = proactiveContext,
         )
+    }
+
+    private fun List<UIMessage>.voiceCallAssistantReplyText(): String {
+        val lastUserIndex = indexOfLast { it.role == MessageRole.USER }
+        return drop(lastUserIndex + 1)
+            .filter { it.role == MessageRole.ASSISTANT }
+            .map { message ->
+                message.toText().ifBlank { message.extractTextToSpeechToolText() }.trim()
+            }
+            .filter(String::isNotBlank)
+            .joinToString("\n")
     }
 
     private fun UIMessage.extractTextToSpeechToolText(): String =

@@ -101,6 +101,7 @@ import me.rerere.rikkahub.ui.pages.extensions.SkillsPage
 import me.rerere.rikkahub.ui.pages.favorite.FavoritePage
 import me.rerere.rikkahub.ui.pages.game.GameHubPage
 import me.rerere.rikkahub.ui.pages.game.PerfectManGamePage
+import me.rerere.rikkahub.ui.pages.game.QuickCompanionGamePage
 import me.rerere.rikkahub.ui.pages.game.SignalHuntGamePage
 import me.rerere.rikkahub.ui.pages.health.HealthPage
 import me.rerere.rikkahub.ui.pages.history.HistoryPage
@@ -355,6 +356,10 @@ class RouteActivity : ComponentActivity() {
 
                             entry<Screen.PerfectManGame> {
                                 PerfectManGamePage()
+                            }
+
+                            entry<Screen.QuickCompanionGame> { key ->
+                                QuickCompanionGamePage(gameId = key.gameId)
                             }
 
                             entry<Screen.SignalHuntGame> { key ->
@@ -737,6 +742,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object PerfectManGame : Screen
+
+    @Serializable
+    data class QuickCompanionGame(val gameId: String) : Screen
 
     @Serializable
     data class SignalHuntGame(val recordId: String? = null) : Screen

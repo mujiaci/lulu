@@ -24,4 +24,26 @@ class CompanionGameToolTest {
         assertTrue(first.signalsFound in 0..3)
         assertTrue(first.moves.map { it.cell }.distinct().size == 5)
     }
+
+    @Test
+    fun `additional companion games are deterministic`() {
+        assertEquals(
+            playCompanionRockPaperScissors(CompanionGameStrategy.CURIOUS, 9),
+            playCompanionRockPaperScissors(CompanionGameStrategy.CURIOUS, 9),
+        )
+        assertEquals(playCompanionDiceDuel(12), playCompanionDiceDuel(12))
+        assertEquals(
+            playCompanionTicTacToe(CompanionGameStrategy.CAREFUL, 21),
+            playCompanionTicTacToe(CompanionGameStrategy.CAREFUL, 21),
+        )
+    }
+
+    @Test
+    fun `autonomous tic tac toe always completes a legal board`() {
+        val result = playCompanionTicTacToe(CompanionGameStrategy.BOLD, 4)
+
+        assertTrue(result.moves.size in 5..9)
+        assertEquals(result.moves.size, result.moves.map { it.cell }.distinct().size)
+        assertTrue(result.outcome in setOf("win", "lose", "draw"))
+    }
 }

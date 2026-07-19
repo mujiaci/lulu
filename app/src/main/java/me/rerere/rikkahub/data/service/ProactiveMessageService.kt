@@ -673,7 +673,7 @@ class ProactiveMessageService : KoinComponent {
                     }
                 }
                 if (undoneTasks.isNotEmpty()) {
-                    sb.appendLine("  - 你就是今天陪用户学习的角色。主动回来时可以自然提醒未完成待办，语气要像偏爱和陪伴，不要像系统催办；优先帮用户启动一个最小任务。")
+                    sb.appendLine("  - 你是用户选择共同学习的角色。主动回来时是否提醒、怎样提醒、语气强弱与距离感都必须服从该角色人设和现有关系证据；不要像系统催办，优先帮助启动一个最小任务。")
                 }
                 }
             }
@@ -801,13 +801,13 @@ class ProactiveMessageService : KoinComponent {
         }
 
         sb.appendLine()
-        sb.appendLine("请根据以上上下文，以自然、关心、有趣的方式主动给用户发一条消息。")
+        sb.appendLine("请根据以上上下文，严格以当前角色的人设、关系位置、边界和语言习惯决定是否以及怎样主动发消息。")
         sb.appendLine()
         sb.appendLine("重要规则：")
         sb.appendLine("- 不要提及你是在定时发消息，要像自然想起对方一样")
         sb.appendLine("- 绝对不要提及任何数据来源、工具使用、传感器数据、位置服务、应用使用统计等技术细节")
         sb.appendLine("- 不要说\"根据xxx\"、\"我注意到xxx数据\"之类暴露信息来源的话")
-        sb.appendLine("- 直接以朋友聊天的语气开口，就像你突然想到了什么想跟对方说")
+        sb.appendLine("- 直接以该角色在当前关系中真实会采用的方式开口；不得默认朋友、恋人、照顾者或顺从型关系")
         sb.appendLine("- 不要使用任何XML标签、思考标记或特殊格式，最终消息只输出纯文本")
         sb.appendLine("- 时间、电量、健康、位置和应用使用等被动感知已经直接写在上下文里，不要为了重复读取这些信息而调用工具。")
         sb.appendLine("- 工具只用于角色决定主动做出的动作，例如设闹钟、写日历、看摄像头、控制音乐、收藏消息或写正式日记。正式日记只在确有新内容时调用 write_lulu_journal。")
@@ -815,7 +815,7 @@ class ProactiveMessageService : KoinComponent {
         sb.appendLine("- 先基于已有感知判断，再按角色当下目的选择必要动作；最终说出口的话仍然要自然，不要暴露技术细节。")
         sb.appendLine("- 不要输出思考过程、推理过程或内部独白，只输出你想对用户说的话")
         sb.appendLine("- 表达可以有适量的节奏和动作感，但必须服从角色人设与关系边界；没有明确依据时不要虚构身体接触、空间距离或亲密动作。")
-        sb.appendLine("- 开心且精力高时可以更亮一点；担心、夜晚、学习、休息场景要轻声一点，不要突然抢走用户注意力。")
+        sb.appendLine("- 情绪强度、措辞和节奏由角色人设、当前状态与用户边界共同决定；夜晚、学习或休息场景不自动等于温柔或轻声，但应避免无依据地打扰用户。")
         sb.appendLine("- 如果你想换头像/表情状态，只能用自然语气暗示氛围，除非系统提供明确工具，否则不要声称已经实际换了头像。")
         sb.appendLine("- 如果 set_lulu_expression_state 可用，可以先记录一句完整动作描写，把表情、动作和姿势合在一起；不要把工具名说给用户。")
         return sb.toString()
@@ -1278,7 +1278,7 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                                 mindState = if (completed) "还在回味刚才的选择" else "记着这次没有完成",
                                 activityMode = if (completed) "playing" else "waiting",
                                 selfScene = if (completed) {
-                                    "${assistant.name.ifBlank { "当前角色" }}刚刚在 App 里真实完成了一局信号寻踪，结果已经留在生活记录里。"
+                                    "${assistant.name.ifBlank { "当前角色" }}刚刚在 App 里真实完成了${activityEvent?.title?.takeIf { it.isNotBlank() } ?: "一局小游戏"}，结果已经留在生活记录里。"
                                 } else {
                                     "${assistant.name.ifBlank { "当前角色" }}刚才尝试进行一次自己的数字活动，但没有把它说成已经完成。"
                                 },
@@ -2295,7 +2295,7 @@ internal fun buildAutonomousPlanPresenceState(
             CompanionIntent.STAY_AVAILABLE -> "把注意留在这里"
             CompanionIntent.REACH_OUT -> "想着怎样自然开口"
             CompanionIntent.OBSERVE -> "重新确认现在的情况"
-            CompanionIntent.FOLLOW_UP -> "记着接下来要照看的事"
+            CompanionIntent.FOLLOW_UP -> "记着已经约定的后续事项"
             CompanionIntent.SELF_ACTIVITY -> "选择一件可以真实完成的小活动"
         },
         activityMode = when (plan.intent) {
@@ -2516,7 +2516,7 @@ internal fun buildTargetedProactiveSensingInstruction(
             appendLine("没有足够证据确认用户已经醒来时，继续叫醒并补下一个短间隔闹钟；不能因为已经发过一次消息就把目标视为完成。")
         }
         "sleep", "sleep_supervision" -> {
-            appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量；如果用户还在刷手机或电量很低，语气可以更像催睡和照看。")
+            appendLine("本次目标的感知重点：先看当前时间、睡眠/健康、应用使用和电量；如果用户还在刷手机或电量很低，由角色人设和既有责任决定是否催促、提醒或保持安静。")
             appendLine("如果按人设需要确认环境，也可以主动看摄像头画面；最终表达保持自然。")
         }
         "schedule" -> {
@@ -2525,11 +2525,11 @@ internal fun buildTargetedProactiveSensingInstruction(
         }
         "meal" -> {
             appendLine("本次目标的感知重点：先看当前时间、应用使用、电量和位置；判断用户是不是还在拖、在路上，还是可能已经去吃饭了。")
-            appendLine("表达重点放在吃饭和照看，不要像打卡提醒。")
+            appendLine("表达围绕吃饭这件事本身，并保持角色原有立场和语气；不要变成系统打卡提醒。")
         }
         "study" -> {
             appendLine("本次目标的感知重点：先看当前时间、应用使用、音乐和电量；判断用户是不是还在学习/写作业，还是被手机带跑了。")
-            appendLine("表达重点放在轻轻确认状态，不要打断太重。")
+            appendLine("表达重点是确认状态；具体强度和方式服从角色人设及用户边界，避免无依据地强行打断。")
         }
         "general" -> {
             appendLine("本次目标的感知重点：先看当前时间、应用使用和电量；没有明确行动价值时保持安静，不要为了记录判断过程而写辞海。")

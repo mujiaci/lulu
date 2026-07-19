@@ -141,6 +141,7 @@ fun VoiceCallPage(
     var assistantTurnInProgress by remember { mutableStateOf(false) }
     var silenceJob by remember { mutableStateOf<Job?>(null) }
     var sleepJob by remember { mutableStateOf<Job?>(null) }
+    var assistantGenerationJob by remember { mutableStateOf<Job?>(null) }
     val latestSession by rememberUpdatedState(session)
     val latestStage by rememberUpdatedState(stage)
 
@@ -176,23 +177,47 @@ fun VoiceCallPage(
         )
     }
 
-    fun assistantSay(text: String, replayable: Boolean = true) {
+    fun assistantSay(
+        text: String,
+        replayable: Boolean = true,
+        speak: Boolean = true,
+    ) {
         saveLine(
             VoiceCallLine(
                 role = VoiceCallRole.Assistant,
                 text = text,
                 replayable = replayable,
             ),
-            speak = true,
+            speak = speak,
         )
+        if (!speak) assistantTurnInProgress = false
+    }
+
+    fun createStreamSpeaker(buffer: StringBuilder): suspend (String) -> Unit {
+        var firstSegment = true
+        return { segment ->
+            val speakable = segment.cleanRoleLineForUser().extractSpeakableRoleText()
+            if (speakable.isNotBlank()) {
+                buffer.append(segment)
+                tts.speak(
+                    text = speakable,
+                    flushCalled = firstSegment,
+                    providerOverride = ttsProvider,
+                )
+                firstSegment = false
+            }
+        }
     }
 
     fun startCall() {
         if (isHistoryOnly || stage != CallStage.Idle) return
         VoiceCallForegroundService.start(context.applicationContext, assistantName)
         stage = CallStage.Connecting
-        scope.launch {
+        assistantGenerationJob?.cancel()
+        assistantGenerationJob = scope.launch {
             assistantTurnInProgress = true
+            val streamedOpening = StringBuilder()
+            val streamSpeaker = createStreamSpeaker(streamedOpening)
             val recentOpenings = repository.recentAssistantOpenings(
                 conversationId = conversationId,
                 assistantId = assistantId,
@@ -206,8 +231,9 @@ fun VoiceCallPage(
                         variationSeed = System.currentTimeMillis(),
                     ),
                     visibleUserText = null,
+                    onPartialReply = streamSpeaker,
                 ).takeIf(::isUsableVoiceCallReply)
-                    ?: chatService.sendVoiceCallTurn(
+                    ?: if (streamedOpening.isEmpty()) chatService.sendVoiceCallTurn(
                         conversationId = Uuid.parse(conversationId),
                         text = buildVoiceCallOpeningPrompt(
                             assistantName = assistantName,
@@ -216,7 +242,8 @@ fun VoiceCallPage(
                             retry = true,
                         ),
                         visibleUserText = null,
-                    ).takeIf(::isUsableVoiceCallReply)
+                        onPartialReply = streamSpeaker,
+                    ).takeIf(::isUsableVoiceCallReply) else null
             } catch (cancellation: CancellationException) {
                 throw cancellation
             } catch (_: Throwable) {
@@ -224,7 +251,17 @@ fun VoiceCallPage(
             }
             stage = CallStage.Active
             if (opening != null) {
-                assistantSay(text = opening, replayable = true)
+                assistantSay(
+                    text = opening,
+                    replayable = true,
+                    speak = streamedOpening.isEmpty(),
+                )
+            } else if (streamedOpening.isNotEmpty()) {
+                assistantSay(
+                    text = streamedOpening.toString(),
+                    replayable = true,
+                    speak = false,
+                )
             } else {
                 assistantTurnInProgress = false
                 saveLine(
@@ -254,24 +291,38 @@ fun VoiceCallPage(
                 if (finalText.isNotBlank()) {
                     saveLine(VoiceCallLine(role = VoiceCallRole.User, text = finalText))
                     assistantTurnInProgress = true
+                    val streamedReply = StringBuilder()
+                    val streamSpeaker = createStreamSpeaker(streamedReply)
                     val reply = try {
                         chatService.sendVoiceCallTurn(
                             conversationId = Uuid.parse(conversationId),
                             text = "$finalText\n\n$VOICE_CALL_REPLY_PROMPT",
                             visibleUserText = finalText,
+                            onPartialReply = streamSpeaker,
                         ).takeIf(::isUsableVoiceCallReply)
-                            ?: chatService.sendVoiceCallTurn(
+                            ?: if (streamedReply.isEmpty()) chatService.sendVoiceCallTurn(
                                 conversationId = Uuid.parse(conversationId),
                                 text = "$finalText\n\n$VOICE_CALL_RETRY_PROMPT",
                                 visibleUserText = null,
-                            ).takeIf(::isUsableVoiceCallReply)
+                                onPartialReply = streamSpeaker,
+                            ).takeIf(::isUsableVoiceCallReply) else null
                     } catch (cancellation: CancellationException) {
                         throw cancellation
                     } catch (_: Throwable) {
                         null
                     }
                     if (reply != null) {
-                        assistantSay(text = reply, replayable = true)
+                        assistantSay(
+                            text = reply,
+                            replayable = true,
+                            speak = streamedReply.isEmpty(),
+                        )
+                    } else if (streamedReply.isNotEmpty()) {
+                        assistantSay(
+                            text = streamedReply.toString(),
+                            replayable = true,
+                            speak = false,
+                        )
                     } else {
                         assistantTurnInProgress = false
                         saveLine(
@@ -290,6 +341,7 @@ fun VoiceCallPage(
     fun endCall() {
         silenceJob?.cancel()
         sleepJob?.cancel()
+        assistantGenerationJob?.cancel()
         asr.stop()
         tts.stop()
         val ended = session?.let { repository.endSession(it) }
@@ -510,11 +562,12 @@ fun VoiceCallPage(
                         asrStatus = asrState.status,
                     )
                     val canInterruptAssistant =
-                        stage == CallStage.Active && !sleepMode && (isSpeaking || assistantTurnInProgress)
+                        stage in setOf(CallStage.Connecting, CallStage.Active) && !sleepMode && (isSpeaking || assistantTurnInProgress)
                     FilledTonalButton(
                         onClick = {
                             if (canInterruptAssistant) {
                                 silenceJob?.cancel()
+                                assistantGenerationJob?.cancel()
                                 tts.stop()
                                 assistantTurnInProgress = false
                             } else if (asrState.status == ASRStatus.Idle || asrState.status == ASRStatus.Error) {

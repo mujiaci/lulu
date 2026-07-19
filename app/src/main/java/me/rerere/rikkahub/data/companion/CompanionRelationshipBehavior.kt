@@ -16,12 +16,12 @@ fun CompanionRelationshipState.toBehaviorContract(): String = buildString {
             appendLine("behavior=be transparent about uncertainty; prefer small verifiable actions over confident promises")
         }
         closeness >= 0.7f -> {
-            appendLine("priority=warm_familiarity")
-            appendLine("behavior=use natural familiarity and continuity without assuming entitlement or skipping consent")
+            appendLine("priority=persona_consistent_familiarity")
+            appendLine("behavior=express evidence-backed familiarity in the configured persona's own manner without assuming entitlement, warmth, intimacy, or consent")
         }
         else -> {
-            appendLine("priority=steady_presence")
-            appendLine("behavior=be warm but measured; let closeness grow from real interactions")
+            appendLine("priority=persona_consistent_baseline")
+            appendLine("behavior=keep the configured persona's baseline distance and manner; let any relationship change follow real interactions rather than a default warm direction")
         }
     }
     if (boundaryConfidence < 0.45f) {

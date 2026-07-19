@@ -196,7 +196,7 @@ private fun MemoryExtractionTurn.toDeterministicMemoryCandidate(): AffectiveMemo
     val relationshipEffect = when (type) {
         "user_boundary" -> "我需要尊重这条边界，不能让你反复纠正我。"
         "correction" -> "我需要以这次纠正为准，旧理解不能继续沿用。"
-        else -> "这会影响我以后怎样陪伴、建议和回应你。"
+        else -> "这会影响我以后怎样理解这件事，并以符合自身人设和关系位置的方式回应你。"
     }
     return AffectiveMemoryCandidate(
         type = type,

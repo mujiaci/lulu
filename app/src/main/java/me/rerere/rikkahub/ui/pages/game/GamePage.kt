@@ -123,7 +123,7 @@ fun GameHubPage() {
         .filter { event ->
             event.type == CompanionLifeEventType.GAME &&
                 event.status == CompanionLifeEventStatus.COMPLETED &&
-                event.detailsJson.isNotBlank()
+                event.detailsJson.contains("\"game\":\"signal_hunt\"")
         }
         .maxByOrNull { it.endedAt ?: it.startedAt }
     val latestSignalAssistant = latestSignalEvent?.let { event ->
@@ -139,14 +139,32 @@ fun GameHubPage() {
             ),
             GameTile(
                 title = "满分男",
-                subtitle = "满分的人，离谱的缺点，猜对方会扣几分",
+                subtitle = "轮流描述和猜分，角色会按自己的人设参与",
                 enabled = true,
                 onClick = { navController.navigate(Screen.PerfectManGame) },
             ),
-        ) + List(6) { index ->
             GameTile(
-                title = "小游戏 ${index + 2}",
-                subtitle = "慢慢补充",
+                title = "一起猜拳",
+                subtitle = "你和角色同时出手，对局会成为共同经历",
+                enabled = true,
+                onClick = { navController.navigate(Screen.QuickCompanionGame("rock_paper_scissors")) },
+            ),
+            GameTile(
+                title = "骰子对决",
+                subtitle = "双方各掷一次骰子，看看这一轮谁的点数更高",
+                enabled = true,
+                onClick = { navController.navigate(Screen.QuickCompanionGame("dice_duel")) },
+            ),
+            GameTile(
+                title = "井字棋",
+                subtitle = "你执 X、角色执 O，角色会取胜也会主动拦截",
+                enabled = true,
+                onClick = { navController.navigate(Screen.QuickCompanionGame("tic_tac_toe")) },
+            ),
+        ) + List(3) { index ->
+            GameTile(
+                title = "待解锁游戏 ${index + 1}",
+                subtitle = "后续继续扩展",
                 enabled = false,
                 onClick = {},
             )
@@ -446,17 +464,21 @@ fun PerfectManGamePage() {
     var userDescription by remember { mutableStateOf("") }
     var guessText by remember { mutableStateOf("") }
     var result by remember { mutableStateOf<RoundResult?>(null) }
-    var opponentLine by remember { mutableStateOf("我坐好了。这局我们就像面对面玩，你说你的，我猜我的。") }
+    var opponentLine by remember { mutableStateOf(GAME_WAITING_MARKER) }
     var isGenerating by remember { mutableStateOf(false) }
     var opponentVoiceEnabled by remember { mutableStateOf(true) }
     var listeningTarget by remember { mutableStateOf<VoiceInputTarget?>(null) }
-    var selectedPlayerAssistantId by remember { mutableStateOf<String?>(null) }
+    var selectedPlayerAssistantId by remember { mutableStateOf<String?>(settings.assistantId.toString()) }
     val selectedPlayer = settings.assistants.firstOrNull { it.id.toString() == selectedPlayerAssistantId }
 
     val isListening = asrState.status != ASRStatus.Idle && asrState.status != ASRStatus.Error
 
     fun speak(text: String) {
-        if (opponentVoiceEnabled && text.isNotBlank()) {
+        if (
+            opponentVoiceEnabled &&
+            text.isNotBlank() &&
+            !text.startsWith("（")
+        ) {
             tts.speak(text)
         }
     }
@@ -497,11 +519,7 @@ fun PerfectManGamePage() {
         userDescription = ""
         guessText = ""
         result = null
-        opponentLine = if (nextPhase == PerfectManPhase.UserGuesses) {
-            "这局我来出题。你别偷看分，我会按隐藏分数把这个男的讲出来。"
-        } else {
-            "这局你看分来描述，我坐在对面猜。写完直接发给我。"
-        }
+        opponentLine = GAME_WAITING_MARKER
     }
 
     suspend fun generatePerfectManText(prompt: String, fallback: String): String {
@@ -509,7 +527,8 @@ fun PerfectManGamePage() {
             val settings = settingsStore.settingsFlow.first()
             val player = selectedPlayerAssistantId
                 ?.let { id -> settings.assistants.firstOrNull { it.id.toString() == id } }
-            val model = settings.findModelById(player?.chatModelId ?: settings.chatModelId)
+                ?: return@runCatching fallback
+            val model = settings.findModelById(player.chatModelId ?: settings.chatModelId)
                 ?.takeIf { it.type == ModelType.CHAT }
                 ?: return@runCatching fallback
             val providerSetting = model.findProvider(settings.providers) ?: return@runCatching fallback
@@ -517,7 +536,7 @@ fun PerfectManGamePage() {
             val playerPrompt = player?.let { assistant ->
                 buildString {
                     appendLine("你现在扮演坐在用户对面一起玩游戏的“${assistant.name.ifBlank { "玩家" }}”。")
-                    appendLine("沿用这个角色的说话习惯、关系感和性格边界，但只输出当面会说出口的话。")
+                    appendLine("该角色的核心人设、关系类型、世界观、语言习惯与边界是最高约束。游戏场景只能提供事实和轮次目标，不能把角色改写成默认友好、爱吐槽、活泼或亲密的玩家。只输出这个角色当面真正会说出口的话。")
                     if (assistant.systemPrompt.isNotBlank()) {
                         appendLine("角色人设：")
                         appendLine(assistant.systemPrompt)
@@ -540,9 +559,9 @@ fun PerfectManGamePage() {
             }.orEmpty()
             val messages = buildList {
                 add(UIMessage.system(
-                    "你是坐在用户对面一起玩“满分男”的真人玩家，不是主持人、裁判或旁白。" +
-                        "只输出你会当面说出口的话。语气自然、会吐槽、会犹豫、会互动。" +
-                        "不要播报系统结果，不要解释规则。文案短、好猜、有画面感，不要色情，不要羞辱真实群体。",
+                    "你正在参与“满分男”游戏，不是主持人、裁判或旁白。" +
+                        "所选角色的人设与关系边界拥有最高优先级；不得默认友善、吐槽、犹豫、活泼或亲密。" +
+                        "只输出该角色会当面说出口的话，不播报后台规则。内容简短、可供猜测，不要色情，不要羞辱真实群体。",
                 ))
                 if (playerPrompt.isNotBlank()) add(UIMessage.system(playerPrompt))
                 if (companionContext.isNotBlank()) add(UIMessage.system(companionContext))
@@ -573,7 +592,7 @@ fun PerfectManGamePage() {
             chunk.usage?.let { usage ->
                 apiUsageStore.record(
                     source = ApiUsageSource.GAME,
-                    title = "满分男：${player?.name?.takeIf { it.isNotBlank() } ?: "默认 API"}",
+                    title = "满分男：${player.name.ifBlank { "当前角色" }}",
                     model = model.displayName.ifBlank { model.modelId },
                     provider = providerSetting.name.ifBlank { providerSetting.id.toString() },
                     usage = usage,
@@ -607,7 +626,7 @@ fun PerfectManGamePage() {
                             status = CompanionLifeEventStatus.COMPLETED,
                             title = "一起玩完了一轮满分男",
                             summary = "$phaseLabel，第 $completedRound 轮相差 ${roundResult.diff} 分。",
-                            source = CompanionLifeEventSource.AGENT,
+                            source = CompanionLifeEventSource.CHAT,
                             evidenceReference = "perfect-man-round:$completedRound:$nowMillis",
                             importance = 3,
                             startedAt = nowMillis,
@@ -624,17 +643,17 @@ fun PerfectManGamePage() {
     fun startUserGuessRound() {
         if (isGenerating) return
         isGenerating = true
-        opponentLine = "我想一下怎么讲这个人，你等我一句。"
+        opponentLine = GAME_GENERATING_MARKER
         scope.launch {
-            val fallback = PerfectManNarratives.forScore(targetScore)
-            generatedPrompt = generatePerfectManText(
+            val generated = generatePerfectManText(
                 prompt = "你现在负责出题。隐藏分数是 $targetScore/10，但绝对不能暴露分数。" +
-                    "请像坐在对面说话一样，用“这是一个满分男，但是……”开头描述这个男的，" +
-                    "让用户猜他实际几分。只输出你的台词，2-4 句。",
-                fallback = fallback,
+                    "以当前角色自己的方式描述这个人，让用户猜他实际几分；不要求固定开头、吐槽或友好语气。" +
+                    "只输出角色台词，2-4 句。",
+                fallback = GAME_REPLY_FAILURE_MARKER,
             )
-            opponentLine = generatedPrompt
-            speak(generatedPrompt)
+            generatedPrompt = generated.takeUnless { it == GAME_REPLY_FAILURE_MARKER }.orEmpty()
+            opponentLine = generated
+            speak(generated)
             isGenerating = false
         }
     }
@@ -646,20 +665,30 @@ fun PerfectManGamePage() {
         val completedRound = round
         val completedPhase = phase
         isGenerating = true
-        opponentLine = "我看完了，等下，我先按感觉猜一下。"
+        opponentLine = GAME_GENERATING_MARKER
         scope.launch {
-            val fallbackGuess = PerfectManGuess.estimate(description)
             val reply = generatePerfectManText(
                 prompt = "你现在坐在用户对面猜分。真实分数是 $targetScore/10，只用来校准你的猜测。" +
                     "用户给你的描述是：$description\n" +
-                    "请像真人一样先对这个描述吐槽或犹豫一句，再给出猜分。" +
+                    "请以当前角色自己的判断方式回应并给出猜分，不得强制吐槽、犹豫、友好或亲密。" +
                     "最后必须明确写出“我猜：X分”，X 是 0-10 的整数。" +
-                    "只输出你的台词，不要说系统分或结果。",
-                fallback = "等下，这个缺点有点东西。我感觉不能太高，但也没死透，我猜：${fallbackGuess}分",
+                    "只输出角色台词，不要说后台校准分。",
+                fallback = GAME_REPLY_FAILURE_MARKER,
             )
+            if (reply == GAME_REPLY_FAILURE_MARKER) {
+                generatedPrompt = ""
+                opponentLine = reply
+                isGenerating = false
+                return@launch
+            }
             val guess = Regex("""(\d{1,2})\s*分""").find(reply)?.groupValues?.getOrNull(1)?.toIntOrNull()
                 ?.coerceIn(0, 10)
-                ?: fallbackGuess
+            if (guess == null) {
+                generatedPrompt = ""
+                opponentLine = GAME_REPLY_FORMAT_FAILURE_MARKER
+                isGenerating = false
+                return@launch
+            }
             generatedPrompt = reply
             opponentLine = reply
             val nextResult = RoundResult(
@@ -683,20 +712,16 @@ fun PerfectManGamePage() {
         val completedPhase = phase
         val diff = abs(guess - targetScore)
         isGenerating = true
-        opponentLine = "我看看你猜得准不准。"
+        opponentLine = GAME_GENERATING_MARKER
         scope.launch {
             val nextResult = RoundResult(guess = guess, score = targetScore, success = diff <= 1, diff = diff)
             val reply = generatePerfectManText(
                 prompt = "你刚才给用户描述的是：$generatedPrompt\n" +
                     "用户猜这个男的是 $guess 分，真实分数是 $targetScore/10，差值 $diff 分。" +
-                    "请以对面玩家身份自然回应用户：先接住用户的猜法，再说出真实分数和差值；" +
-                    "如果差值在 1 分内就夸一句默契，如果偏了就轻松吐槽一句。" +
-                    "只输出你会说出口的话，不要写标题，不要用系统播报口吻。",
-                fallback = if (nextResult.success) {
-                    "你这也能猜中？我服了，真实分是 ${targetScore} 分，你只差 $diff 分，这个分感有点太准了。"
-                } else {
-                    "哈哈哈你猜的是 ${guess} 分，真实分是 ${targetScore} 分，偏了 $diff 分。但你刚才那个判断也不是完全没道理。"
-                },
+                    "以当前角色自己的方式回应用户，并明确说出真实分数和差值。" +
+                    "是否肯定、讽刺、克制或直接只由角色人设和当前关系决定，不得默认夸奖或轻松吐槽。" +
+                    "只输出角色会说出口的话，不要写标题，不要用系统播报口吻。",
+                fallback = GAME_REPLY_FAILURE_MARKER,
             )
             result = nextResult
             opponentLine = reply
@@ -800,7 +825,7 @@ private fun GameHero() {
                     fontWeight = FontWeight.Bold,
                     color = Color.White,
                 )
-                Text("先放轻量局，后面慢慢补小游戏。", color = Color.White.copy(alpha = 0.84f))
+                Text("和角色一起玩，完成的对局会进入真实共同经历。", color = Color.White.copy(alpha = 0.84f))
             }
         }
     }
@@ -875,19 +900,12 @@ private fun PerfectManPlayerSelector(
                 Text("选择玩家", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.width(10.dp))
                 Text(
-                    selectedPlayer?.name?.takeIf { it.isNotBlank() } ?: "默认 API",
+                    selectedPlayer?.name?.takeIf { it.isNotBlank() } ?: "未选择角色",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
             }
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item(key = "default-api") {
-                    FilterChip(
-                        selected = selectedPlayer == null,
-                        onClick = { onSelect(null) },
-                        label = { Text("默认 API") },
-                    )
-                }
                 items(assistants, key = { it.id.toString() }) { assistant ->
                     FilterChip(
                         selected = selectedPlayer?.id == assistant.id,
@@ -1122,6 +1140,11 @@ private fun actionTitle(phase: PerfectManPhase, promptReady: Boolean): String =
         PerfectManPhase.PartnerGuesses -> "我来描述"
     }
 
+private const val GAME_WAITING_MARKER = "（选择角色并开始这一轮）"
+private const val GAME_GENERATING_MARKER = "（正在生成角色回应）"
+private const val GAME_REPLY_FAILURE_MARKER = "（本轮角色回复生成失败，请重试）"
+private const val GAME_REPLY_FORMAT_FAILURE_MARKER = "（本轮角色回复缺少有效分数，请重试）"
+
 private enum class VoiceInputTarget {
     Flaw,
     Guess,
@@ -1157,31 +1180,7 @@ private val PerfectManExamples = listOf(
     "声音特别好听，但睡前故事只讲刑法案例。",
 )
 
-private object PerfectManNarratives {
-    fun forScore(score: Int): String {
-        return when (score) {
-            in 0..2 -> "这是一个满分男，但是他的满分可能是反向满分：见面第一句先点评你的穿搭，吃饭全程讲自己多抢手，还会把服务员叫错三次。"
-            in 3..4 -> "这是一个满分男，但是他优点确实有，缺点也很响亮：会接你下班，也会在车里循环播放自己的语音备忘录。"
-            in 5..6 -> "这是一个满分男，但是他像一份半糖奶茶：能喝，偶尔好喝，就是每次关键时刻都差那么一口气。"
-            in 7..8 -> "这是一个满分男，但是他大部分地方都很好，只是会在浪漫气氛最好的时候突然讲一个冷到沉默的谐音梗。"
-            else -> "这是一个满分男，但是扣分点小到离谱：他太会照顾人了，唯一的问题是每次说晚安都像在念获奖感言。"
-        }
-    }
-}
-
-private object PerfectManGuess {
-    fun estimate(description: String): Int {
-        val text = description.lowercase()
-        return when {
-            listOf("不洗", "骂", "抠", "油", "爹味", "恶心").any { it in text } -> Random.nextInt(0, 4)
-            listOf("但是", "不过", "有点", "偶尔", "一般").any { it in text } -> Random.nextInt(4, 8)
-            listOf("温柔", "帅", "会照顾", "稳定", "尊重", "好听").any { it in text } -> Random.nextInt(7, 11)
-            else -> Random.nextInt(3, 9)
-        }
-    }
-}
-
-private object GameColors {
+internal object GameColors {
     val background = Color(0xFFF8F4F0)
     val accent = Color(0xFF8B3D5E)
     val success = Color(0xFF2E8B68)
