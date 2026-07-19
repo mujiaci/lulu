@@ -95,6 +95,7 @@ import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.gadgetbridge.GadgetbridgeReader
 import me.rerere.rikkahub.data.model.Assistant
+import me.rerere.rikkahub.data.voicecall.ProactiveCallManager
 import me.rerere.rikkahub.utils.JsonInstant
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.model.Conversation
@@ -1132,6 +1133,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 val activeTools = allTools.activeModelTools()
                 val nowMillis = System.currentTimeMillis()
                 val screenInteractive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
+                val recentCallOutcome = ProactiveCallManager.recentOutcomeContext(
+                    context = this@ProactiveMessageTriggerService,
+                    assistantId = assistantUuid.toString(),
+                    nowMillis = nowMillis,
+                )
                 val passiveFacts = collectCompanionPassivePerceptionFacts(
                     tools = allTools,
                     observedAt = nowMillis,
@@ -1139,6 +1145,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     key = "perception.screen_interactive",
                     value = screenInteractive.toString(),
                     observedAt = nowMillis,
+                ) + listOfNotNull(
+                    recentCallOutcome?.let { outcome ->
+                        CompanionContextFact(
+                            key = "interaction.recent_proactive_call_outcome",
+                            value = outcome,
+                            observedAt = nowMillis,
+                        )
+                    },
                 )
                 val latestDeviceActivityAt = latestForegroundUsageAt(passiveFacts)
                 val memoryQuery = listOfNotNull(
@@ -1323,6 +1337,32 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     stopSelf()
                     return@launch
                 }
+                if (
+                    !isTargetedTrigger &&
+                    autonomousPlan?.intent == CompanionIntent.REACH_OUT &&
+                    autonomousPlan.shouldMessageNow
+                ) {
+                    val callOffered = ProactiveCallManager.offerIncomingCall(
+                        context = this@ProactiveMessageTriggerService,
+                        assistantId = assistant.id.toString(),
+                        assistantName = assistant.name.ifBlank { "当前角色" },
+                        conversationId = conversationId.toString(),
+                        reason = autonomousPlan.reason,
+                        setting = assistant.proactiveCallSetting,
+                    )
+                    if (callOffered) {
+                        Log.d(TAG, "Companion intent planner chose proactive call delivery")
+                        ProactiveMessageService.scheduleNext(
+                            context = this@ProactiveMessageTriggerService,
+                            settings = settings,
+                            minutesSinceLastChat = minutesSinceLastChat,
+                            assistantId = assistantUuid,
+                        )
+                        stopSelf()
+                        return@launch
+                    }
+                }
+
                 val deferredPlan = autonomousPlan
                     ?.takeIf { !it.shouldMessageNow }
                     ?.toProactiveReminderPlan(

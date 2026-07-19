@@ -58,6 +58,7 @@ const val POMODORO_NOTIFICATION_CHANNEL_ID = "pomodoro_timer"
 const val MUSIC_PLAYER_NOTIFICATION_CHANNEL_ID = "music_player"
 const val DEVICE_EVENT_NOTIFICATION_CHANNEL_ID = "device_event_tracking"
 const val VOICE_CALL_NOTIFICATION_CHANNEL_ID = "voice_call"
+const val INCOMING_VOICE_CALL_NOTIFICATION_CHANNEL_ID = "incoming_voice_call"
 
 class RikkaHubApp : Application() {
     companion object {
@@ -274,6 +275,15 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(webServerChannel)
+
+        val incomingCallChannel = NotificationChannelCompat
+            .Builder(INCOMING_VOICE_CALL_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_HIGH)
+            .setName("角色来电")
+            .setDescription("角色主动来电、接听与拒绝")
+            .setVibrationEnabled(true)
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(incomingCallChannel)
 
         val pomodoroChannel = NotificationChannelCompat
             .Builder(POMODORO_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)

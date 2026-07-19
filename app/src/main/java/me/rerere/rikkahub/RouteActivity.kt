@@ -136,6 +136,7 @@ import me.rerere.rikkahub.ui.pages.stats.StatsPage
 import me.rerere.rikkahub.ui.pages.translator.TranslatorPage
 import me.rerere.rikkahub.ui.pages.voicecall.VoiceCallHistoryPage
 import me.rerere.rikkahub.ui.pages.voicecall.VoiceCallPage
+import me.rerere.rikkahub.data.voicecall.ProactiveCallManager
 import me.rerere.rikkahub.ui.pages.webview.WebViewPage
 import me.rerere.rikkahub.ui.pages.worldbook.WorldbookPage
 import me.rerere.rikkahub.ui.theme.LocalDarkMode
@@ -174,6 +175,18 @@ class RouteActivity : ComponentActivity() {
         enableEdgeToEdge()
         disableNavigationBarContrast()
         super.onCreate(savedInstanceState)
+
+        if (intent?.action == ProactiveCallManager.ACTION_INCOMING_CALL) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+            } else {
+                window.addFlags(
+                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                        android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON,
+                )
+            }
+        }
 
         if (CrashHandler.hasCrashed(this)) {
             startActivity(Intent(this, SafeModeActivity::class.java))
@@ -239,6 +252,10 @@ class RouteActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        setIntent(intent)
+        navStack?.let { stack ->
+            if (navigateProactiveCall(intent, stack)) return
+        }
         // Navigate to the chat screen if a conversation ID is provided
         intent.getStringExtra("conversationId")?.let { text ->
             val autoStartVoice = intent.getBooleanExtra("autoStartVoice", false)
@@ -263,6 +280,36 @@ class RouteActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    private fun navigateProactiveCall(intent: Intent?, stack: MutableList<NavKey>): Boolean {
+        if (intent?.action != ProactiveCallManager.ACTION_INCOMING_CALL) return false
+        val assistantId = intent.getStringExtra(ProactiveCallManager.EXTRA_ASSISTANT_ID)
+            ?.takeIf(String::isNotBlank)
+            ?: return false
+        val conversationId = intent.getStringExtra(ProactiveCallManager.EXTRA_CONVERSATION_ID)
+            ?.takeIf(String::isNotBlank)
+            ?: return false
+        val reason = intent.getStringExtra(ProactiveCallManager.EXTRA_REASON).orEmpty()
+        val autoStart = intent.getBooleanExtra(ProactiveCallManager.EXTRA_AUTO_START, false)
+        Snapshot.withMutableSnapshot {
+            stack.removeAll { it is Screen.VoiceCall && it.assistantId == assistantId }
+            stack.add(
+                Screen.VoiceCall(
+                    conversationId = conversationId,
+                    assistantId = assistantId,
+                    incomingCall = true,
+                    autoStart = autoStart,
+                    incomingReason = reason,
+                ),
+            )
+        }
+        if (autoStart) {
+            ProactiveCallManager.markAnswered(this, assistantId)
+        } else {
+            ProactiveCallManager.dismissIncomingCall(this)
+        }
+        return true
     }
 
     override fun onDestroy() {
@@ -290,6 +337,9 @@ class RouteActivity : ComponentActivity() {
 
         val backStack = rememberNavBackStack(startScreen)
         SideEffect { this@RouteActivity.navStack = backStack }
+        LaunchedEffect(Unit) {
+            navigateProactiveCall(intent, backStack)
+        }
 
         ShareHandler(backStack)
 
@@ -425,6 +475,9 @@ class RouteActivity : ComponentActivity() {
                                     conversationId = key.conversationId,
                                     assistantId = key.assistantId,
                                     sessionId = key.sessionId,
+                                    incomingCall = key.incomingCall,
+                                    autoStart = key.autoStart,
+                                    incomingReason = key.incomingReason,
                                 )
                             }
 
@@ -775,6 +828,9 @@ sealed interface Screen : NavKey {
         val conversationId: String,
         val assistantId: String,
         val sessionId: String? = null,
+        val incomingCall: Boolean = false,
+        val autoStart: Boolean = false,
+        val incomingReason: String = "",
     ) : Screen
 
     @Serializable

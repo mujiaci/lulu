@@ -8,6 +8,7 @@ import me.rerere.ai.provider.CustomHeader
 import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.rikkahub.data.ai.tools.LocalToolOption
+import me.rerere.rikkahub.data.datastore.ProactiveCallSetting
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import kotlin.uuid.Uuid
 
@@ -31,6 +32,7 @@ data class Assistant(
     val autoPlayVoice: Boolean = false,
     val ttsVoiceId: String = "",
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
+    val proactiveCallSetting: ProactiveCallSetting = ProactiveCallSetting(),
     val enableRecentChatsReference: Boolean = false,
     val messageTemplate: String = "{{ message }}",
     val presetMessages: List<UIMessage> = emptyList(),

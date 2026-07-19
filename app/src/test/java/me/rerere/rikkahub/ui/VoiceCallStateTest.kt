@@ -60,4 +60,18 @@ class VoiceCallStateTest {
         assertTrue(prompt.contains("喂，我在。"))
         assertTrue(prompt.contains("避免相同句式"))
     }
+
+    @Test
+    fun `proactive opening keeps private motive and persona priority`() {
+        val prompt = buildVoiceCallOpeningPrompt(
+            assistantName = "边境审讯官",
+            variationSeed = 9L,
+            incomingReason = "角色决定现在用电话联系用户",
+        )
+
+        assertTrue(prompt.contains("主动打给用户"))
+        assertTrue(prompt.contains("内部理由"))
+        assertTrue(prompt.contains("最高优先级"))
+        assertFalse(prompt.contains("默认温柔地"))
+    }
 }

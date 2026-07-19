@@ -606,6 +606,7 @@ data class Settings(
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
     val memoryEmbeddingConfig: MemoryEmbeddingConfig = MemoryEmbeddingConfig(),
     val pomodoroVoiceEnabled: Boolean = true,
+    val pomodoroTheme: PomodoroTheme = PomodoroTheme.CLOUD,
 ) {
     companion object {
         // 构造一个用于初始化的settings, 但它不能用于保存，防止使用初始值存储
@@ -623,6 +624,15 @@ data class MemoryEmbeddingConfig(
     val batchSize: Int = 60,
     val rerankCandidateCount: Int = 60,
 )
+
+@Serializable
+enum class PomodoroTheme {
+    @SerialName("cloud")
+    CLOUD,
+
+    @SerialName("midnight")
+    MIDNIGHT,
+}
 
 @Serializable
 enum class ChatFontFamily {
