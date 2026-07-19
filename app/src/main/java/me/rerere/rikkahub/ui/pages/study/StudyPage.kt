@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -203,7 +204,7 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
             ?: settings.getCurrentAssistant()
     }
     val snackbarHostState = remember { SnackbarHostState() }
-    var section by remember { mutableStateOf(StudySection.Companion) }
+    var section by remember { mutableStateOf(StudySection.Today) }
     var newTask by remember { mutableStateOf("") }
     var drawDialog by remember { mutableStateOf<List<StudyDrawReveal>?>(null) }
     var pendingBoxDialog by remember { mutableStateOf(false) }
@@ -211,7 +212,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     var showSuperDialog by remember { mutableStateOf(false) }
     var showLevelDialog by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val isGachaSection = section == StudySection.Gacha
     val pageColor = if (isGachaSection) StudyColors.starryPage else StudyColors.page
 
@@ -228,42 +228,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = {
-            LargeFlexibleTopAppBar(
-                title = { Text(if (isGachaSection) "星夜来信" else "考研") },
-                navigationIcon = {
-                    if (isGachaSection) {
-                        Surface(
-                            modifier = Modifier
-                                .padding(start = 4.dp)
-                                .size(48.dp)
-                                .clickable { navController.popBackStack() },
-                            shape = CircleShape,
-                            color = Color.White.copy(alpha = 0.10f),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.14f)),
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(HugeIcons.ArrowLeft01, contentDescription = "返回")
-                            }
-                        }
-                    } else {
-                        BackButton()
-                    }
-                },
-                scrollBehavior = scrollBehavior,
-                colors = if (isGachaSection) {
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = StudyColors.starryPage,
-                        scrolledContainerColor = StudyColors.starryPageDeep,
-                        navigationIconContentColor = Color.White,
-                        titleContentColor = Color.White,
-                    )
-                } else {
-                    CustomColors.topBarColors
-                },
-            )
-        },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         containerColor = pageColor,
     ) { padding ->
@@ -287,10 +251,34 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                 )
             }
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().statusBarsPadding(),
                 contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 14.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp),
             ) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(48.dp).clickable { navController.popBackStack() },
+                            shape = CircleShape,
+                            color = if (isGachaSection) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.72f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isGachaSection) Color.White.copy(alpha = 0.14f) else StudyColors.blue.copy(alpha = 0.12f),
+                            ),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    HugeIcons.ArrowLeft01,
+                                    contentDescription = "返回",
+                                    tint = if (isGachaSection) Color.White else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
                 item {
                     SectionChips(
                         selected = section,
@@ -306,7 +294,6 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                                 assistant = companionAssistant,
                                 assistants = settings.assistants,
                                 onSignIn = vm::signIn,
-                                onPomodoro = { navController.navigate(Screen.StudyPomodoro) },
                                 onOpenLevel = { showLevelDialog = true },
                                 onSelectCompanion = { vm.selectCompanion(it.id.toString()) },
                             )
@@ -320,6 +307,11 @@ fun StudyPage(vm: StudyVM = koinViewModel()) {
                         item { RecentEventsCard(events = state.recentEvents) }
                     }
                     StudySection.Today -> {
+                        item {
+                            TodayPomodoroLaunchCard(
+                                onClick = { navController.navigate(Screen.StudyPomodoro) },
+                            )
+                        }
                         item {
                             DailyStudyDashboard(
                                 tasks = state.tasks,
@@ -793,7 +785,6 @@ private fun StudyHero(
     assistant: Assistant,
     assistants: List<Assistant>,
     onSignIn: () -> Unit,
-    onPomodoro: () -> Unit,
     onOpenLevel: () -> Unit,
     onSelectCompanion: (Assistant) -> Unit,
 ) {
@@ -862,17 +853,10 @@ private fun StudyHero(
                         Modifier.weight(1f),
                     )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                    FilledTonalButton(onClick = onSignIn, modifier = Modifier.weight(1f)) {
-                        Icon(HugeIcons.Clapping01, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("签到")
-                    }
-                    Button(onClick = onPomodoro, modifier = Modifier.weight(1f)) {
-                        Icon(HugeIcons.Clock02, null)
-                        Spacer(Modifier.width(6.dp))
-                        Text("番茄钟")
-                    }
+                FilledTonalButton(onClick = onSignIn, modifier = Modifier.fillMaxWidth()) {
+                    Icon(HugeIcons.Clapping01, null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("签到")
                 }
             }
         }
@@ -963,6 +947,37 @@ private fun SectionChips(
                     FilterChipDefaults.filterChipColors()
                 },
             )
+        }
+    }
+}
+
+@Composable
+private fun TodayPomodoroLaunchCard(onClick: () -> Unit) {
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onClick),
+        colors = CardDefaults.elevatedCardColors(containerColor = Color(0xFFF1F5FF)),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Surface(
+                modifier = Modifier.size(52.dp),
+                shape = CircleShape,
+                color = Color(0xFFDCE7FF),
+                contentColor = Color(0xFF385788),
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Icon(HugeIcons.Clock02, contentDescription = null, modifier = Modifier.size(26.dp))
+                }
+            }
+            Column(Modifier.weight(1f)) {
+                Text("开始番茄钟", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("从今天的任务顺手开始一轮专注", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Icon(HugeIcons.ArrowRight01, contentDescription = null, tint = Color(0xFF5874A3))
         }
     }
 }
@@ -1075,15 +1090,10 @@ private fun TaskContent(
     onToggle: (String, Boolean) -> Unit,
     onDelete: (String) -> Unit,
 ) {
-    val planCount = tasks.count { it.source == StudyTaskSource.Plan }
-    val donePlanCount = tasks.count { it.source == StudyTaskSource.Plan && it.done }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
                 Text("待办", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                if (planCount > 0) {
-                    Text("计划任务 $donePlanCount/$planCount，手动任务 ${tasks.size - planCount} 个", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
             }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2164,7 +2174,7 @@ private fun GachaCard(
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(590.dp)
+                .height(650.dp)
                 .clip(RoundedCornerShape(28.dp)),
         ) {
             StarryLetterBackdrop(Modifier.fillMaxSize())
@@ -2198,10 +2208,30 @@ private fun GachaCard(
                     }
                     Spacer(Modifier.weight(1f))
                     Text(
-                        "夸夸值 ${state.wallet.kudos} · 券可抽 ${state.wallet.singleDrawTickets + state.wallet.tenDrawTickets * 10} 次",
-                        color = Color.White.copy(alpha = 0.78f),
+                        "券可抽 ${state.wallet.singleDrawTickets + state.wallet.tenDrawTickets * 10} 次",
+                        color = Color.White.copy(alpha = 0.68f),
                         style = MaterialTheme.typography.labelMedium,
                     )
+                }
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = Color(0x22FFFFFF),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text("当前夸夸值", color = Color.White.copy(alpha = 0.72f))
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            state.wallet.kudos.toString(),
+                            color = Color(0xFFF4E8C9),
+                            style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Black,
+                        )
+                    }
                 }
                 Text(
                     "星夜来信",
@@ -2215,7 +2245,7 @@ private fun GachaCard(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    StarryRarityPill("紫", "8%", Color(0xFFC5A5FF))
+                    StarryRarityPill("紫", "6%", Color(0xFFC5A5FF))
                     StarryRarityPill("金", "1.5%", Color(0xFFF2D18A))
                     StarryRarityPill("彩", "0.35%", Color(0xFF8DE0DC))
                 }
@@ -2233,7 +2263,7 @@ private fun GachaCard(
                     FragmentWalletPill("番剧3小时", state.inventory.animeFragments, Color(0xFF8DE0DC))
                 }
                 Text(
-                    "紫色：抖音20分钟 5.5% / 剧场 2.5% · 金色：游戏120分钟 / 视频",
+                    "紫色：抖音20分钟 5% / 剧场 1% · 金色：游戏120分钟 / 视频",
                     color = Color.White.copy(alpha = 0.64f),
                     style = MaterialTheme.typography.labelSmall,
                     modifier = Modifier.fillMaxWidth(),
@@ -2905,7 +2935,7 @@ private fun StudyGuideCard() {
                 "单抽 ${StudyRules.SINGLE_DRAW_COST} 夸夸值。",
                 "十连 ${StudyRules.TEN_DRAW_COST} 夸夸值。",
                 "画卷碎片已经集满后再抽到同名蓝色碎片，仍会在抽卡结果中展示，并标记为“碎片已满”；不会重复计入，也不返夸夸值、抽卡券或其他资源。",
-                "蓝色画卷专属碎片 90.15%；紫色 8%（抖音20分钟 5.5% / 剧场碎片 2.5%）。",
+                "蓝色画卷专属碎片 92.15%；紫色 6%（抖音20分钟 5% / 剧场碎片 1%）。",
                 "金色 1.5%（游戏120分钟 1.2% / 视频解锁卡 0.3%）；彩色番剧3小时 0.35%。",
                 "硬保底：连续 ${StudyRules.NON_NORMAL_PITY_DRAW_COUNT} 抽没有出现紫/金/彩时，第 ${StudyRules.NON_NORMAL_PITY_DRAW_COUNT} 抽必为紫色。",
                 "卡池、等级和神秘商店都不再产出通用碎片；旧存档中的通用碎片仍可使用。",
@@ -2918,7 +2948,7 @@ private fun StudyGuideCard() {
             lines = listOf(
                 "学习2小时约得2400夸夸值，可抽3次十连；学习3小时约得3600夸夸值，可抽4次十连加4次单抽。",
                 "超神 5 天给 5 张十连券；等级、成就和商店会追加抽卡券。",
-                "按100抽估算：蓝色约90，紫色约8，金色约1至2，彩色约0至1。",
+                "按100抽估算：蓝色约92，紫色约6，金色约1至2，彩色约0至1。",
                 "普通图片专属碎片只来自抽卡；新奖励不再产生通用普通碎片。",
             ),
         )
@@ -2946,7 +2976,7 @@ private fun StudyGuideCard() {
                 "收藏已按 20 套画卷、每套 10 个专属碎片展示。",
                 "旧存档通用普通碎片仍可自动补最佳目标，也可在收藏里指定画卷；新系统不再产出。",
                 "娱乐券与剧场碎片均按用途独立保存，卡池内不存在任何通用碎片。",
-                "Lv14 会自动补齐一套未完成画卷；已解锁画卷可以直接跳到生图页。",
+                "等级与成就只奖励夸夸值和抽卡券；画卷与娱乐收藏通过抽卡获得。",
                 "番茄钟已接入角色陪伴、语音鼓励和轻聊天。",
                 "更深的角色主动督学、画卷提示词自动带入、星愿馆视频收藏柜可以作为后续增强。",
             ),

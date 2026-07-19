@@ -121,6 +121,21 @@ object StudyRules {
         StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 100, title = "夸夸值 100")),
         StudyAchievement("epic_touch", "金光亮起", "获得第一枚金色碎片", StudyReward(tenDrawTickets = 1, kudos = 100, title = "十连抽券 x1 + 夸夸值 100")),
         StudyAchievement("mcdonalds_arrival", "第一支视频", "首次解锁视频奖励", StudyReward(kudos = 300, title = "夸夸值 300")),
+        StudyAchievement("pomodoro_150", "一百五十次相见", "累计完成150个番茄钟", StudyReward(kudos = 1_500, tenDrawTickets = 3, title = "夸夸值 1500 + 十连抽券 x3")),
+        StudyAchievement("pomodoro_200", "专注两百回", "累计完成200个番茄钟", StudyReward(tenDrawTickets = 5, title = "十连抽券 x5")),
+        StudyAchievement("pomodoro_365", "日日有回声", "累计完成365个番茄钟", StudyReward(kudos = 3_650, tenDrawTickets = 8, title = "夸夸值 3650 + 十连抽券 x8")),
+        StudyAchievement("tasks_150", "清单远征", "累计完成150项待办", StudyReward(kudos = 1_500, tenDrawTickets = 2, title = "夸夸值 1500 + 十连抽券 x2")),
+        StudyAchievement("tasks_200", "两百次兑现", "累计完成200项待办", StudyReward(tenDrawTickets = 5, title = "十连抽券 x5")),
+        StudyAchievement("tasks_365", "一年份完成感", "累计完成365项待办", StudyReward(kudos = 3_650, tenDrawTickets = 8, title = "夸夸值 3650 + 十连抽券 x8")),
+        StudyAchievement("perfect_60", "两月成习", "连续60天待办全清", StudyReward(kudos = 2_000, tenDrawTickets = 5, title = "夸夸值 2000 + 十连抽券 x5")),
+        StudyAchievement("perfect_100", "百日不辍", "连续100天待办全清", StudyReward(tenDrawTickets = 10, title = "十连抽券 x10")),
+        StudyAchievement("study_300h", "三百小时航程", "累计学习时长300小时", StudyReward(kudos = 3_000, tenDrawTickets = 5, title = "夸夸值 3000 + 十连抽券 x5")),
+        StudyAchievement("study_500h", "五百小时星河", "累计学习时长500小时", StudyReward(tenDrawTickets = 10, title = "十连抽券 x10")),
+        StudyAchievement("study_1000h", "千小时之证", "累计学习时长1000小时", StudyReward(kudos = 10_000, tenDrawTickets = 20, title = "夸夸值 10000 + 十连抽券 x20")),
+        StudyAchievement("outfits_15", "十五卷风景", "解锁任意15套普通画卷", StudyReward(kudos = 2_000, tenDrawTickets = 5, title = "夸夸值 2000 + 十连抽券 x5")),
+        StudyAchievement("outfits_20", "画卷全收集", "解锁全部20套普通画卷", StudyReward(tenDrawTickets = 10, title = "十连抽券 x10")),
+        StudyAchievement("theaters_3", "三幕连映", "解锁3个小剧场章节", StudyReward(kudos = 800, tenDrawTickets = 2, title = "夸夸值 800 + 十连抽券 x2")),
+        StudyAchievement("videos_3", "三支珍藏", "累计解锁3次视频奖励", StudyReward(kudos = 800, tenDrawTickets = 2, title = "夸夸值 800 + 十连抽券 x2")),
     )
 
     fun rolloverToDate(state: StudyState, date: LocalDate = LocalDate.now()): StudyState {
@@ -698,23 +713,36 @@ object StudyRules {
                 "pomodoro_20" -> state.stats.totalPomodoros >= 20
                 "pomodoro_50" -> state.stats.totalPomodoros >= 50
                 "pomodoro_100" -> state.stats.totalPomodoros >= 100
+                "pomodoro_150" -> state.stats.totalPomodoros >= 150
+                "pomodoro_200" -> state.stats.totalPomodoros >= 200
+                "pomodoro_365" -> state.stats.totalPomodoros >= 365
                 "warm_start" -> state.stats.totalPomodoros >= 3
                 "todo_slayer" -> state.stats.totalTasksCompleted >= 30
                 "task_spark" -> state.stats.totalTasksCompleted >= 10
                 "tasks_50" -> state.stats.totalTasksCompleted >= 50
                 "tasks_100" -> state.stats.totalTasksCompleted >= 100
+                "tasks_150" -> state.stats.totalTasksCompleted >= 150
+                "tasks_200" -> state.stats.totalTasksCompleted >= 200
+                "tasks_365" -> state.stats.totalTasksCompleted >= 365
                 "perfect_3" -> state.longestPerfectStreak >= 3
                 "perfect_7" -> state.longestPerfectStreak >= 7
                 "perfect_14" -> state.longestPerfectStreak >= 14
                 "perfect_30" -> state.longestPerfectStreak >= 30
+                "perfect_60" -> state.longestPerfectStreak >= 60
+                "perfect_100" -> state.longestPerfectStreak >= 100
                 "deep_work_10h" -> state.stats.totalStudyMinutes >= 600
                 "time_traveler" -> state.stats.totalStudyMinutes >= 3_000
                 "study_100h" -> state.stats.totalStudyMinutes >= 6_000
                 "study_200h" -> state.stats.totalStudyMinutes >= 12_000
+                "study_300h" -> state.stats.totalStudyMinutes >= 18_000
+                "study_500h" -> state.stats.totalStudyMinutes >= 30_000
+                "study_1000h" -> state.stats.totalStudyMinutes >= 60_000
                 "first_outfit" -> state.stats.unlockedOutfitSets >= 1
                 "outfit_collector" -> state.stats.unlockedOutfitSets >= 3
                 "outfits_5" -> state.stats.unlockedOutfitSets >= 5
                 "outfits_10" -> state.stats.unlockedOutfitSets >= 10
+                "outfits_15" -> state.stats.unlockedOutfitSets >= 15
+                "outfits_20" -> state.stats.unlockedOutfitSets >= 20
                 "theater_open" -> state.inventory.theaterFragments >= 1 || state.stats.unlockedTheaters >= 1
                 "lucky_drawer" -> state.inventory.normalFragments.values.sum() +
                     state.inventory.universalNormalFragments +
@@ -723,6 +751,8 @@ object StudyRules {
                     state.inventory.animeFragments >= 20
                 "epic_touch" -> state.inventory.gameFragments + state.inventory.videoFragments >= 1
                 "mcdonalds_arrival" -> state.stats.videoRewardsRedeemed >= 1
+                "theaters_3" -> state.stats.unlockedTheaters >= 3
+                "videos_3" -> state.stats.videoRewardsRedeemed >= 3
                 else -> false
             }
         }
@@ -956,7 +986,7 @@ object StudyRules {
     private fun drawOne(random: Random): StudyDrawResult {
         val roll = random.nextDouble()
         return when {
-            roll < 0.9015 -> {
+            roll < 0.9215 -> {
                 val outfit = outfitNames[random.nextInt(outfitNames.size)]
                 val part = outfitParts[random.nextInt(outfitParts.size)]
                 StudyDrawResult(StudyRarity.Normal, "normal:$outfit:$part", "$outfit-$part 碎片")
@@ -971,7 +1001,7 @@ object StudyRules {
         }
     }
 
-    private fun drawRare(random: Random): StudyDrawResult = if (random.nextDouble() < 0.6875) {
+    private fun drawRare(random: Random): StudyDrawResult = if (random.nextDouble() < (5.0 / 6.0)) {
         StudyDrawResult(StudyRarity.Rare, "rare:douyin", "抖音时长券 · 20分钟", StudyFragmentType.Douyin)
     } else {
         StudyDrawResult(StudyRarity.Rare, "rare:theater", "剧场碎片", StudyFragmentType.Theater)

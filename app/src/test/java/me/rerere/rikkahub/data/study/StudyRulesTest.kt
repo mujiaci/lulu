@@ -846,18 +846,18 @@ class StudyRulesTest {
     }
 
     @Test
-    fun `purple draw gives theater a two point five percent share of the full pool`() {
+    fun `purple draw splits five percent douyin and one percent theater`() {
         var state = StudyState(wallet = StudyWallet(singleDrawTickets = 2))
 
         state = StudyRules.draw(
             state,
             count = 1,
-            random = FixedDrawRandom(doubles = mutableListOf(0.95, 0.68)),
+            random = FixedDrawRandom(doubles = mutableListOf(0.95, 0.82)),
         ).state
         state = StudyRules.draw(
             state,
             count = 1,
-            random = FixedDrawRandom(doubles = mutableListOf(0.95, 0.70)),
+            random = FixedDrawRandom(doubles = mutableListOf(0.95, 0.85)),
         ).state
 
         assertEquals(1, state.inventory.douyinFragments)
@@ -995,6 +995,19 @@ class StudyRulesTest {
         assertTrue("perfect_30" in ids)
         assertTrue("study_200h" in ids)
         assertTrue("outfits_10" in ids)
+    }
+
+
+    @Test
+    fun `long term achievement ladder remains available`() {
+        val ids = StudyRules.achievements.map { it.id }.toSet()
+        assertTrue("pomodoro_365" in ids)
+        assertTrue("tasks_365" in ids)
+        assertTrue("perfect_100" in ids)
+        assertTrue("study_1000h" in ids)
+        assertTrue("outfits_20" in ids)
+        assertTrue("theaters_3" in ids)
+        assertTrue("videos_3" in ids)
     }
 
 }
