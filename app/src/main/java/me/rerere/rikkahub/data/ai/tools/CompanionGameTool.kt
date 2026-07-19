@@ -95,8 +95,8 @@ fun createCompanionGameTool(
             CompanionGameKind.DICE_DUEL -> {
                 val result = playCompanionDiceDuel(seed)
                 buildJsonObject {
-                    put("role_roll", result.roleRoll)
-                    put("opponent_roll", result.opponentRoll)
+                    put("role_roll", result.roleMove.toInt())
+                    put("opponent_roll", result.opponentMove.toInt())
                     put("outcome", result.outcome)
                     put("result", result.resultText)
                 }

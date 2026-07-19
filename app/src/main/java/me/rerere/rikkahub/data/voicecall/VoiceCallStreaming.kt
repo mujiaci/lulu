@@ -72,6 +72,13 @@ private fun String.safeVoiceCallStreamText(): String {
     return sanitizeLuluVisibleExpression(speakablePrefix).trim()
 }
 
+private val INTERNAL_STREAM_TAGS: List<String> = listOf(
+    "<companion",
+    "<private",
+    "<lulu",
+    "<runtime",
+)
+
 private val HARD_SPEECH_BOUNDARIES = setOf('。', '！', '？', '.', '!', '?', '…', '~', '～', '\n')
 private val SOFT_SPEECH_BOUNDARIES = setOf('，', ',', '；', ';')
 private const val MIN_SOFT_SEGMENT_CHARACTERS = 18
