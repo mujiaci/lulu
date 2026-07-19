@@ -78,37 +78,48 @@ object StudyRules {
     )
 
     val levels = listOf(
-        StudyLevel(1, 80, "启程", StudyReward(singleDrawTickets = 1, title = "单抽券 x1")),
-        StudyLevel(2, 200, "稳定", StudyReward(singleDrawTickets = 2, title = "单抽券 x2")),
+        StudyLevel(1, 80, "启程", StudyReward(kudos = 100, title = "夸夸值 100")),
+        StudyLevel(2, 200, "稳定", StudyReward(kudos = 200, title = "夸夸值 200")),
         StudyLevel(3, 400, "微光", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
-        StudyLevel(4, 800, "靠近", StudyReward(douyinFragments = 1, title = "抖音时长券20分钟 x1")),
-        StudyLevel(5, 1_500, "热望", StudyReward(singleDrawTickets = 2, title = "单抽券 x2")),
-        StudyLevel(6, 2_500, "长跑", StudyReward(theaterFragments = 1, title = "剧场碎片 x1")),
-        StudyLevel(7, 4_000, "星火", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
-        StudyLevel(8, 6_500, "破晓", StudyReward(gameFragments = 1, title = "游戏畅玩券120分钟 x1")),
-        StudyLevel(9, 10_000, "执灯", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
-        StudyLevel(10, 15_000, "织梦者", StudyReward(videoFragments = 1, title = "视频解锁卡 x1 + 称号「织梦者」")),
-        StudyLevel(11, 22_000, "星桥", StudyReward(theaterFragments = 3, title = "剧场碎片 x3")),
-        StudyLevel(12, 32_000, "远航", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
-        StudyLevel(13, 45_000, "回响", StudyReward(videoFragments = 2, title = "视频解锁卡 x2")),
-        StudyLevel(14, 60_000, "满愿", StudyReward(title = "任意完整画卷一套")),
-        StudyLevel(15, 80_000, "星穹彼岸", StudyReward(title = "称号「星穹彼岸」")),
+        StudyLevel(4, 800, "靠近", StudyReward(kudos = 300, title = "夸夸值 300")),
+        StudyLevel(5, 1_500, "热望", StudyReward(kudos = 500, tenDrawTickets = 1, title = "夸夸值 500 + 十连抽券 x1")),
+        StudyLevel(6, 2_500, "长跑", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyLevel(7, 4_000, "星火", StudyReward(kudos = 600, tenDrawTickets = 1, title = "夸夸值 600 + 十连抽券 x1")),
+        StudyLevel(8, 6_500, "破晓", StudyReward(kudos = 800, title = "夸夸值 800")),
+        StudyLevel(9, 10_000, "执灯", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
+        StudyLevel(10, 15_000, "织梦者", StudyReward(kudos = 1_000, tenDrawTickets = 1, title = "夸夸值 1000 + 十连抽券 x1")),
+        StudyLevel(11, 22_000, "星桥", StudyReward(kudos = 1_200, tenDrawTickets = 1, title = "夸夸值 1200 + 十连抽券 x1")),
+        StudyLevel(12, 32_000, "远航", StudyReward(kudos = 1_500, tenDrawTickets = 2, title = "夸夸值 1500 + 十连抽券 x2")),
+        StudyLevel(13, 45_000, "回响", StudyReward(kudos = 1_800, tenDrawTickets = 2, title = "夸夸值 1800 + 十连抽券 x2")),
+        StudyLevel(14, 60_000, "满愿", StudyReward(kudos = 2_000, tenDrawTickets = 3, title = "夸夸值 2000 + 十连抽券 x3")),
+        StudyLevel(15, 80_000, "星穹彼岸", StudyReward(kudos = 3_000, tenDrawTickets = 5, title = "夸夸值 3000 + 十连抽券 x5")),
     )
 
     val achievements = listOf(
-        StudyAchievement("first_companion", "初识陪伴", "累计完成10个番茄钟", StudyReward(singleDrawTickets = 1, title = "单抽券 x1")),
         StudyAchievement("warm_start", "热身完成", "累计完成3个番茄钟", StudyReward(kudos = 50, title = "夸夸值 50")),
-        StudyAchievement("todo_slayer", "清单杀手", "累计完成30项待办", StudyReward(kudos = 100, title = "夸夸值 100")),
-        StudyAchievement("task_spark", "清单起势", "累计完成10项待办", StudyReward(singleDrawTickets = 1, title = "单抽券 x1")),
+        StudyAchievement("first_companion", "初识陪伴", "累计完成10个番茄钟", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyAchievement("pomodoro_20", "渐入佳境", "累计完成20个番茄钟", StudyReward(kudos = 200, title = "夸夸值 200")),
+        StudyAchievement("pomodoro_50", "专注成林", "累计完成50个番茄钟", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
+        StudyAchievement("pomodoro_100", "百次同行", "累计完成100个番茄钟", StudyReward(kudos = 1_000, tenDrawTickets = 3, title = "夸夸值 1000 + 十连抽券 x3")),
+        StudyAchievement("task_spark", "清单起势", "累计完成10项待办", StudyReward(kudos = 100, title = "夸夸值 100")),
+        StudyAchievement("todo_slayer", "清单杀手", "累计完成30项待办", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyAchievement("tasks_50", "步步兑现", "累计完成50项待办", StudyReward(kudos = 500, title = "夸夸值 500")),
+        StudyAchievement("tasks_100", "百事皆成", "累计完成100项待办", StudyReward(tenDrawTickets = 3, title = "十连抽券 x3")),
         StudyAchievement("perfect_3", "连续全清3天", "连续3天待办全清", StudyReward(kudos = 100, title = "夸夸值 100")),
         StudyAchievement("perfect_7", "连续全清7天", "连续7天待办全清", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyAchievement("perfect_14", "两周不负", "连续14天待办全清", StudyReward(kudos = 800, tenDrawTickets = 2, title = "夸夸值 800 + 十连抽券 x2")),
+        StudyAchievement("perfect_30", "一月成章", "连续30天待办全清", StudyReward(tenDrawTickets = 5, title = "十连抽券 x5")),
         StudyAchievement("deep_work_10h", "坐稳书桌", "累计学习时长10小时", StudyReward(kudos = 100, title = "夸夸值 100")),
-        StudyAchievement("time_traveler", "时光旅人", "累计学习时长50小时", StudyReward(kudos = 200, title = "夸夸值 200")),
-        StudyAchievement("first_outfit", "第一画卷", "解锁第一套普通画卷", StudyReward(douyinFragments = 1, title = "抖音时长券20分钟 x1")),
-        StudyAchievement("outfit_collector", "画卷收藏家", "解锁任意3套普通画卷", StudyReward(theaterFragments = 2, title = "剧场碎片 x2")),
-        StudyAchievement("theater_open", "剧场开幕", "攒够一次小剧场章节兑换", StudyReward(singleDrawTickets = 2, title = "单抽券 x2")),
-        StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 80, title = "夸夸值 80")),
-        StudyAchievement("epic_touch", "金光亮起", "获得第一枚金色碎片", StudyReward(singleDrawTickets = 1, kudos = 80, title = "单抽券 x1 + 夸夸值 80")),
+        StudyAchievement("time_traveler", "时光旅人", "累计学习时长50小时", StudyReward(kudos = 300, title = "夸夸值 300")),
+        StudyAchievement("study_100h", "百小时灯火", "累计学习时长100小时", StudyReward(kudos = 1_000, tenDrawTickets = 2, title = "夸夸值 1000 + 十连抽券 x2")),
+        StudyAchievement("study_200h", "长夜有光", "累计学习时长200小时", StudyReward(tenDrawTickets = 5, title = "十连抽券 x5")),
+        StudyAchievement("first_outfit", "第一画卷", "解锁第一套普通画卷", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyAchievement("outfit_collector", "画卷收藏家", "解锁任意3套普通画卷", StudyReward(kudos = 500, title = "夸夸值 500")),
+        StudyAchievement("outfits_5", "衣香成册", "解锁任意5套普通画卷", StudyReward(tenDrawTickets = 2, title = "十连抽券 x2")),
+        StudyAchievement("outfits_10", "十卷珍藏", "解锁任意10套普通画卷", StudyReward(kudos = 1_500, tenDrawTickets = 3, title = "夸夸值 1500 + 十连抽券 x3")),
+        StudyAchievement("theater_open", "剧场开幕", "攒够一次小剧场章节兑换", StudyReward(tenDrawTickets = 1, title = "十连抽券 x1")),
+        StudyAchievement("lucky_drawer", "好运初现", "累计获得20个抽卡碎片", StudyReward(kudos = 100, title = "夸夸值 100")),
+        StudyAchievement("epic_touch", "金光亮起", "获得第一枚金色碎片", StudyReward(tenDrawTickets = 1, kudos = 100, title = "十连抽券 x1 + 夸夸值 100")),
         StudyAchievement("mcdonalds_arrival", "第一支视频", "首次解锁视频奖励", StudyReward(kudos = 300, title = "夸夸值 300")),
     )
 
@@ -649,18 +660,10 @@ object StudyRules {
     fun claimLevelReward(state: StudyState, level: Int): StudyActionResult {
         val item = levels.firstOrNull { it.level == level } ?: return StudyActionResult(state)
         if (state.wallet.totalKudosEarned < item.threshold || level in state.claimedLevelRewards) return StudyActionResult(state)
-        val refreshed = when (level) {
-            14 -> state.inventory.unlockFirstIncompleteOutfit()
-            else -> state.inventory.addReward(item.reward)
-        }.refreshUnlockStats()
         return StudyActionResult(
             state = state.copy(
                 wallet = state.wallet.add(item.reward),
-                inventory = refreshed.first,
-                stats = state.stats.copy(
-                    unlockedOutfitSets = refreshed.second.first,
-                    unlockedTheaters = state.stats.unlockedTheaters,
-                ),
+                inventory = state.inventory.addReward(item.reward),
                 claimedLevelRewards = state.claimedLevelRewards + level,
                 recentEvents = state.recentEvents.addEvent(StudyEventType.Level, "等级奖励", "Lv$level ${item.reward.title}"),
             ),
@@ -692,15 +695,26 @@ object StudyRules {
         return achievements.filter { achievement ->
             achievement.id !in state.claimedAchievementIds && when (achievement.id) {
                 "first_companion" -> state.stats.totalPomodoros >= 10
+                "pomodoro_20" -> state.stats.totalPomodoros >= 20
+                "pomodoro_50" -> state.stats.totalPomodoros >= 50
+                "pomodoro_100" -> state.stats.totalPomodoros >= 100
                 "warm_start" -> state.stats.totalPomodoros >= 3
                 "todo_slayer" -> state.stats.totalTasksCompleted >= 30
                 "task_spark" -> state.stats.totalTasksCompleted >= 10
+                "tasks_50" -> state.stats.totalTasksCompleted >= 50
+                "tasks_100" -> state.stats.totalTasksCompleted >= 100
                 "perfect_3" -> state.longestPerfectStreak >= 3
                 "perfect_7" -> state.longestPerfectStreak >= 7
+                "perfect_14" -> state.longestPerfectStreak >= 14
+                "perfect_30" -> state.longestPerfectStreak >= 30
                 "deep_work_10h" -> state.stats.totalStudyMinutes >= 600
                 "time_traveler" -> state.stats.totalStudyMinutes >= 3_000
+                "study_100h" -> state.stats.totalStudyMinutes >= 6_000
+                "study_200h" -> state.stats.totalStudyMinutes >= 12_000
                 "first_outfit" -> state.stats.unlockedOutfitSets >= 1
                 "outfit_collector" -> state.stats.unlockedOutfitSets >= 3
+                "outfits_5" -> state.stats.unlockedOutfitSets >= 5
+                "outfits_10" -> state.stats.unlockedOutfitSets >= 10
                 "theater_open" -> state.inventory.theaterFragments >= 1 || state.stats.unlockedTheaters >= 1
                 "lucky_drawer" -> state.inventory.normalFragments.values.sum() +
                     state.inventory.universalNormalFragments +

@@ -141,21 +141,24 @@ class ExamStudyPlanTest {
     }
 
     @Test
-    fun unfinishedNewChaptersDoNotUnlockCombinedPracticeEarly() {
-        val beforeClosure = listOf(
-            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 18)),
-            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 19)),
-            ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 20)),
-        ).flatMap { it?.tasks.orEmpty() }.joinToString("\n") { it.title }
-        val gatedPractice = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 21))
+    fun completedChaptersSixAndSevenNeverReturnToCourseTasks() {
+        val afterCompletion = (19..25)
+            .mapNotNull { day -> ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, day)) }
+            .flatMap { it.tasks }
+            .joinToString("\n") { it.title }
+        val julyTwenty = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 20))
             ?.tasks.orEmpty().joinToString("\n") { it.title }
+        val julyTwentyFour = ExamStudyPlan.todayPlan(LocalDate.of(2026, 7, 24))
+            ?.tasks.orEmpty().joinToString("\n") { it.title }
+        val week = ExamStudyPlan.julyWeeks.single { it.id == "2026-07-w4" }
+            .tasks.joinToString("\n")
 
-        assertTrue(beforeClosure.contains("第 5 章课程已完成"))
-        assertTrue(beforeClosure.contains("第 6-7 章"))
-        assertFalse(beforeClosure.contains("第 8 章"))
-        assertFalse(beforeClosure.contains("第 3-7 章合并题"))
-        assertTrue(gatedPractice.contains("仅在刑法第 7 章课程确认听完后"))
-        assertTrue(gatedPractice.contains("第 3-7 章合并题"))
+        assertFalse(afterCompletion.contains("继续第 6-7 章课程"))
+        assertFalse(afterCompletion.contains("第 6-7 章续课"))
+        assertTrue(julyTwenty.contains("第 3-7 章合并题"))
+        assertTrue(julyTwentyFour.contains("正式连接框架"))
+        assertTrue(week.contains("第 6-7 章课程已全部完成"))
+        assertFalse(week.contains("剩余 6.5 小时"))
     }
 
     @Test

@@ -2,11 +2,16 @@ package me.rerere.rikkahub.data.voicecall
 
 import android.Manifest
 import android.app.PendingIntent
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.RingtoneManager
 import android.net.ConnectivityManager
+import android.net.Uri
 import android.net.NetworkCapabilities
 import android.os.Build
 import androidx.core.app.NotificationCompat
@@ -125,10 +130,16 @@ object ProactiveCallManager {
             ringingIntent,
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
-        val builder = NotificationCompat.Builder(appContext, INCOMING_VOICE_CALL_NOTIFICATION_CHANNEL_ID)
+        val ringtoneUri = setting.ringtoneUri
+            ?.takeIf(String::isNotBlank)
+            ?.let(Uri::parse)
+            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+        val channelId = ensureIncomingCallChannel(appContext, ringtoneUri)
+        val builder = NotificationCompat.Builder(appContext, channelId)
             .setSmallIcon(R.drawable.small_icon)
             .setContentTitle(assistantName)
             .setContentText("语音来电")
+            .setSound(ringtoneUri)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
@@ -240,6 +251,25 @@ object ProactiveCallManager {
             .remove(KEY_OUTCOME)
             .remove(KEY_OUTCOME_AT)
             .apply()
+    }
+
+    private fun ensureIncomingCallChannel(context: Context, ringtoneUri: Uri): String {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return INCOMING_VOICE_CALL_NOTIFICATION_CHANNEL_ID
+        val channelId = "${INCOMING_VOICE_CALL_NOTIFICATION_CHANNEL_ID}_${ringtoneUri.toString().hashCode().toString().replace("-", "n")}"
+        val manager = context.getSystemService(NotificationManager::class.java)
+        val audioAttributes = AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
+        manager.createNotificationChannel(
+            NotificationChannel(channelId, "角色来电", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "角色主动来电通知"
+                lockscreenVisibility = android.app.Notification.VISIBILITY_PRIVATE
+                setSound(ringtoneUri, audioAttributes)
+                enableVibration(true)
+            },
+        )
+        return channelId
     }
 
     private fun isOnWifi(context: Context): Boolean {

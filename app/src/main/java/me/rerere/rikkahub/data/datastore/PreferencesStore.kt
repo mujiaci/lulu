@@ -165,6 +165,7 @@ class SettingsStore(
 
         // 考研番茄钟
         val POMODORO_VOICE_ENABLED = booleanPreferencesKey("pomodoro_voice_enabled")
+        val POMODORO_THEME = stringPreferencesKey("pomodoro_theme")
 
     }
 
@@ -247,6 +248,9 @@ class SettingsStore(
                 developerMode = preferences[DEVELOPER_MODE] == true,
                 displaySetting = JsonInstant.decodeFromString(preferences[DISPLAY_SETTING] ?: "{}"),
                 pomodoroVoiceEnabled = preferences[POMODORO_VOICE_ENABLED] != false,
+                pomodoroTheme = preferences[POMODORO_THEME]
+                    ?.let { stored -> runCatching { PomodoroTheme.valueOf(stored) }.getOrNull() }
+                    ?: PomodoroTheme.CLOUD,
                 searchServices = preferences[SEARCH_SERVICES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: listOf(SearchServiceOptions.DEFAULT),
@@ -472,6 +476,7 @@ class SettingsStore(
             preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
             preferences[MEMORY_EMBEDDING_CONFIG] = JsonInstant.encodeToString(settings.memoryEmbeddingConfig)
             preferences[POMODORO_VOICE_ENABLED] = settings.pomodoroVoiceEnabled
+            preferences[POMODORO_THEME] = settings.pomodoroTheme.name
         }
     }
 

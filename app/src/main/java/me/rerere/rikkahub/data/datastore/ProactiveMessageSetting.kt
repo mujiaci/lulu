@@ -24,6 +24,7 @@ data class ProactiveCallSetting(
     val quietEndHour: Int = 8,
     val allowMobileData: Boolean = true,
     val fullScreenWhenAllowed: Boolean = true,
+    val ringtoneUri: String? = null,
 )
 
 @Serializable

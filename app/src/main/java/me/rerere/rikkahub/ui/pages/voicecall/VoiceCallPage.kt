@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.ui.pages.voicecall
 
 import android.media.RingtoneManager
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -78,11 +79,9 @@ import me.rerere.hugeicons.stroke.StopCircle
 import me.rerere.hugeicons.stroke.TransactionHistory
 import me.rerere.hugeicons.stroke.VolumeHigh
 import me.rerere.rikkahub.Screen
-import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getAssistantTTSProvider
 import me.rerere.rikkahub.data.datastore.getAssistantById
 import me.rerere.rikkahub.data.model.Avatar
-import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.voicecall.ProactiveCallManager
 import me.rerere.rikkahub.data.voicecall.VoiceCallLine
 import me.rerere.rikkahub.data.voicecall.VoiceCallRepository
@@ -131,17 +130,8 @@ fun VoiceCallPage(
     val navController = LocalNavController.current
     val settings = LocalSettings.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    val incomingRingtone = remember(context) {
-        runCatching {
-            RingtoneManager.getRingtone(
-                context.applicationContext,
-                RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE),
-            )
-        }.getOrNull()
-    }
     val repository = remember(context) { VoiceCallRepository(context.applicationContext) }
     val chatService: ChatService = koinInject()
-    val settingsStore: SettingsStore = koinInject()
     val tts = LocalTTSState.current
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
@@ -149,6 +139,15 @@ fun VoiceCallPage(
     val scope = rememberCoroutineScope()
     val assistant = remember(settings, assistantId) {
         runCatching { settings.getAssistantById(Uuid.parse(assistantId)) }.getOrNull()
+    }
+    val incomingRingtone = remember(context, assistant?.proactiveCallSetting?.ringtoneUri) {
+        runCatching {
+            val uri = assistant?.proactiveCallSetting?.ringtoneUri
+                ?.takeIf(String::isNotBlank)
+                ?.let(Uri::parse)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
+            RingtoneManager.getRingtone(context.applicationContext, uri)
+        }.getOrNull()
     }
     val ttsProvider = remember(settings, assistant) {
         assistant?.let { settings.getAssistantTTSProvider(it.id) }
@@ -177,34 +176,6 @@ fun VoiceCallPage(
     var userTurnSubmitting by remember { mutableStateOf(false) }
     val latestSession by rememberUpdatedState(session)
     val latestStage by rememberUpdatedState(stage)
-
-    fun updateProactiveCallEnabled(enabled: Boolean) {
-        val targetAssistant = assistant ?: return
-        scope.launch {
-            val nextSettings = settings.copy(
-                proactiveMessageSetting = if (enabled) {
-                    settings.proactiveMessageSetting.copy(enabled = true)
-                } else {
-                    settings.proactiveMessageSetting
-                },
-                assistants = settings.assistants.map { item ->
-                    if (item.id == targetAssistant.id) {
-                        item.copy(proactiveCallSetting = item.proactiveCallSetting.copy(enabled = enabled))
-                    } else {
-                        item
-                    }
-                },
-            )
-            settingsStore.update(nextSettings)
-            if (enabled) {
-                ProactiveMessageService.scheduleNext(
-                    context = context,
-                    settings = nextSettings,
-                    assistantId = targetAssistant.id,
-                )
-            }
-        }
-    }
 
     fun saveLine(line: VoiceCallLine, speak: Boolean = false) {
         val current = session ?: return
@@ -606,11 +577,34 @@ fun VoiceCallPage(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Spacer(Modifier.height(4.dp))
-            UIAvatar(
-                name = assistantName,
-                value = assistant?.avatar ?: Avatar.Dummy,
-                modifier = Modifier.size(128.dp),
-            )
+            Box(
+                modifier = Modifier.size(160.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                listOf(Color(0x665C7FD8), Color(0x225C7FD8), Color.Transparent),
+                            ),
+                        ),
+                )
+                Surface(
+                    modifier = Modifier.size(144.dp),
+                    shape = CircleShape,
+                    color = Color.White.copy(alpha = 0.09f),
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        UIAvatar(
+                            name = assistantName,
+                            value = assistant?.avatar ?: Avatar.Dummy,
+                            modifier = Modifier.size(134.dp).clip(CircleShape),
+                        )
+                    }
+                }
+            }
             Text(
                 text = assistantName,
                 style = MaterialTheme.typography.displaySmall,
@@ -631,35 +625,6 @@ fun VoiceCallPage(
                 style = MaterialTheme.typography.labelMedium,
                 color = Color(0xFFB8C7D9),
             )
-            if (!isHistoryOnly && stage != CallStage.Ringing && assistant != null) {
-                Surface(
-                    shape = CircleShape,
-                    color = Color.White.copy(alpha = 0.08f),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Column(modifier = Modifier.weight(1f, fill = false)) {
-                            Text("角色主动来电", color = Color(0xFFEAF0FB), style = MaterialTheme.typography.labelLarge)
-                            Text(
-                                if (assistant.proactiveCallSetting.enabled) "已开启 · 可在合适时主动联系" else "已关闭",
-                                color = Color(0xFF9EADC3),
-                                style = MaterialTheme.typography.labelSmall,
-                            )
-                        }
-                        Switch(
-                            checked = assistant.proactiveCallSetting.enabled,
-                            onCheckedChange = ::updateProactiveCallEnabled,
-                        )
-                        TextButton(onClick = { navController.navigate(Screen.SettingProactiveMessage) }) {
-                            Text("设置")
-                        }
-                    }
-                }
-            }
-
             if (stage == CallStage.Ringing) {
                 Surface(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
@@ -686,19 +651,25 @@ fun VoiceCallPage(
                         }
                     }
                 }
+            } else if (stage == CallStage.Idle && !isHistoryOnly) {
+                IdleCallPanel(
+                    assistantName = assistantName,
+                    onStartCall = { startCall() },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
+                )
             } else {
                 CallContentCard(
-                stage = stage,
-                isHistoryOnly = isHistoryOnly,
-                assistantName = assistantName,
-                session = currentSession,
-                onStartCall = { startCall() },
-                onReplay = { line ->
-                    line.text.cleanRoleLineForUser().extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
-                        scope.launch { speakInSegments(tts, it, ttsProvider) }
-                    }
-                },
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                    stage = stage,
+                    isHistoryOnly = isHistoryOnly,
+                    assistantName = assistantName,
+                    session = currentSession,
+                    onStartCall = { startCall() },
+                    onReplay = { line ->
+                        line.text.cleanRoleLineForUser().extractSpeakableRoleText().takeIf { it.isNotBlank() }?.let {
+                            scope.launch { speakInSegments(tts, it, ttsProvider) }
+                        }
+                    },
+                    modifier = Modifier.weight(1f).fillMaxWidth(),
                 )
             }
 
@@ -907,25 +878,30 @@ private fun CallContentCard(
 private fun IdleCallPanel(
     assistantName: String,
     onStartCall: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
+        modifier = modifier.padding(horizontal = 24.dp, vertical = 18.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
-            HugeIcons.Call02,
-            contentDescription = null,
-            modifier = Modifier.size(54.dp),
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Spacer(Modifier.height(14.dp))
-        Text("准备呼叫 $assistantName", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(18.dp))
-        FilledTonalButton(onClick = onStartCall) {
-            Icon(HugeIcons.Call02, contentDescription = null)
-            Text("开始通话")
+        Text("随时都可以聊一会儿", style = MaterialTheme.typography.titleMedium, color = Color(0xFFDCE6F7))
+        Spacer(Modifier.height(8.dp))
+        Text("呼叫 $assistantName", style = MaterialTheme.typography.bodyMedium, color = Color(0xFF91A3BC))
+        Spacer(Modifier.height(28.dp))
+        Surface(
+            modifier = Modifier.size(96.dp).clickable(onClick = onStartCall),
+            shape = CircleShape,
+            color = Color(0xFFDAE4FF),
+            contentColor = Color(0xFF263B67),
+            shadowElevation = 12.dp,
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(HugeIcons.Call02, contentDescription = "开始通话", modifier = Modifier.size(42.dp))
+            }
         }
+        Spacer(Modifier.height(14.dp))
+        Text("开始通话", style = MaterialTheme.typography.labelLarge, color = Color(0xFFCFD9EB))
     }
 }
 

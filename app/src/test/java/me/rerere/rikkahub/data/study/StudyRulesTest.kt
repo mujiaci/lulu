@@ -958,4 +958,43 @@ class StudyRulesTest {
     private companion object {
         val TEST_ZONE: ZoneId = ZoneId.of("Asia/Shanghai")
     }
+
+    @Test
+    fun `level rewards grant only kudos and draw tickets`() {
+        assertTrue(StudyRules.levels.all { level ->
+            val reward = level.reward
+            reward.douyinFragments == 0 &&
+                reward.theaterFragments == 0 &&
+                reward.gameFragments == 0 &&
+                reward.videoFragments == 0 &&
+                reward.animeFragments == 0 &&
+                reward.universalNormalFragments == 0 &&
+                reward.universalRareFragments == 0 &&
+                reward.universalEpicFragments == 0
+        })
+        assertTrue(StudyRules.levels.count { it.reward.tenDrawTickets > 0 } >= 10)
+        assertTrue(StudyRules.levels.count { it.reward.kudos > 0 } >= 10)
+    }
+
+    @Test
+    fun `expanded milestones unlock new achievements`() {
+        val state = StudyState(
+            stats = StudyStats(
+                totalPomodoros = 100,
+                totalTasksCompleted = 100,
+                totalStudyMinutes = 12_000,
+                unlockedOutfitSets = 10,
+            ),
+            longestPerfectStreak = 30,
+        )
+
+        val ids = StudyRules.claimableAchievements(state).map { it.id }.toSet()
+
+        assertTrue("pomodoro_100" in ids)
+        assertTrue("tasks_100" in ids)
+        assertTrue("perfect_30" in ids)
+        assertTrue("study_200h" in ids)
+        assertTrue("outfits_10" in ids)
+    }
+
 }

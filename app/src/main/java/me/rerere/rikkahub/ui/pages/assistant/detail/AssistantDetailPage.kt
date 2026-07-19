@@ -3,6 +3,7 @@ package me.rerere.rikkahub.ui.pages.assistant.detail
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.BookOpen01
 import me.rerere.hugeicons.stroke.ArrowRight01
+import me.rerere.hugeicons.stroke.Call02
 import me.rerere.hugeicons.stroke.Code
 import me.rerere.hugeicons.stroke.Message02
 import me.rerere.hugeicons.stroke.Settings03
@@ -97,6 +98,15 @@ fun AssistantDetailPage(id: String) {
                         leadingContent = { Icon(HugeIcons.Settings03, null) },
                         supportingContent = { Text(stringResource(R.string.assistant_detail_basic_desc)) },
                         headlineContent = { Text(stringResource(R.string.assistant_page_tab_basic)) },
+                        trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.AssistantCallSettings(id)) },
+                        leadingContent = { Icon(HugeIcons.Call02, null) },
+                        supportingContent = {
+                            Text(if (assistant.proactiveCallSetting.enabled) "已开启 · 频率、时段与铃声" else "关闭")
+                        },
+                        headlineContent = { Text("主动来电") },
                         trailingContent = { Icon(HugeIcons.ArrowRight01, null) },
                     )
                     item(

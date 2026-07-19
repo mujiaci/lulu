@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -681,7 +682,12 @@ fun StudyPomodoroFocusPage(
     ) {
         TextButton(
             onClick = { showThemePicker = true },
-            modifier = Modifier.align(Alignment.TopEnd).padding(top = 12.dp, end = 12.dp),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 52.dp, end = 16.dp)
+                .height(48.dp)
+                .widthIn(min = 92.dp),
+            contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp),
             colors = ButtonDefaults.textButtonColors(contentColor = focusPalette.primaryText),
         ) {
             Text("配色", fontWeight = FontWeight.SemiBold)
@@ -2821,7 +2827,9 @@ private fun AchievementCard(state: StudyState, onClaim: (String) -> Unit) {
     val claimable = StudyRules.claimableAchievements(state).map { it.id }.toSet()
     StudyCard {
         Text("成就墙", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        StudyRules.achievements.forEach { achievement ->
+        StudyRules.achievements
+            .sortedBy { it.id in state.claimedAchievementIds }
+            .forEach { achievement ->
             AchievementRow(
                 achievement = achievement,
                 claimed = achievement.id in state.claimedAchievementIds,

@@ -1,19 +1,9 @@
 package me.rerere.rikkahub.ui.pages.setting
 
-import android.app.NotificationManager
-import android.content.Intent
-import android.net.Uri
-import android.os.Build
-import android.provider.Settings
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -25,7 +15,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -34,43 +23,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.rikkahub.ui.components.nav.BackButton
 import me.rerere.rikkahub.ui.components.ui.CardGroup
-import me.rerere.rikkahub.ui.context.LocalNavController
-import me.rerere.rikkahub.data.datastore.ProactiveCallFrequency
-import me.rerere.rikkahub.data.datastore.ProactiveCallSetting
-import me.rerere.rikkahub.data.datastore.getCurrentAssistant
-import me.rerere.rikkahub.data.repository.ConversationRepository
 import me.rerere.rikkahub.data.service.ProactiveMessageService
-import me.rerere.rikkahub.data.voicecall.ProactiveCallManager
 import me.rerere.rikkahub.data.service.ProactiveMessageWorker
 import org.koin.compose.koinInject
-import kotlinx.coroutines.launch
-import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
     val context = LocalContext.current
-    val navController = LocalNavController.current
     val settings by vm.settings.collectAsStateWithLifecycle()
-    val currentAssistant = settings.getCurrentAssistant()
-    val callSetting = currentAssistant.proactiveCallSetting
-    val conversationRepository = koinInject<ConversationRepository>()
-    val scope = rememberCoroutineScope()
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
-
-    fun updateCallSetting(next: ProactiveCallSetting) {
-        vm.updateSettings(
-            settings.copy(
-                assistants = settings.assistants.map { assistant ->
-                    if (assistant.id == currentAssistant.id) {
-                        assistant.copy(proactiveCallSetting = next)
-                    } else {
-                        assistant
-                    }
-                },
-            ),
-        )
-    }
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -133,189 +95,6 @@ fun SettingProactiveMessagePage(vm: SettingVM = koinInject()) {
                                     Text("等待调度中...")
                                 }
                             }
-                        )
-                    }
-                }
-            }
-
-            item {
-                CardGroup {
-                    item(
-                        headlineContent = { Text("角色主动来电") },
-                        supportingContent = {
-                            Text("角色先按人设和最近上下文决定是否联系，再按下方频率选择电话或消息。移动数据默认可用。")
-                        },
-                        trailingContent = {
-                            Switch(
-                                checked = callSetting.enabled,
-                                onCheckedChange = { enabled ->
-                                    val proactive = if (enabled) {
-                                        settings.proactiveMessageSetting.copy(enabled = true)
-                                    } else {
-                                        settings.proactiveMessageSetting
-                                    }
-                                    vm.updateSettings(
-                                        settings.copy(
-                                            proactiveMessageSetting = proactive,
-                                            assistants = settings.assistants.map { assistant ->
-                                                if (assistant.id == currentAssistant.id) {
-                                                    assistant.copy(
-                                                        proactiveCallSetting = callSetting.copy(enabled = enabled),
-                                                    )
-                                                } else {
-                                                    assistant
-                                                }
-                                            },
-                                        ),
-                                    )
-                                    if (enabled) {
-                                        ProactiveMessageService.scheduleNext(context, proactive)
-                                    }
-                                },
-                            )
-                        },
-                    )
-                    if (callSetting.enabled) {
-                        item(
-                            headlineContent = { Text("来电频率") },
-                            supportingContent = {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                ) {
-                                    listOf(
-                                        ProactiveCallFrequency.OCCASIONAL to "偶尔",
-                                        ProactiveCallFrequency.NORMAL to "普通",
-                                        ProactiveCallFrequency.FREQUENT to "经常",
-                                    ).forEach { (frequency, label) ->
-                                        FilterChip(
-                                            selected = callSetting.frequency == frequency,
-                                            onClick = { updateCallSetting(callSetting.copy(frequency = frequency)) },
-                                            label = { Text(label) },
-                                        )
-                                    }
-                                }
-                            },
-                        )
-                        item(
-                            headlineContent = { Text("允许移动数据") },
-                            supportingContent = { Text("关闭后只有连接 Wi-Fi 时才会发起来电。") },
-                            trailingContent = {
-                                Switch(
-                                    checked = callSetting.allowMobileData,
-                                    onCheckedChange = {
-                                        updateCallSetting(callSetting.copy(allowMobileData = it))
-                                    },
-                                )
-                            },
-                        )
-                        item(
-                            headlineContent = { Text("锁屏全屏来电") },
-                            supportingContent = { Text("系统允许时覆盖锁屏；解锁使用手机时通常显示悬浮来电通知。") },
-                            trailingContent = {
-                                Switch(
-                                    checked = callSetting.fullScreenWhenAllowed,
-                                    onCheckedChange = {
-                                        updateCallSetting(callSetting.copy(fullScreenWhenAllowed = it))
-                                    },
-                                )
-                            },
-                        )
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-                            item(
-                                headlineContent = { Text("全屏来电系统权限") },
-                                supportingContent = {
-                                    val manager = context.getSystemService(NotificationManager::class.java)
-                                    Text(
-                                        if (manager.canUseFullScreenIntent()) {
-                                            "✅ 系统已允许锁屏全屏来电"
-                                        } else {
-                                            "⚠️ 系统尚未允许；仍会使用普通来电通知"
-                                        },
-                                    )
-                                },
-                                onClick = {
-                                    runCatching {
-                                        context.startActivity(
-                                            Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
-                                                data = Uri.parse("package:${context.packageName}")
-                                            },
-                                        )
-                                    }
-                                },
-                            )
-                        }
-                        item(
-                            headlineContent = { Text("最短来电间隔（小时）") },
-                            supportingContent = {
-                                OutlinedTextField(
-                                    value = callSetting.minIntervalHours.toString(),
-                                    onValueChange = { value ->
-                                        value.toIntOrNull()?.takeIf { it in 1..168 }?.let {
-                                            updateCallSetting(callSetting.copy(minIntervalHours = it))
-                                        }
-                                    },
-                                    singleLine = true,
-                                    modifier = Modifier.padding(top = 8.dp),
-                                )
-                            },
-                        )
-                        item(
-                            headlineContent = { Text("安静时段") },
-                            supportingContent = {
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    OutlinedTextField(
-                                        value = callSetting.quietStartHour.toString(),
-                                        onValueChange = { value ->
-                                            value.toIntOrNull()?.takeIf { it in 0..23 }?.let {
-                                                updateCallSetting(callSetting.copy(quietStartHour = it))
-                                            }
-                                        },
-                                        label = { Text("开始小时") },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                    OutlinedTextField(
-                                        value = callSetting.quietEndHour.toString(),
-                                        onValueChange = { value ->
-                                            value.toIntOrNull()?.takeIf { it in 0..23 }?.let {
-                                                updateCallSetting(callSetting.copy(quietEndHour = it))
-                                            }
-                                        },
-                                        label = { Text("结束小时") },
-                                        singleLine = true,
-                                        modifier = Modifier.weight(1f),
-                                    )
-                                }
-                            },
-                        )
-                        item(
-                            headlineContent = { Text("测试来电") },
-                            supportingContent = { Text("立即用当前角色检查来电页面、通知和接听流程。") },
-                            trailingContent = {
-                                Button(
-                                    onClick = {
-                                        scope.launch {
-                                            val conversationId = conversationRepository
-                                                .getRecentConversations(currentAssistant.id, limit = 1)
-                                                .firstOrNull()
-                                                ?.id
-                                                ?: Uuid.random()
-                                            ProactiveCallManager.offerIncomingCall(
-                                                context = context,
-                                                assistantId = currentAssistant.id.toString(),
-                                                assistantName = currentAssistant.name.ifBlank { "当前角色" },
-                                                conversationId = conversationId.toString(),
-                                                reason = "用户在设置页主动触发了一次测试来电。",
-                                                setting = callSetting,
-                                                force = true,
-                                            )
-                                        }
-                                    },
-                                ) {
-                                    Text("现在测试")
-                                }
-                            },
                         )
                     }
                 }
