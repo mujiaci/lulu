@@ -19,14 +19,37 @@ enum class MemoryExtractionDirection {
     RECENT_FIRST,
 }
 
-internal fun buildSelectedConversationBranchId(messageNodes: List<MessageNode>): String {
-    val selectedPath = messageNodes.mapNotNull { node ->
-        runCatching { "${node.id}:${node.currentMessage.id}" }.getOrNull()
-    }.joinToString("|")
+internal fun buildSelectedConversationBranchId(
+    messageNodes: List<MessageNode>,
+    endSequenceInclusive: Int = messageNodes.size,
+): String {
+    val selectedPath = messageNodes
+        .take(endSequenceInclusive.coerceIn(0, messageNodes.size))
+        .mapNotNull { node ->
+            runCatching { "${node.id}:${node.currentMessage.id}" }.getOrNull()
+        }
+        .joinToString("|")
     val digest = MessageDigest.getInstance("SHA-256")
         .digest(selectedPath.toByteArray(Charsets.UTF_8))
         .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     return "selected:${digest.take(24)}"
+}
+
+internal fun firstSelectedBranchMutationSequence(
+    before: List<MessageNode>,
+    after: List<MessageNode>,
+): Int? {
+    val sharedSize = minOf(before.size, after.size)
+    for (index in 0 until sharedSize) {
+        val beforeIdentity = runCatching {
+            before[index].id.toString() to before[index].currentMessage.id.toString()
+        }.getOrNull()
+        val afterIdentity = runCatching {
+            after[index].id.toString() to after[index].currentMessage.id.toString()
+        }.getOrNull()
+        if (beforeIdentity != afterIdentity) return index + 1
+    }
+    return if (before.size != after.size) sharedSize + 1 else null
 }
 
 fun buildAffectiveMemoryExtractionPlan(
