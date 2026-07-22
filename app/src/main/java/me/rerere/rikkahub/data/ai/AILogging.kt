@@ -15,6 +15,10 @@ sealed class AILogging {
         val params: TextGenerationParams,
         val messages: List<UIMessage>,
         val sentMessages: List<UIMessage> = messages,
+        val messageCount: Int = messages.size,
+        val sentMessageCount: Int = sentMessages.size,
+        val source: ApiUsageSource = ApiUsageSource.CHAT,
+        val title: String = "",
         val breakdown: GenerationTokenBreakdown? = null,
         val providerSetting: ProviderSetting,
         val stream: Boolean,
@@ -56,10 +60,14 @@ class AILoggingManager {
     fun getLogs(): StateFlow<List<AILogging>> = logs
 
     fun addLog(log: AILogging) {
-        logs.value = logs.value + log
-        if (logs.value.size > MAX_LOGS) {
-            logs.value = logs.value.drop(1)
+        val privacySafeLog = when (log) {
+            is AILogging.Generation -> log.copy(
+                messages = emptyList(),
+                sentMessages = emptyList(),
+                error = log.error?.let { REDACTED_ERROR },
+            )
         }
+        logs.value = (logs.value + privacySafeLog).takeLast(MAX_LOGS)
     }
 
     fun updateGenerationUsage(id: Uuid, usage: TokenUsage) {
@@ -77,7 +85,7 @@ class AILoggingManager {
             if (log is AILogging.Generation && log.id == id) {
                 log.copy(
                     finishedAtMillis = System.currentTimeMillis(),
-                    error = error,
+                    error = error?.let { REDACTED_ERROR },
                 )
             } else {
                 log
