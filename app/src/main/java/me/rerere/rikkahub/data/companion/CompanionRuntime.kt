@@ -596,6 +596,7 @@ private fun CompanionInteractionTimeline.applyInteractionEvent(
         }
     }
     return when (event.kind) {
+        CompanionInteractionEventKind.LOCAL_HEARTBEAT -> copy(lastHeartbeatAt = event.occurredAt)
         CompanionInteractionEventKind.USER_ACTIVITY -> copy(lastUserActivityAt = event.occurredAt)
         CompanionInteractionEventKind.USER_REPLY -> copy(
             lastUserActivityAt = event.occurredAt,
