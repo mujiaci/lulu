@@ -126,6 +126,9 @@ internal fun AssistantBasicContent(
     var memoryIntervalInput by remember(assistant.memoryExtractionInterval) {
         mutableStateOf(assistant.memoryExtractionInterval.toString())
     }
+    var memoryProtectedRecentInput by remember(assistant.memoryExtractionProtectedRecentCount) {
+        mutableStateOf(assistant.memoryExtractionProtectedRecentCount.toString())
+    }
     val faceReferencePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { vm.setFaceReferenceImage(assistant, it) }
     }
@@ -515,7 +518,7 @@ internal fun AssistantBasicContent(
                 modifier = Modifier.padding(8.dp),
                 label = { Text("记忆总结间隔") },
                 description = {
-                    Text("最近 10 条聊天会保留为当前上下文，不参与总结。可读取的旧聊天达到这个数值时，角色才会整理一次长期记忆。0 表示关闭自动整理。")
+                    Text("批次大小和最近保护区都由这个角色独立设置。只有保护区之外凑够一个完整批次才会整理长期记忆；0 条批次表示关闭自动整理。")
                 },
             ) {
                 Slider(
@@ -546,7 +549,29 @@ internal fun AssistantBasicContent(
                             if (assistant.memoryExtractionInterval <= 0) {
                                 "已关闭自动整理"
                             } else {
-                                "当前：${assistant.memoryExtractionInterval} 条；加上最近保留的 10 条，总聊天达到 ${assistant.memoryExtractionInterval + 10} 条时首次整理。"
+                                "当前批次：${assistant.memoryExtractionInterval} 条；加上最近保护的 ${assistant.memoryExtractionProtectedRecentCount} 条，总聊天达到 ${assistant.memoryExtractionInterval + assistant.memoryExtractionProtectedRecentCount} 条时首次整理。"
+                            },
+                        )
+                    },
+                )
+                OutlinedTextField(
+                    value = memoryProtectedRecentInput,
+                    onValueChange = { value ->
+                        memoryProtectedRecentInput = value
+                        value.toIntOrNull()?.coerceIn(0, 200)?.let { protectedCount ->
+                            onUpdate(assistant.copy(memoryExtractionProtectedRecentCount = protectedCount))
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("最近保留、不参与提取的消息数") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    supportingText = {
+                        Text(
+                            if (assistant.memoryExtractionProtectedRecentCount == 0) {
+                                "不设保护区；完整批次一形成就可以整理。"
+                            } else {
+                                "最近 ${assistant.memoryExtractionProtectedRecentCount} 条保持原文上下文，不进入长期记忆批次。"
                             },
                         )
                     },
