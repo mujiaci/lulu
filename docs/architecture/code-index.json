@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T19:30:53.528562+00:00",
-  "commit": "ee599daf4b353b1e97093ff7d80c8d4fc737f224",
+  "generatedAt": "2026-07-22T19:31:15.131274+00:00",
+  "commit": "21bc4b647d316e709ec4a07d6b8eb415d4caff05",
   "branch": "master",
   "summary": {
     "files": 1098,
-    "lines": 261462,
+    "lines": 261512,
     "symbols": 5294,
     "byModule": {
       "app": 636,
@@ -30027,7 +30027,7 @@
       "path": "app/src/test/java/me/rerere/rikkahub/data/ai/CompanionContextEnvelopeTest.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 103,
+      "lines": 153,
       "package": "me.rerere.rikkahub.data.ai",
       "categories": [
         "AI与上下文"
