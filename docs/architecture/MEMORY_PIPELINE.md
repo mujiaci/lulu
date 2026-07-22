@@ -15,6 +15,7 @@
 | 三态判定 | `classifySemanticMemoryExtraction` | `SUCCESS_WITH_MEMORIES`、`SUCCESS_EMPTY`、`FAILED_RETRYABLE` |
 | 保存 | `MemoryBankService.saveExtractedMemories` | 标准化、按内容去重、写入来源节点和事件/提取时间 |
 | checkpoint 推进 | `MemoryBankService.markExtractionProcessed` | 只在语义成功有记忆或模型明确返回空列表时推进 |
+| 批次生命周期 | `memory_extraction_batch`、`MemoryBankService.begin/complete/failExtractionBatch` | 持久化处理范围、状态、尝试次数、脱敏错误类别、模型、版本、生成记忆 ID 和完成时间；第三次失败进入人工检查 |
 | 后处理 | `MemoryBankService` 与 `CompanionRuntime` | 纠正旧记忆、更新私人印象/关系事件、生成向量并执行维护 |
 
 ## 连续批次规则
@@ -66,9 +67,9 @@
 
 下列内容仍属于后续 P1，不能误认为已经实现：
 
-- 独立的持久化批次表及完整状态枚举；
-- 尝试次数、最后错误、模型、提取版本和生成记忆 ID；
-- App 重启后仍可见的失败重试队列；
+- 将过渡的 `branch_id=selected` 替换成真实、稳定的消息分支标识；
+- 记忆管理页读取批次表并展示 App 重启后仍存在的失败重试队列；
+- 自动执行临时失败重试；
 - JSON 有限格式修复与重试上限；
 - 编辑、删除、切换分支后的精确批次失效；
 - 角色级保护区设置；

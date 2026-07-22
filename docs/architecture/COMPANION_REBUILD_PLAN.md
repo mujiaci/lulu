@@ -39,8 +39,9 @@
 - [x] 批次大小读取角色级 `memoryExtractionInterval`；默认 20，用户可在角色页面调整，0 表示关闭自动提取。
 - [ ] 保护区默认 10 条，并支持角色级调整。
 - [x] 先按用户设置值切分标准连续批次，再读取 checkpoint；不跨批次拼接历史空洞。
-- [ ] 建立独立批次状态：`PENDING`、`PROCESSING`、`SUCCESS_WITH_MEMORIES`、`SUCCESS_EMPTY`、`FAILED_RETRYABLE`、`FAILED_MANUAL_REVIEW`、`INVALIDATED`。
-- [ ] 保存会话/分支、序号范围、消息 ID、时间范围、尝试次数、错误、模型、提取版本和生成记忆 ID。
+- [x] 建立持久化独立批次状态：`PENDING`、`PROCESSING`、`SUCCESS_WITH_MEMORIES`、`SUCCESS_EMPTY`、`FAILED_RETRYABLE`、`FAILED_MANUAL_REVIEW`、`INVALIDATED`。
+- [x] 保存会话、序号范围、消息 ID、时间范围、尝试次数、脱敏错误类别、模型、提取版本和生成记忆 ID；数据库由 v28 安全迁移至 v29。
+- [ ] 将当前过渡值 `branch_id=selected` 替换为可区分真实消息分支的稳定标识，并接入分支失效。
 - [x] 区分“无记忆”与“提取失败”，落实安全 checkpoint；确定性结果不能掩盖语义失败。
 - [ ] 临时失败自动重试；JSON 错误允许有限格式修复；超限后进入人工修复。
 - [ ] 确定性规则与语义提取分轨，语义失败时不得被确定性结果掩盖。
