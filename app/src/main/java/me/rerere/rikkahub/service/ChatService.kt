@@ -140,16 +140,19 @@ import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.MemoryBankService
+import me.rerere.rikkahub.data.service.MAX_MEMORY_EXTRACTION_ATTEMPTS
 import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchStatus
 import me.rerere.rikkahub.data.service.MemoryExtractionDirection
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
+import me.rerere.rikkahub.data.service.buildSelectedConversationBranchId
 import me.rerere.rikkahub.data.service.classifySemanticMemoryExtraction
 import me.rerere.rikkahub.data.service.buildDeterministicMemoryCandidates
 import me.rerere.rikkahub.data.service.buildCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidates
 import me.rerere.rikkahub.data.service.isDurableMemoryCandidate
 import me.rerere.rikkahub.data.service.normalizedMemoryIdentity
+import me.rerere.rikkahub.data.service.retryTransientMemoryExtraction
 import me.rerere.rikkahub.data.service.syncCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.toMemoryExtractionTurns
 import me.rerere.rikkahub.data.voicecall.VoiceCallStreamSegmenter
@@ -1836,10 +1839,10 @@ class ChatService(
                 val messageNodePositions = conversation.messageNodes
                     .mapIndexed { index, node -> node.id.toString() to index + 1 }
                     .toMap()
-                val extractionBatch = memoryBankService.beginExtractionBatch(
+                var extractionBatch = memoryBankService.beginExtractionBatch(
                     assistantId = assistant.id.toString(),
                     conversationId = conversationId.toString(),
-                    branchId = "selected",
+                    branchId = buildSelectedConversationBranchId(conversation.messageNodes),
                     batchStartSequence = batchNodeIds.mapNotNull(messageNodePositions::get).minOrNull() ?: 0,
                     batchEndSequence = batchNodeIds.mapNotNull(messageNodePositions::get).maxOrNull() ?: 0,
                     sourceNodeIds = batchNodeIds,
@@ -1857,41 +1860,65 @@ class ChatService(
                     return@runCatching
                 }
                 val modelExtraction = runCatching {
-                    val providerImpl = providerManager.getProviderByType(extractionProvider)
-                    val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
-                        turns = plan.turns,
-                        assistantName = assistant.name,
-                        assistantPersona = assistant.toLuluPlannerPersona(
-                            messages = conversation.currentMessages,
-                            settings = settings,
-                        ),
-                        stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
-                        responsibilityContext = buildCompanionResponsibilityContext(
-                            companionRuntime.snapshot(assistant.id.toString()).alwaysOnAnchors,
-                            System.currentTimeMillis(),
-                        ),
-                    )
-                    val chunk = providerImpl.generateText(
-                        providerSetting = extractionProvider,
-                        messages = listOf(UIMessage.user(prompt)),
-                        params = TextGenerationParams(
-                            model = extractionModel,
-                            temperature = 0.2f,
-                            topP = 0.8f,
-                            maxTokens = 1200,
-                            reasoningLevel = ReasoningLevel.OFF,
-                            customHeaders = buildList {
-                                addAll(assistant.customHeaders)
-                                addAll(extractionModel.customHeaders)
-                            },
-                            customBody = buildList {
-                                addAll(assistant.customBodies)
-                                addAll(extractionModel.customBodies)
-                            },
-                        ),
-                    )
-                    val rawText = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
-                    AffectiveMemoryExtractor.parseExtractionResult(rawText).memories
+                    retryTransientMemoryExtraction(
+                        maxAttempts = (
+                            MAX_MEMORY_EXTRACTION_ATTEMPTS - extractionBatch.attemptCount + 1
+                            ).coerceAtLeast(1),
+                        onRetry = { _, _ ->
+                            memoryBankService.failExtractionBatch(
+                                extractionBatch.batchId,
+                                "transient_provider_failure",
+                            )
+                            extractionBatch = memoryBankService.beginExtractionBatch(
+                                assistantId = assistant.id.toString(),
+                                conversationId = conversationId.toString(),
+                                branchId = buildSelectedConversationBranchId(conversation.messageNodes),
+                                batchStartSequence = batchNodeIds.mapNotNull(messageNodePositions::get).minOrNull() ?: 0,
+                                batchEndSequence = batchNodeIds.mapNotNull(messageNodePositions::get).maxOrNull() ?: 0,
+                                sourceNodeIds = batchNodeIds,
+                                sourceStartedAt = plan.turns.minOfOrNull { it.createdAtMillis } ?: 0L,
+                                sourceEndedAt = plan.turns.maxOfOrNull { it.createdAtMillis } ?: 0L,
+                                modelId = extractionModel.id.toString(),
+                            )
+                            activeExtractionBatchId = extractionBatch.batchId
+                        },
+                    ) {
+                        val providerImpl = providerManager.getProviderByType(extractionProvider)
+                        val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
+                            turns = plan.turns,
+                            assistantName = assistant.name,
+                            assistantPersona = assistant.toLuluPlannerPersona(
+                                messages = conversation.currentMessages,
+                                settings = settings,
+                            ),
+                            stateHistory = companionRuntime.snapshot(assistant.id.toString()).stateHistory,
+                            responsibilityContext = buildCompanionResponsibilityContext(
+                                companionRuntime.snapshot(assistant.id.toString()).alwaysOnAnchors,
+                                System.currentTimeMillis(),
+                            ),
+                        )
+                        val chunk = providerImpl.generateText(
+                            providerSetting = extractionProvider,
+                            messages = listOf(UIMessage.user(prompt)),
+                            params = TextGenerationParams(
+                                model = extractionModel,
+                                temperature = 0.2f,
+                                topP = 0.8f,
+                                maxTokens = 1200,
+                                reasoningLevel = ReasoningLevel.OFF,
+                                customHeaders = buildList {
+                                    addAll(assistant.customHeaders)
+                                    addAll(extractionModel.customHeaders)
+                                },
+                                customBody = buildList {
+                                    addAll(assistant.customBodies)
+                                    addAll(extractionModel.customBodies)
+                                },
+                            ),
+                        )
+                        val rawText = chunk.choices.firstOrNull()?.message?.toText().orEmpty()
+                        AffectiveMemoryExtractor.parseExtractionResult(rawText).memories
+                    }
                 }
                 val modelExtractionSucceeded = modelExtraction.isSuccess
                 val modelCandidates = modelExtraction.getOrElse { error ->
