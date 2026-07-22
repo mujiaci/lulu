@@ -17,7 +17,8 @@ internal fun enforceFinalCompanionContextBudget(
 ): FinalCompanionContextResult {
     val maxTokens = source.finalCompanionInputBudget()
     var bounded = deduplicateFinalSystemSnapshots(messages)
-    var dropped = messages.size - bounded.size
+    val compactedSystemMessages = (messages.size - bounded.size).coerceAtLeast(0)
+    var dropped = compactedSystemMessages
 
     // Preserve current system truth and recent conversation. Remove oldest conversational
     // messages first only when source-level selection still exceeds the emergency ceiling.
@@ -39,7 +40,7 @@ internal fun enforceFinalCompanionContextBudget(
         messages = bounded,
         estimatedTokens = estimateMessagesTokens(bounded),
         droppedMessages = dropped,
-        compactedSystemMessages = 0,
+        compactedSystemMessages = compactedSystemMessages,
     )
 }
 
