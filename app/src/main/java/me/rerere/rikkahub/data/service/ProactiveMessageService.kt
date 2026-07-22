@@ -1131,11 +1131,42 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     ?.toInstant(TimeZone.currentSystemDefault())
                     ?.toEpochMilliseconds()
 
+                val nowMillis = System.currentTimeMillis()
+                if (!isTargetedTrigger) {
+                    val heartbeat = CompanionHeartbeatEvaluator.evaluate(
+                        snapshot = companionRuntime.snapshot(assistant.id.toString()),
+                        nowMillis = nowMillis,
+                    )
+                    companionRuntime.applyTurn(
+                        CompanionTurnMutation(
+                            assistantId = assistant.id.toString(),
+                            interactionEvents = listOf(
+                                CompanionInteractionEvent(
+                                    kind = CompanionInteractionEventKind.LOCAL_HEARTBEAT,
+                                    occurredAt = nowMillis,
+                                    detail = heartbeat.reason,
+                                ),
+                            ),
+                            nowMillis = nowMillis,
+                        ),
+                    )
+                    if (!heartbeat.shouldRunDeepPerception) {
+                        Log.d(TAG, "Local heartbeat completed without model call: ${heartbeat.reason}")
+                        ProactiveMessageService.scheduleNext(
+                            context = this@ProactiveMessageTriggerService,
+                            settings = settings,
+                            minutesSinceLastChat = heartbeat.minutesSinceUserActivity,
+                            assistantId = assistantUuid,
+                        )
+                        stopSelf()
+                        return@launch
+                    }
+                }
+
                 val allTools = buildAllTools(settings, assistant)
                     .deduplicateByToolName()
                     .selectRelevantToolsForPrompt(historyMessages)
                 val activeTools = allTools.activeModelTools()
-                val nowMillis = System.currentTimeMillis()
                 val screenInteractive = (getSystemService(Context.POWER_SERVICE) as PowerManager).isInteractive
                 val recentCallOutcome = ProactiveCallManager.recentOutcomeContext(
                     context = this@ProactiveMessageTriggerService,
@@ -1251,36 +1282,6 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                         )
                         executingCommitment = null
                         scheduleNextDurableCommitment()
-                        stopSelf()
-                        return@launch
-                    }
-                }
-                if (!isTargetedTrigger) {
-                    val heartbeat = CompanionHeartbeatEvaluator.evaluate(
-                        snapshot = companionRuntime.snapshot(assistant.id.toString()),
-                        nowMillis = nowMillis,
-                    )
-                    companionRuntime.applyTurn(
-                        CompanionTurnMutation(
-                            assistantId = assistant.id.toString(),
-                            interactionEvents = listOf(
-                                CompanionInteractionEvent(
-                                    kind = CompanionInteractionEventKind.LOCAL_HEARTBEAT,
-                                    occurredAt = nowMillis,
-                                    detail = heartbeat.reason,
-                                ),
-                            ),
-                            nowMillis = nowMillis,
-                        ),
-                    )
-                    if (!heartbeat.shouldRunDeepPerception) {
-                        Log.d(TAG, "Local heartbeat completed without model call: ${heartbeat.reason}")
-                        ProactiveMessageService.scheduleNext(
-                            context = this@ProactiveMessageTriggerService,
-                            settings = settings,
-                            minutesSinceLastChat = heartbeat.minutesSinceUserActivity,
-                            assistantId = assistantUuid,
-                        )
                         stopSelf()
                         return@launch
                     }
