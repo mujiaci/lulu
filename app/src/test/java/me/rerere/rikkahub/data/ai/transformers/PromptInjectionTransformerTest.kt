@@ -1006,6 +1006,34 @@ class PromptInjectionTransformerTest {
     }
 
     @Test
+    fun `global lorebook ignores relevance matching but still respects entry enabled state`() {
+        val mandatory = createRegexInjection(
+            content = "所有角色都必须遵守这条世界规则。",
+            keywords = listOf("永远不会命中的关键词"),
+        )
+        val disabled = createRegexInjection(
+            enabled = false,
+            content = "已禁用内容不能进入上下文。",
+            keywords = listOf("同样不会命中"),
+        )
+
+        val result = collectInjections(
+            messages = listOf(UIMessage.user("聊聊今天的午饭")),
+            assistant = createAssistant(),
+            modeInjections = emptyList(),
+            lorebooks = listOf(
+                Lorebook(
+                    name = "全局世界",
+                    globalApply = true,
+                    entries = listOf(mandatory, disabled),
+                ),
+            ),
+        )
+
+        assertEquals(listOf(mandatory.id), result.map { it.id })
+    }
+
+    @Test
     fun `collectInjections should return empty for no matching conditions`() {
         val result = collectInjections(
             messages = listOf(UIMessage.user("Hello")),
