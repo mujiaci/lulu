@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T20:02:10.912946+00:00",
-  "commit": "f22e21513f99b450f9b0bd3c238cb4dbe56a9e58",
+  "generatedAt": "2026-07-22T20:05:24.235399+00:00",
+  "commit": "01f3e31c576f5adc7f2f2d4b4d6d02a47fc5364b",
   "branch": "master",
   "summary": {
     "files": 1098,
-    "lines": 261518,
+    "lines": 261521,
     "symbols": 5294,
     "byModule": {
       "app": 636,
@@ -7005,7 +7005,7 @@
       "path": "app/src/main/java/me/rerere/rikkahub/data/ai/transformers/CompanionPresenceContractTransformer.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 47,
+      "lines": 50,
       "package": "me.rerere.rikkahub.data.ai.transformers",
       "categories": [
         "AI与上下文"
