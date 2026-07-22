@@ -2,11 +2,15 @@ package me.rerere.rikkahub.data.service
 
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionConcernStatus
+import me.rerere.rikkahub.data.companion.CompanionInteractionEvent
+import me.rerere.rikkahub.data.companion.CompanionInteractionEventKind
+import me.rerere.rikkahub.data.companion.CompanionOutboundStatus
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
 
 data class CompanionHeartbeatDecision(
     val dueCommitmentIds: List<String>,
     val dueConcernIds: List<String>,
+    val lifecycleEvents: List<CompanionInteractionEvent>,
     val minutesSinceUserActivity: Long,
     val shouldRunDeepPerception: Boolean,
     val reason: String,
@@ -30,6 +34,21 @@ object CompanionHeartbeatEvaluator {
                     concern.nextPerceptionAt?.let { it <= nowMillis } == true
             }
             .map { it.id }
+        val lifecycleEvents = snapshot.interactionTimeline.outboundContacts
+            .filter { contact ->
+                contact.status in UNRESOLVED_OUTBOUND_STATUSES &&
+                    nowMillis - contact.latestActivityAt() >= UNANSWERED_AFTER_MILLIS
+            }
+            .map { contact ->
+                CompanionInteractionEvent(
+                    kind = CompanionInteractionEventKind.OUTBOUND_UNANSWERED,
+                    occurredAt = nowMillis,
+                    contactId = contact.id,
+                    conversationId = contact.conversationId,
+                    sourceMessageId = contact.sourceMessageId,
+                    detail = "no_user_feedback_yet",
+                )
+            }
         val idleMinutes = snapshot.interactionTimeline.lastUserActivityAt
             ?.let { ((nowMillis - it) / 60_000L).coerceAtLeast(0L) }
             ?: Long.MAX_VALUE
@@ -50,9 +69,21 @@ object CompanionHeartbeatEvaluator {
         return CompanionHeartbeatDecision(
             dueCommitmentIds = dueCommitmentIds,
             dueConcernIds = dueConcernIds,
+            lifecycleEvents = lifecycleEvents,
             minutesSinceUserActivity = idleMinutes,
             shouldRunDeepPerception = reason != "local_heartbeat_only",
             reason = reason,
         )
     }
+
+    private fun me.rerere.rikkahub.data.companion.CompanionOutboundContact.latestActivityAt(): Long =
+        listOfNotNull(openedAt, deliveredAt, sentAt, generatedAt).maxOrNull() ?: generatedAt
+
+    private val UNRESOLVED_OUTBOUND_STATUSES = setOf(
+        CompanionOutboundStatus.GENERATED,
+        CompanionOutboundStatus.SENT,
+        CompanionOutboundStatus.DELIVERED,
+        CompanionOutboundStatus.OPENED,
+    )
+    private const val UNANSWERED_AFTER_MILLIS = 90L * 60L * 1_000L
 }
