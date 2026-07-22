@@ -110,6 +110,9 @@ jobs:
           mkdir -p ci-logs
           set -o pipefail
           chmod +x ./gradlew
+          if [ ! -f app/lint-baseline.xml ]; then
+            ./gradlew --no-daemon --no-build-cache :app:updateLintBaseline 2>&1 | tee ci-logs/android-lint-baseline.log
+          fi
           ./gradlew --no-daemon --no-build-cache :app:lintRelease 2>&1 | tee ci-logs/android-lint.log
 
       - name: Gradle Build
@@ -138,7 +141,9 @@ jobs:
         if: success()
         with:
           name: signed-apk
-          path: apk-artifacts/*.apk
+          path: |
+            apk-artifacts/*.apk
+            app/lint-baseline.xml
           if-no-files-found: error
 
       - name: Publish GitHub Release
