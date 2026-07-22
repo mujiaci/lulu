@@ -58,7 +58,6 @@
 
 - `sourceMessageAt`：证据消息时间；
 - `occurredAt`：事件实际发生时间，无法确定时回退到来源消息时间；
-- `extractedAt`：本次提取或重建时间；
 - `occurredAtInferred`：事件时间是否由来源消息推测；
 - `extractedAt`：本次提取或重建时间；
 - `memoryCreatedAt`：记忆数据库记录首次创建时间；
