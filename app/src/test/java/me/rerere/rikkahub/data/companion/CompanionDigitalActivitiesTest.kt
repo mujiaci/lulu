@@ -9,7 +9,7 @@ import kotlin.test.assertTrue
 class CompanionDigitalActivitiesTest {
     @Test
     fun everyFirstBatchActivityHasACompleteExecutionContract() {
-        assertEquals(CompanionDigitalActivityKind.entries.toSet(), CompanionDigitalActivityRegistry.definitions.keys)
+        assertEquals(CompanionDigitalActivityKind.values().toSet(), CompanionDigitalActivityRegistry.definitions.keys)
         CompanionDigitalActivityRegistry.definitions.values.forEach { definition ->
             assertTrue(definition.trigger.isNotBlank())
             assertTrue(definition.cooldownMillis > 0L)
