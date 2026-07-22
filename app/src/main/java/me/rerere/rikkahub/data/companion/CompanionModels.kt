@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.companion
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-const val CURRENT_COMPANION_SCHEMA_VERSION = 9
+const val CURRENT_COMPANION_SCHEMA_VERSION = 10
 
 @Serializable
 data class CompanionPersistedState(
@@ -35,11 +35,30 @@ data class CompanionSnapshot(
     val continuity: CompanionContinuity = CompanionContinuity(),
     /** Evidence-backed interaction clocks. Outbound activity never overwrites user activity. */
     val interactionTimeline: CompanionInteractionTimeline = CompanionInteractionTimeline(),
+    /** Messages this character deliberately kept because they mattered, never probability-driven. */
+    val favorites: List<CompanionFavorite> = emptyList(),
     val updatedAt: Long = 0L,
 ) {
     companion object {
         fun empty(assistantId: String): CompanionSnapshot = CompanionSnapshot(assistantId = assistantId)
     }
+}
+
+@Serializable
+data class CompanionFavorite(
+    val id: String = UUID.randomUUID().toString(),
+    val assistantId: String,
+    val messageId: String,
+    val reason: String,
+    val feeling: String,
+    val source: CompanionFavoriteSource = CompanionFavoriteSource.AUTONOMOUS,
+    val createdAt: Long = System.currentTimeMillis(),
+)
+
+@Serializable
+enum class CompanionFavoriteSource {
+    AUTONOMOUS,
+    MANUAL,
 }
 
 @Serializable
@@ -282,6 +301,14 @@ enum class CompanionLifeEventType {
     MUSIC,
     GAME,
     REFLECTION,
+    UNSENT_NOTE,
+    FAVORITE_ORGANIZATION,
+    EXPERIENCE_REVIEW,
+    CONCERN_ORGANIZATION,
+    REPLAY_REVIEW,
+    SHARED_PLAN,
+    COMMITMENT_REVIEW,
+    STATE_REVIEW,
     WAITING,
 }
 
