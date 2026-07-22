@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.companion
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-const val CURRENT_COMPANION_SCHEMA_VERSION = 8
+const val CURRENT_COMPANION_SCHEMA_VERSION = 9
 
 @Serializable
 data class CompanionPersistedState(
@@ -326,6 +326,20 @@ data class CompanionStateHistoryEntry(
 @Serializable
 data class CompanionRelationshipState(
     val roleLabel: String = "",
+    /** Explicit facts initialized once from the complete character card. */
+    val knownDuration: String = "",
+    val sharedExperiences: List<String> = emptyList(),
+    val stage: String = "",
+    val securityContext: String = "",
+    val attachmentExpression: String = "",
+    val interactionPatterns: List<String> = emptyList(),
+    val declaredBoundaries: List<String> = emptyList(),
+    val potentialTensions: List<String> = emptyList(),
+    val initializationEvidence: String = "",
+    /** Latest evidence-backed relationship change. */
+    val lastChangeReason: String = "",
+    val lastChangeConfidence: Float = 0f,
+    val lastEvidenceIds: List<String> = emptyList(),
     val trust: Float = 0.5f,
     val closeness: Float = 0f,
     val reliability: Float = 0.5f,
@@ -347,6 +361,10 @@ data class CompanionRelationshipEvent(
     val boundaryDelta: Float = 0f,
     val tensionDelta: Float = 0f,
     val evidence: String,
+    val reason: String = evidence,
+    val confidence: Float = 1f,
+    val stageAfter: String? = null,
+    val evidenceIds: List<String> = listOf(sourceId),
     val createdAt: Long = System.currentTimeMillis(),
     val sourceMessageAt: Long? = null,
     val occurredAt: Long? = null,
@@ -397,6 +415,11 @@ data class CompanionCommitment(
     val subjectKey: String,
     val promise: String,
     val dueAt: Long,
+    val promisorId: String = assistantId,
+    val beneficiary: String = "user",
+    val responsibility: String = promise,
+    val schedule: CompanionCommitmentSchedule = CompanionCommitmentSchedule(),
+    val executionMethod: String = "",
     val status: CompanionCommitmentStatus = CompanionCommitmentStatus.PROPOSED,
     val actionPlan: CompanionActionPlan = CompanionActionPlan(),
     val sourceConversationId: String? = null,
@@ -407,6 +430,23 @@ data class CompanionCommitment(
     val statusReason: String? = null,
     val lastActionResult: CompanionActionResult? = null,
     val attemptCount: Int = 0,
+    val history: List<CompanionCommitmentHistoryEntry> = emptyList(),
+)
+
+@Serializable
+data class CompanionCommitmentSchedule(
+    val timeDescription: String = "",
+    val frequency: String = "",
+    val condition: String = "",
+)
+
+@Serializable
+data class CompanionCommitmentHistoryEntry(
+    val fromStatus: CompanionCommitmentStatus? = null,
+    val toStatus: CompanionCommitmentStatus,
+    val occurredAt: Long,
+    val reason: String = "",
+    val actionResult: CompanionActionResult? = null,
 )
 
 @Serializable
