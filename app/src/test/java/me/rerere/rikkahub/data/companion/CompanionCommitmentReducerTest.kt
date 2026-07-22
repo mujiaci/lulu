@@ -135,6 +135,50 @@ class CompanionCommitmentReducerTest {
         assertEquals("我会晚点再来看看。", result.single().promise)
     }
 
+    @Test
+    fun `one message with several explicit responsibilities becomes separate commitments`() {
+        val result = CompanionCommitmentReducer.apply(
+            current = emptyList(),
+            changes = listOf(
+                CompanionCommitmentChange.Upsert(
+                    commitment(
+                        id = "supervision",
+                        subjectKey = "daily-supervision",
+                        promise = "监督起床、监督睡觉、监督学习",
+                    ).copy(
+                        responsibility = "监督起床、监督睡觉、监督学习",
+                        schedule = CompanionCommitmentSchedule(frequency = "每天"),
+                    ),
+                ),
+            ),
+            nowMillis = 20L,
+        )
+
+        assertEquals(3, result.size)
+        assertEquals(
+            setOf("监督起床", "监督睡觉", "监督学习"),
+            result.map { it.responsibility }.toSet(),
+        )
+        assertEquals(setOf("每天"), result.map { it.schedule.frequency }.toSet())
+        assertEquals(3, result.map { it.subjectKey }.distinct().size)
+    }
+
+    @Test
+    fun `ordinary enumeration inside one promise is not split accidentally`() {
+        val result = CompanionCommitmentReducer.apply(
+            current = emptyList(),
+            changes = listOf(
+                CompanionCommitmentChange.Upsert(
+                    commitment(promise = "准备书本、耳机和水杯"),
+                ),
+            ),
+            nowMillis = 20L,
+        )
+
+        assertEquals(1, result.size)
+        assertEquals("准备书本、耳机和水杯", result.single().promise)
+    }
+
     private fun transition(
         commitments: List<CompanionCommitment>,
         status: CompanionCommitmentStatus,
