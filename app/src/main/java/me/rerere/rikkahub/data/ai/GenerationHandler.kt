@@ -432,6 +432,8 @@ class GenerationHandler(
                 messages = messages,
                 sentMessages = internalMessages,
                 breakdown = breakdown,
+                source = apiUsageSource,
+                title = apiUsageTitle.ifBlank { assistant.name }.ifBlank { apiUsageSource.label },
                 providerSetting = provider,
                 stream = true
             )
@@ -476,6 +478,8 @@ class GenerationHandler(
                 messages = messages,
                 sentMessages = internalMessages,
                 breakdown = breakdown,
+                source = apiUsageSource,
+                title = apiUsageTitle.ifBlank { assistant.name }.ifBlank { apiUsageSource.label },
                 providerSetting = provider,
                 stream = false
             )
