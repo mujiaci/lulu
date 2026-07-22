@@ -237,6 +237,12 @@ internal fun CompanionPersistedState.normalizedCompanionState(): CompanionPersis
 private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot = copy(
     state = if (other.state.updatedAt >= state.updatedAt) other.state else state,
     stateHistory = (stateHistory + other.stateHistory).distinctBy { it.id },
+    explainableState = if (other.explainableState.updatedAt >= explainableState.updatedAt) {
+        other.explainableState
+    } else {
+        explainableState
+    },
+    lifeAnchor = newerCompanionLifeAnchor(lifeAnchor, other.lifeAnchor),
     neuroState = if (other.neuroState.updatedAt >= neuroState.updatedAt) other.neuroState else neuroState,
     privateImpression = if (other.privateImpression.updatedAt >= privateImpression.updatedAt) {
         other.privateImpression
@@ -280,6 +286,8 @@ private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
         lastAssistantText = continuity.lastAssistantText.trim().take(800),
     ),
     state = state.normalizedForStorage(),
+    explainableState = explainableState.normalizedExplainableState(),
+    lifeAnchor = lifeAnchor?.normalizedLifeAnchor(),
     stateHistory = stateHistory
         .filter { it.recordedAt > 0L && it.state.hasVisibleStateContent() }
         .distinctBy { it.id }
