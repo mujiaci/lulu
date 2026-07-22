@@ -143,6 +143,7 @@ import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.service.MemoryExtractionDirection
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
+import me.rerere.rikkahub.data.service.classifySemanticMemoryExtraction
 import me.rerere.rikkahub.data.service.buildDeterministicMemoryCandidates
 import me.rerere.rikkahub.data.service.buildCompanionPrivateImpression
 import me.rerere.rikkahub.data.service.buildRelationshipEventsFromMemoryCandidates
@@ -1885,9 +1886,12 @@ class ChatService(
                     .take(2)
                     .map { it.nodeId }
                     .reversed()
-                val candidates = (modelCandidates + deterministicCandidates)
-                    .map { it.normalized() }
-                    .map { candidate ->
+                val preparedCandidates = (
+                    modelCandidates.map { true to it } +
+                        deterministicCandidates.map { false to it }
+                    )
+                    .map { (fromSemanticModel, rawCandidate) -> fromSemanticModel to rawCandidate.normalized() }
+                    .map { (fromSemanticModel, candidate) ->
                         val sourceNodeIds = candidate.sourceMessageNodeIds
                             .ifEmpty { fallbackEvidenceNodeIds }
                         val evidenceNodeIds = candidate.evidenceMessageNodeIds
@@ -1903,7 +1907,7 @@ class ChatService(
                                         occurredAt <= sourceMessageAt + MEMORY_OCCURRENCE_FUTURE_TOLERANCE_MS
                                     )
                             }
-                        candidate.copy(
+                        fromSemanticModel to candidate.copy(
                             userSignal = candidate.userSignal ?: candidate.content,
                             sourceMessageNodeIds = sourceNodeIds,
                             evidenceMessageNodeIds = evidenceNodeIds,
@@ -1911,15 +1915,18 @@ class ChatService(
                             occurredAtMillis = modelOccurrence ?: sourceMessageAt,
                         )
                     }
-                    .filter { it.isDurableMemoryCandidate() }
+                    .filter { (_, candidate) -> candidate.isDurableMemoryCandidate() }
+                val semanticOutcome = classifySemanticMemoryExtraction(
+                    modelCallSucceeded = modelExtractionSucceeded,
+                    parsedCandidateCount = modelCandidates.size,
+                    durableCandidateCount = preparedCandidates.count { (fromSemanticModel, _) -> fromSemanticModel },
+                )
+                val candidates = preparedCandidates
+                    .map { (_, candidate) -> candidate }
                     .distinctBy { it.content.normalizedMemoryIdentity() }
                     .take(8)
                 if (candidates.isEmpty()) {
-                    // An explicitly empty result means the model found nothing durable. A
-                    // non-empty result rejected by validation is a compatibility problem and
-                    // must stay retryable instead of permanently skipping this conversation.
-                    val safelyProcessedEmptyResult = modelExtractionSucceeded && modelCandidates.isEmpty()
-                    if (safelyProcessedEmptyResult) {
+                    if (semanticOutcome.advancesCheckpoint) {
                         memoryBankService.markExtractionProcessed(
                             assistantId = assistant.id.toString(),
                             conversationId = conversationId.toString(),
@@ -1928,11 +1935,10 @@ class ChatService(
                     }
                     Logging.log(
                         TAG,
-                        "Memory extraction found no durable memories for conversation=$conversationId reason=${plan.reason} success=$modelExtractionSucceeded checkpointed=$safelyProcessedEmptyResult",
+                        "Memory extraction found no durable memories for conversation=$conversationId reason=${plan.reason} outcome=$semanticOutcome checkpointed=${semanticOutcome.advancesCheckpoint}",
                     )
                     return@runCatching
                 }
-
                 val savedMemories = memoryBankService.saveExtractedMemories(
                     candidates = candidates,
                     assistantId = assistant.id.toString(),
@@ -1971,7 +1977,7 @@ class ChatService(
                         )
                     )
                 }
-                if (modelExtractionSucceeded) {
+                if (semanticOutcome.advancesCheckpoint) {
                     memoryBankService.markExtractionProcessed(
                         assistantId = assistant.id.toString(),
                         conversationId = conversationId.toString(),
