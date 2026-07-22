@@ -815,6 +815,24 @@ class MemoryBankService(
         memoryBankDAO.getExtractionBatchesByAssistant(assistantId)
     }
 
+    suspend fun resetExtractionBatchForManualRetry(
+        batchId: String,
+        now: Long = System.currentTimeMillis(),
+    ): MemoryExtractionBatchEntity = withContext(Dispatchers.IO) {
+        val current = requireNotNull(memoryBankDAO.getExtractionBatch(batchId)) {
+            "Memory extraction batch not found"
+        }
+        val reset = current.copy(
+            status = MemoryExtractionBatchStatus.PENDING.name,
+            attemptCount = 0,
+            lastError = null,
+            updatedAt = now,
+            completedAt = null,
+        )
+        memoryBankDAO.upsertExtractionBatch(reset)
+        reset
+    }
+
     suspend fun invalidateExtractionBatches(
         assistantId: String,
         conversationId: String,
