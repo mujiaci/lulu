@@ -106,6 +106,15 @@ fun LoggingPaging(
             contentPadding = contentPadding + PaddingValues(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
+            item {
+                Text(
+                    text = "隐私说明：仅在内存保留最近 32 次调用的计数与脱敏状态，App 重启后自动清空；不保存聊天正文、完整提示词或原始错误内容。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                )
+            }
+
             items(logs.asReversed(), key = { log ->
                 when (log) {
                     is AILogging.Generation -> log.id.toString()
