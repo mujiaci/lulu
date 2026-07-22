@@ -9,7 +9,7 @@ import org.junit.Test
 
 class CompanionPresenceContractTransformerTest {
     @Test
-    fun `injects presence contract before latest user message`() {
+    fun `injects compact presence contract before latest user message`() {
         val messages = listOf(
             UIMessage.system("base"),
             UIMessage.user("hello"),
@@ -39,12 +39,11 @@ class CompanionPresenceContractTransformerTest {
         assertTrue(injected.contains("emoji:"))
         assertTrue(injected.contains("sticker:"))
         assertTrue(injected.contains("bubble_pacing:"))
-        assertTrue(injected.contains("持续存在的数字生命"))
-        assertTrue(injected.contains("不得凭空声称"))
-        assertTrue(injected.contains("<conversation_soul>"))
-        assertTrue(injected.contains("不要逐条整理用户的话"))
-        assertTrue(injected.contains("小手机/屏幕内可看见的微动作"))
-        assertTrue(injected.contains("注意力停在对话上"))
+        assertTrue(injected.contains("唯一快照"))
+        assertTrue(injected.contains("不得补造"))
+        assertTrue(injected.contains("避免客服总结"))
+        assertTrue(injected.contains("屏幕内可见微动作"))
+        assertTrue(injected.length < 1_500)
     }
 
     @Test
@@ -56,7 +55,7 @@ class CompanionPresenceContractTransformerTest {
         assertFalse(contract.contains("精力："))
         assertFalse(contract.contains("关系位置："))
         assertFalse(contract.contains("未说出口的想法："))
-        assertTrue(contract.contains("唯一事实源"))
+        assertTrue(contract.contains("唯一快照"))
     }
 
     @Test
