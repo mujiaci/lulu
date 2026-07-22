@@ -85,6 +85,9 @@ fun MemoryBankPage(
     val assistantLabels = remember(assistantIds, settings.assistants) {
         buildMemoryAssistantLabels(assistantIds, settings.assistants)
     }
+    val selectedAssistant = remember(selectedAssistantId, settings.assistants) {
+        selectedAssistantId?.let { id -> settings.assistants.firstOrNull { it.id.toString() == id } }
+    }
 
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     var showDeleteDialog by remember { mutableStateOf<MemoryBankEntity?>(null) }
@@ -175,7 +178,9 @@ fun MemoryBankPage(
                     ) {
                         Text("整理聊天记忆", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "每次只处理一个完整批次，最新 10 条不会被抽走，也不会重复整理已经完成的批次。",
+                            selectedAssistant?.let { assistant ->
+                                "每批 ${assistant.memoryExtractionInterval} 条，最近 ${assistant.memoryExtractionProtectedRecentCount} 条保持原文；不会跨批次拼接或重复整理。"
+                            } ?: "每个角色按自己的批次与最近保护区设置整理；不会跨批次拼接或重复整理。",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
