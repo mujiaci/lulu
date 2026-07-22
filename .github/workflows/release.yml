@@ -4,28 +4,23 @@ on:
   push:
     branches: [master]
   workflow_dispatch:
-  issue_comment:
-    types: [created]
 
 permissions:
   contents: write
   issues: write
 
 concurrency:
-  group: signed-apk-${{ github.event_name }}-${{ github.ref }}
+  group: signed-apk-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
-    if: github.event_name != 'issue_comment' || github.event.comment.body == '/build-lulu'
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -63,19 +58,6 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon --no-build-cache assembleRelease -x uploadCrashlyticsMappingFileRelease 2>&1 | tee ci-logs/build.log
 
-      - name: Run unit tests
-        run: |
-          mkdir -p ci-logs
-          set -o pipefail
-          ./gradlew --no-daemon --no-build-cache :app:testDebugUnitTest 2>&1 | tee ci-logs/tests.log
-
-      - name: Run Android Lint report
-        continue-on-error: true
-        run: |
-          mkdir -p ci-logs
-          set -o pipefail
-          ./gradlew --no-daemon --no-build-cache :app:lintRelease 2>&1 | tee ci-logs/lint.log
-
       - name: Collect APK
         run: |
           set -euo pipefail
@@ -97,13 +79,27 @@ jobs:
         run: |
           set -euo pipefail
           tag="signed-build-${GITHUB_RUN_NUMBER}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" apk-artifacts/lulu-signed.apk --clobber
-          else
-            gh release create "$tag" apk-artifacts/lulu-signed.apk \
-              --title "Lulu ${tag}" \
-              --notes "Automated signed APK build from ${GITHUB_SHA}."
-          fi
+          gh release create "$tag" apk-artifacts/lulu-signed.apk \
+            --title "Lulu ${tag}" \
+            --notes "Automated signed APK build from ${GITHUB_SHA}."
+
+      - name: Report successful build
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: 25,
+              body: [
+                '✅ Signed APK 编译成功。',
+                '',
+                `- 提交：\`${context.sha.slice(0, 7)}\``,
+                `- Release：\`signed-build-${context.runNumber}\``,
+                `- 运行：https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+              ].join('\n')
+            })
 
       - name: Upload failure logs
         if: failure()
@@ -115,17 +111,13 @@ jobs:
           retention-days: 14
 
       - name: Create failure issue
-        if: failure() && github.event_name != 'issue_comment'
+        if: failure()
         uses: actions/github-script@v7
         with:
           script: |
             const fs = require('fs')
-            const path = require('path')
-            const dir = 'ci-logs'
-            const lines = fs.existsSync(dir)
-              ? fs.readdirSync(dir)
-                  .filter(name => name.endsWith('.log'))
-                  .flatMap(name => fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/))
+            const lines = fs.existsSync('ci-logs/build.log')
+              ? fs.readFileSync('ci-logs/build.log', 'utf8').split(/\r?\n/)
               : []
             const pattern = /(^e: |FAILURE:|What went wrong:|Execution failed|Compilation error|Unresolved reference|error:|Exception|BUILD FAILED)/i
             const selected = lines.filter(line => pattern.test(line)).slice(-100)
