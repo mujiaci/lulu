@@ -7,6 +7,8 @@ on:
       - "docs/architecture/CODE_INDEX.md"
       - "docs/architecture/code-index.json"
   workflow_dispatch:
+  schedule:
+    - cron: "17 */6 * * *"
 
 permissions:
   contents: write
@@ -34,6 +36,15 @@ jobs:
           INDEX_BRANCH: ${{ github.ref_name }}
         run: python3 scripts/generate_code_index.py
 
+      - name: Upload generated index for diagnostics
+        uses: actions/upload-artifact@v4
+        with:
+          name: repository-code-index
+          path: |
+            docs/architecture/CODE_INDEX.md
+            docs/architecture/code-index.json
+          retention-days: 7
+
       - name: Commit refreshed index
         run: |
           if git diff --quiet -- docs/architecture/CODE_INDEX.md docs/architecture/code-index.json; then
@@ -44,4 +55,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add docs/architecture/CODE_INDEX.md docs/architecture/code-index.json
           git commit -m "docs: refresh code index [skip ci] [skip index]"
-          git push
+          git pull --rebase origin master
+          git push origin HEAD:master
