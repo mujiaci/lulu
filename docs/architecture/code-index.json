@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T20:13:12.334154+00:00",
-  "commit": "930d467d7f148d3a4d1976893c4455e90f9e383b",
+  "generatedAt": "2026-07-22T20:57:03.338170+00:00",
+  "commit": "251d8072b6ceebedb5598418d05db6bedac5eee8",
   "branch": "master",
   "summary": {
     "files": 1098,
-    "lines": 261526,
-    "symbols": 5294,
+    "lines": 261415,
+    "symbols": 5293,
     "byModule": {
       "app": 636,
       "web-ui": 131,
@@ -12970,7 +12970,7 @@
       "path": "app/src/main/java/me/rerere/rikkahub/data/service/AffectiveMemoryExtractor.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 535,
+      "lines": 424,
       "package": "me.rerere.rikkahub.data.service",
       "categories": [
         "记忆"
@@ -12999,12 +12999,12 @@
         {
           "name": "AffectiveMemoryCandidate",
           "kind": "class",
-          "line": 47
+          "line": 46
         },
         {
           "name": "normalized",
           "kind": "function",
-          "line": 73
+          "line": 70
         },
         {
           "name": "toEntity",
@@ -13012,119 +13012,114 @@
           "line": 96
         },
         {
+          "name": "calibrateImportance",
+          "kind": "function",
+          "line": 143
+        },
+        {
           "name": "shouldSkipMemoryBankWrite",
           "kind": "function",
-          "line": 140
+          "line": 154
         },
         {
           "name": "isDurableMemoryCandidate",
           "kind": "function",
-          "line": 147
+          "line": 161
         },
         {
           "name": "normalizedMemoryIdentity",
           "kind": "function",
-          "line": 167
+          "line": 180
         },
         {
           "name": "buildDeterministicMemoryCandidates",
           "kind": "function",
-          "line": 170
+          "line": 183
         },
         {
           "name": "buildDeterministicMemoryCandidatesFromNodes",
           "kind": "function",
-          "line": 187
+          "line": 199
         },
         {
           "name": "toDeterministicMemoryCandidate",
           "kind": "function",
-          "line": 195
-        },
-        {
-          "name": "hasAffectiveSummary",
-          "kind": "function",
-          "line": 238
-        },
-        {
-          "name": "toDisplayMemoryContent",
-          "kind": "function",
-          "line": 245
-        },
-        {
-          "name": "toEmbeddingMemoryText",
-          "kind": "function",
-          "line": 253
-        },
-        {
-          "name": "firstPersonSummary",
-          "kind": "function",
-          "line": 264
-        },
-        {
-          "name": "hasFirstPersonVoice",
-          "kind": "function",
-          "line": 275
-        },
-        {
-          "name": "looksLikeRawToolOrTraceDump",
-          "kind": "function",
-          "line": 280
-        },
-        {
-          "name": "looksLikeVocabularyDrill",
-          "kind": "function",
-          "line": 295
+          "line": 207
         },
         {
           "name": "AffectiveMemoryExtractor",
           "kind": "object",
-          "line": 328
+          "line": 247
         },
         {
           "name": "buildExtractionPrompt",
           "kind": "function",
-          "line": 329
+          "line": 249
         },
         {
           "name": "parseExtractionResult",
           "kind": "function",
-          "line": 377
+          "line": 281
         },
         {
           "name": "decodeExtractionCandidates",
           "kind": "function",
-          "line": 393
+          "line": 295
         },
         {
           "name": "repairMemoryExtractionJsonOnce",
           "kind": "function",
-          "line": 406
+          "line": 304
         },
         {
           "name": "isTransientMemoryExtractionFailure",
           "kind": "function",
-          "line": 412
+          "line": 310
         },
         {
           "name": "retryTransientMemoryExtraction",
           "kind": "function",
-          "line": 424
+          "line": 320
         },
         {
           "name": "sourceTimeLabel",
           "kind": "function",
-          "line": 455
+          "line": 341
         },
         {
-          "name": "toExtractionContext",
+          "name": "hasAffectiveSummary",
           "kind": "function",
-          "line": 464
+          "line": 350
+        },
+        {
+          "name": "toDisplayMemoryContent",
+          "kind": "function",
+          "line": 357
+        },
+        {
+          "name": "toEmbeddingMemoryText",
+          "kind": "function",
+          "line": 365
+        },
+        {
+          "name": "firstPersonSummary",
+          "kind": "function",
+          "line": 377
+        },
+        {
+          "name": "looksLikeRawToolOrTraceDump",
+          "kind": "function",
+          "line": 387
+        },
+        {
+          "name": "looksLikeVocabularyDrill",
+          "kind": "function",
+          "line": 395
         },
         {
           "name": "extractJsonPayload",
           "kind": "function",
-          "line": 519
+          "line": 403
         }
       ]
     },
