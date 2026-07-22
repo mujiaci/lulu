@@ -268,10 +268,12 @@ private fun CompanionSnapshot.merge(other: CompanionSnapshot): CompanionSnapshot
     } else {
         continuity
     },
+    interactionTimeline = interactionTimeline.merge(other.interactionTimeline),
     updatedAt = maxOf(updatedAt, other.updatedAt),
 )
 
 private fun CompanionSnapshot.normalized(): CompanionSnapshot = copy(
+    interactionTimeline = interactionTimeline.normalizedForStorage(),
     continuity = continuity.copy(
         conversationId = continuity.conversationId?.trim()?.takeIf(String::isNotBlank),
         lastUserText = continuity.lastUserText.trim().take(800),
@@ -390,6 +392,45 @@ private fun CompanionPrivateImpression.normalizedForStorage(): CompanionPrivateI
     recentChanges = recentChanges.cleanImpressionItems(),
 )
 
+private fun CompanionInteractionTimeline.merge(
+    other: CompanionInteractionTimeline,
+): CompanionInteractionTimeline = CompanionInteractionTimeline(
+    lastUserActivityAt = maxNullable(lastUserActivityAt, other.lastUserActivityAt),
+    lastUserReplyAt = maxNullable(lastUserReplyAt, other.lastUserReplyAt),
+    lastOrdinaryAssistantAt = maxNullable(lastOrdinaryAssistantAt, other.lastOrdinaryAssistantAt),
+    lastOutboundAt = maxNullable(lastOutboundAt, other.lastOutboundAt),
+    lastOpenedAt = maxNullable(lastOpenedAt, other.lastOpenedAt),
+    lastLifeAnchorUpdatedAt = maxNullable(lastLifeAnchorUpdatedAt, other.lastLifeAnchorUpdatedAt),
+    outboundContacts = (outboundContacts + other.outboundContacts)
+        .groupBy(CompanionOutboundContact::id)
+        .values
+        .map { duplicates -> duplicates.maxBy(CompanionOutboundContact::latestLifecycleAt) },
+).normalizedForStorage()
+
+private fun CompanionInteractionTimeline.normalizedForStorage(): CompanionInteractionTimeline = copy(
+    outboundContacts = outboundContacts
+        .filter { it.id.isNotBlank() && it.generatedAt > 0L }
+        .groupBy(CompanionOutboundContact::id)
+        .values
+        .map { duplicates -> duplicates.maxBy(CompanionOutboundContact::latestLifecycleAt) }
+        .sortedByDescending(CompanionOutboundContact::generatedAt)
+        .take(MAX_OUTBOUND_CONTACTS_PER_ASSISTANT),
+)
+
+private fun CompanionOutboundContact.latestLifecycleAt(): Long = listOfNotNull(
+    resolvedAt,
+    openedAt,
+    deliveredAt,
+    sentAt,
+    generatedAt,
+).maxOrNull() ?: generatedAt
+
+private fun maxNullable(first: Long?, second: Long?): Long? = when {
+    first == null -> second
+    second == null -> first
+    else -> maxOf(first, second)
+}
+
 private fun CompanionLifeEvent.normalizedForStorage(): CompanionLifeEvent = copy(
     title = title.cleanCompanionHumanText("").take(MAX_LIFE_EVENT_TITLE_LENGTH),
     summary = summary.cleanCompanionHumanText("").take(MAX_LIFE_EVENT_SUMMARY_LENGTH),
@@ -494,6 +535,7 @@ private const val MAX_CONCERNS_PER_ASSISTANT = 300
 private const val MAX_COMMITMENTS_PER_ASSISTANT = 300
 private const val MAX_ALWAYS_ON_ANCHORS_PER_ASSISTANT = 48
 private const val MAX_STATE_HISTORY_PER_ASSISTANT = 160
+private const val MAX_OUTBOUND_CONTACTS_PER_ASSISTANT = 80
 private const val MAX_RELATIONSHIP_HISTORY_PER_ASSISTANT = 160
 private const val MAX_LIFE_EVENTS_PER_ASSISTANT = 300
 private const val MAX_GOALS_PER_ASSISTANT = 24
