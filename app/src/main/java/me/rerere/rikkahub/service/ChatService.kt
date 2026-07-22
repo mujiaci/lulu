@@ -1741,6 +1741,7 @@ class ChatService(
                         messageNodes = conversation.messageNodes,
                         processedSourceNodeIds = processedBefore,
                         extractionInterval = assistant.memoryExtractionInterval,
+                        protectedRecentCount = assistant.memoryExtractionProtectedRecentCount,
                         direction = direction,
                     ) ?: break
                     _memoryReorganizationProgress.value = MemoryReorganizationProgress(
@@ -1838,6 +1839,7 @@ class ChatService(
                     messageNodes = conversation.messageNodes,
                     processedSourceNodeIds = processedSourceNodeIds,
                     extractionInterval = assistant.memoryExtractionInterval,
+                    protectedRecentCount = assistant.memoryExtractionProtectedRecentCount,
                     direction = direction,
                 ) ?: return@runCatching
 
