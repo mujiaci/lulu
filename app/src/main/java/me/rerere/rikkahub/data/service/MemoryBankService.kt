@@ -818,7 +818,7 @@ class MemoryBankService(
             val isLegacyIdentity = batch.batchId == buildLegacyMemoryExtractionBatchId(
                 assistantId = batch.assistantId,
                 conversationId = batch.conversationId,
-                sourceNodeIds = sourceNodeIds,
+                sourceNodeIds = sourceNodeIds.toList(),
             )
             val belongsToSelectedBranch = isLegacyIdentity ||
                 batch.branchId == selectedBranchIdAtSequence(batch.batchEndSequence)
