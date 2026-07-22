@@ -85,6 +85,40 @@ class CompanionCommitmentReducerTest {
     }
 
     @Test
+    fun `commitment keeps structured responsibility and complete transition history`() {
+        val original = commitment(status = CompanionCommitmentStatus.PROPOSED).copy(
+            promisorId = "assistant-a",
+            beneficiary = "user",
+            responsibility = "每天监督学习",
+            schedule = CompanionCommitmentSchedule(
+                timeDescription = "每天 20:00",
+                frequency = "每天",
+                condition = "用户尚未完成复习",
+            ),
+            executionMethod = "发送提醒并确认结果",
+        )
+        var result = CompanionCommitmentReducer.apply(
+            current = emptyList(),
+            changes = listOf(CompanionCommitmentChange.Upsert(original)),
+            nowMillis = 10L,
+        )
+        result = transition(result, CompanionCommitmentStatus.ACTIVE, 20L)
+        result = transition(result, CompanionCommitmentStatus.DUE, 30L)
+        val commitment = result.single()
+        assertEquals("assistant-a", commitment.promisorId)
+        assertEquals("每天", commitment.schedule.frequency)
+        assertEquals("用户尚未完成复习", commitment.schedule.condition)
+        assertEquals(
+            listOf(
+                CompanionCommitmentStatus.PROPOSED,
+                CompanionCommitmentStatus.ACTIVE,
+                CompanionCommitmentStatus.DUE,
+            ),
+            commitment.history.map { it.toStatus },
+        )
+    }
+
+    @Test
     fun `technical planner details never enter commitment state`() {
         val result = CompanionCommitmentReducer.apply(
             current = emptyList(),
