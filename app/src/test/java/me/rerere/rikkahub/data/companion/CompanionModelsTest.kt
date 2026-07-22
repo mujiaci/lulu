@@ -80,6 +80,31 @@ class CompanionModelsTest {
     }
 
     @Test
+    fun `interaction timeline survives v7 serialization`() {
+        val snapshot = CompanionSnapshot(
+            assistantId = "assistant-a",
+            interactionTimeline = CompanionInteractionTimeline(
+                lastUserActivityAt = 100L,
+                lastOutboundAt = 200L,
+                outboundContacts = listOf(
+                    CompanionOutboundContact(
+                        id = "out-1",
+                        status = CompanionOutboundStatus.DELIVERED,
+                        generatedAt = 180L,
+                        deliveredAt = 200L,
+                    ),
+                ),
+            ),
+        )
+
+        val decoded = json.decodeFromString<CompanionSnapshot>(json.encodeToString(snapshot))
+
+        assertEquals(100L, decoded.interactionTimeline.lastUserActivityAt)
+        assertEquals(200L, decoded.interactionTimeline.lastOutboundAt)
+        assertEquals(CompanionOutboundStatus.DELIVERED, decoded.interactionTimeline.outboundContacts.single().status)
+    }
+
+    @Test
     fun `state history survives serialization`() {
         val snapshot = CompanionSnapshot(
             assistantId = "assistant-a",
