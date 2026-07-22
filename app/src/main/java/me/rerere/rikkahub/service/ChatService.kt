@@ -2701,7 +2701,11 @@ class ChatService(
         // Create new conversation with compressed history as multiple user messages + kept messages
         val newMessageNodes = buildList {
             compressedSummaries.forEach { summary ->
-                add(UIMessage.user(summary).toMessageNode())
+                add(
+                    UIMessage.user(
+                        "<rolling_summary>\n$summary\n</rolling_summary>",
+                    ).toMessageNode(),
+                )
             }
             addAll(messagesToKeep.map { it.toMessageNode() })
         }
