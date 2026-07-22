@@ -111,8 +111,8 @@ internal fun buildCompanionContextEnvelope(
         ),
     )
     val summaryMessage = latestRollingSummary
-        .takeIf(String::isNotBlank)
-        ?.let(UIMessage::system)
+        .takeIf { it.isNotBlank() }
+        ?.let { summary -> UIMessage.system(summary) }
     return CompanionContextEnvelope(
         messages = buildList {
             addAll(deduplicatedSystemMessages)
