@@ -6,8 +6,9 @@ internal fun initializeCompanionRelationshipFromCharacterCard(
     characterCard: String,
     nowMillis: Long,
 ): CompanionRelationshipState {
-    if (current.updatedAt > 0L || characterCard.isBlank()) return current
+    if (characterCard.isBlank() || current.initializationEvidence.isNotBlank()) return current
     val declaration = characterCard.relationshipDeclaration() ?: return current
+    val hasInteractionEvidence = current.updatedAt > 0L
     return current.copy(
         roleLabel = current.roleLabel.ifBlank { declaration.label },
         knownDuration = characterCard.fieldValue("认识时长", "相识时长", "认识时间", "known for"),
@@ -19,15 +20,15 @@ internal fun initializeCompanionRelationshipFromCharacterCard(
         declaredBoundaries = characterCard.fieldItems("边界", "禁忌", "底线", "boundaries"),
         potentialTensions = characterCard.fieldItems("潜在矛盾", "未解矛盾", "冲突点", "tensions"),
         initializationEvidence = "character_card",
-        lastChangeReason = "由完整角色卡初始化",
-        lastChangeConfidence = 1f,
-        lastEvidenceIds = listOf("character_card"),
-        trust = declaration.trust,
-        closeness = declaration.closeness,
-        reliability = declaration.reliability,
-        boundaryConfidence = declaration.boundaryConfidence,
-        unresolvedTension = declaration.tension,
-        updatedAt = nowMillis,
+        lastChangeReason = if (hasInteractionEvidence) current.lastChangeReason else "由完整角色卡初始化",
+        lastChangeConfidence = if (hasInteractionEvidence) current.lastChangeConfidence else 1f,
+        lastEvidenceIds = if (hasInteractionEvidence) current.lastEvidenceIds else listOf("character_card"),
+        trust = if (hasInteractionEvidence) current.trust else declaration.trust,
+        closeness = if (hasInteractionEvidence) current.closeness else declaration.closeness,
+        reliability = if (hasInteractionEvidence) current.reliability else declaration.reliability,
+        boundaryConfidence = if (hasInteractionEvidence) current.boundaryConfidence else declaration.boundaryConfidence,
+        unresolvedTension = if (hasInteractionEvidence) current.unresolvedTension else declaration.tension,
+        updatedAt = maxOf(current.updatedAt, nowMillis),
     )
 }
 
