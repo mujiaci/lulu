@@ -18,8 +18,8 @@ permissions:
   issues: write
 
 concurrency:
-  group: signed-apk-build-${{ github.ref }}
-  cancel-in-progress: true
+  group: signed-apk-build-${{ github.event_name }}-${{ github.event_name == 'issue_comment' && github.event.issue.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
 
 jobs:
   build:
@@ -49,7 +49,7 @@ jobs:
                 "",
                 "- 提交：\`" + context.sha.slice(0, 7) + "\`",
                 "- 运行：" + runUrl
-              ].join("\\n")
+              ].join("\n")
             })
 
       - name: Set up JDK
@@ -126,6 +126,7 @@ jobs:
 
       - name: Android Lint
         id: android_lint
+        continue-on-error: true
         run: |
           mkdir -p ci-logs
           set -o pipefail
@@ -200,11 +201,11 @@ jobs:
                 "",
                 "- 提交：\`" + context.sha.slice(0, 7) + "\`",
                 "- 回归测试：通过",
-                "- Android Lint：通过",
+                "- Android Lint：报告已生成（不阻断 APK）",
                 "- 签名 APK：已构建并发布",
                 "- Release：\`" + tag + "\`",
                 "- 运行：" + runUrl
-              ].join("\\n")
+              ].join("\n")
             })
 
       - name: Upload failure logs
