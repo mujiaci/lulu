@@ -685,7 +685,6 @@ internal fun userReplyInteractionEvents(
     occurredAt: Long,
 ): List<CompanionInteractionEvent> = buildList {
     add(CompanionInteractionEvent(CompanionInteractionEventKind.USER_REPLY, occurredAt))
-    add(CompanionInteractionEvent(CompanionInteractionEventKind.OUTBOUND_OPENED, occurredAt))
     val normalized = text.trim().lowercase()
     add(
         when {
