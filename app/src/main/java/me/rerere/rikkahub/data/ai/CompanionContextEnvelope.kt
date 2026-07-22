@@ -54,12 +54,26 @@ internal fun buildCompanionContextEnvelope(
         .takeIf { it > 0 }
         ?.coerceAtMost(budget.maxHistoryMessages)
         ?: budget.maxHistoryMessages
+    val rollingSummaryMessages = messages.filter { message ->
+        message.role != MessageRole.SYSTEM &&
+            message.toText().contains("<rolling_summary", ignoreCase = true)
+    }
     val systemMessages = messages.filter { it.role == MessageRole.SYSTEM }
-    val allHistory = messages.filter { it.role != MessageRole.SYSTEM }
+    val allHistory = messages.filter { message ->
+        message.role != MessageRole.SYSTEM && message !in rollingSummaryMessages
+    }
     var history = allHistory.limitContext(configuredWindow)
 
     val systemText = systemMessages.joinToString("\n\n") { it.toText() }
-    val fixedText = listOf(characterCore, globalLorebook, roleLorebook, otherMandatoryPrompt, systemText)
+    val rollingSummaryText = rollingSummaryMessages.joinToString("\n\n") { it.toText() }
+    val fixedText = listOf(
+        characterCore,
+        globalLorebook,
+        roleLorebook,
+        otherMandatoryPrompt,
+        systemText,
+        rollingSummaryText,
+    )
         .filter(String::isNotBlank)
         .joinToString("\n\n")
     val fixedTokens = estimateCompanionPromptTokens(fixedText)
@@ -88,7 +102,13 @@ internal fun buildCompanionContextEnvelope(
         section("全局世界书", globalLorebook, if (globalLorebook.isBlank()) 0 else 1),
         section("角色世界书", roleLorebook, if (roleLorebook.isBlank()) 0 else 1),
         section("最近消息", recentText, history.size),
-        section("滚动摘要", classified.rollingSummary, classified.messageCount("rolling")),
+        section(
+            "滚动摘要",
+            listOf(rollingSummaryText, classified.rollingSummary)
+                .filter(String::isNotBlank)
+                .joinToString("\n\n"),
+            rollingSummaryMessages.size + classified.messageCount("rolling"),
+        ),
         section("记忆", classified.memory, classified.messageCount("memory")),
         section("关系/状态", classified.relationshipState, classified.messageCount("relationship")),
         section("承诺/关注", classified.commitmentConcern, classified.messageCount("commitment")),
@@ -99,7 +119,9 @@ internal fun buildCompanionContextEnvelope(
         ),
     )
     return CompanionContextEnvelope(
-        messages = systemMessages + history,
+        messages = systemMessages +
+            rollingSummaryMessages.map { UIMessage.system(it.toText()) } +
+            history,
         droppedHistoryMessages = (allHistory.size - history.size).coerceAtLeast(0),
         estimatedInputTokens = fixedTokens + estimateCompanionPromptTokens(recentText),
         budget = budget,
