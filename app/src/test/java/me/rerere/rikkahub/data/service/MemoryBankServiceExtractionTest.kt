@@ -452,7 +452,7 @@ class MemoryBankServiceExtractionTest {
 
         val context = service.buildRecallContext(
             assistantId = "assistant-1",
-            query = "论文大纲卡住了",
+            query = "",
         )
 
         assertTrue(context.contains("拆成更小的步骤"))
