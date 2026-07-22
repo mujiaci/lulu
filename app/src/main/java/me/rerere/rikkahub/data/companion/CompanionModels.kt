@@ -3,7 +3,7 @@ package me.rerere.rikkahub.data.companion
 import kotlinx.serialization.Serializable
 import java.util.UUID
 
-const val CURRENT_COMPANION_SCHEMA_VERSION = 7
+const val CURRENT_COMPANION_SCHEMA_VERSION = 8
 
 @Serializable
 data class CompanionPersistedState(
@@ -17,6 +17,10 @@ data class CompanionSnapshot(
     val assistantId: String,
     val state: CompanionState = CompanionState(),
     val stateHistory: List<CompanionStateHistoryEntry> = emptyList(),
+    /** Human-readable, evidence-backed state; legacy state remains readable during migration. */
+    val explainableState: CompanionExplainableState = CompanionExplainableState(),
+    /** Current real-world or digital-space activity anchor, if still valid. */
+    val lifeAnchor: CompanionLifeAnchor? = null,
     val neuroState: CompanionNeuroState = CompanionNeuroState(),
     val privateImpression: CompanionPrivateImpression = CompanionPrivateImpression(),
     /** Duties the character must actively remember and act on, separate from its impression of the user. */
