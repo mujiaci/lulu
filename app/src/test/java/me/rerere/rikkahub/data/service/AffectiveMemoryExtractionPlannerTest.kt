@@ -195,6 +195,34 @@ class AffectiveMemoryExtractionPlannerTest {
         )
     }
 
+    @Test
+    fun `planner honors role configured recent protection across boundaries`() {
+        val conversation = nodes(27)
+
+        assertEquals(
+            null,
+            buildAffectiveMemoryExtractionPlan(
+                messageNodes = conversation,
+                processedSourceNodeIds = emptySet(),
+                extractionInterval = 12,
+                protectedRecentCount = 16,
+            ),
+        )
+
+        val plan = requireNotNull(
+            buildAffectiveMemoryExtractionPlan(
+                messageNodes = conversation,
+                processedSourceNodeIds = emptySet(),
+                extractionInterval = 12,
+                protectedRecentCount = 15,
+            ),
+        )
+        assertEquals(12, plan.turns.size)
+        assertEquals(idOf(1), plan.turns.first().nodeId)
+        assertEquals(idOf(12), plan.turns.last().nodeId)
+        assertFalse(plan.turns.any { it.nodeId == idOf(13) })
+    }
+
     private fun nodes(
         count: Int,
         text: (Int) -> String = { index -> "message $index" },
