@@ -85,6 +85,10 @@ class CompanionRelationshipInitializationTest {
             nowMillis = 100L,
         )
 
-        assertEquals(existing, result)
+        assertEquals(existing.roleLabel, result.roleLabel)
+        assertEquals(existing.trust, result.trust)
+        assertEquals(existing.closeness, result.closeness)
+        assertEquals(existing.unresolvedTension, result.unresolvedTension)
+        assertEquals("character_card", result.initializationEvidence)
     }
 }
