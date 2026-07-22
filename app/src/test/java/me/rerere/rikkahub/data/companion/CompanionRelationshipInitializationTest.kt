@@ -33,6 +33,31 @@ class CompanionRelationshipInitializationTest {
     }
 
     @Test
+    fun `ordinary friend stays distinct from intimate and hostile roles`() {
+        val result = initializeCompanionRelationshipFromCharacterCard(
+            current = CompanionRelationshipState(),
+            characterCard = "关系：朋友。说话平常，尊重距离。",
+            nowMillis = 100L,
+        )
+
+        assertEquals("朋友", result.roleLabel)
+        assertTrue(result.closeness in 0.30f..0.50f)
+        assertTrue(result.unresolvedTension < 0.20f)
+    }
+
+    @Test
+    fun `nonhuman identity does not receive an invented intimate relationship`() {
+        val original = CompanionRelationshipState()
+        val result = initializeCompanionRelationshipFromCharacterCard(
+            current = original,
+            characterCard = "身份：非人观测体。表达方式冷静，不模拟恋爱或人类依恋。",
+            nowMillis = 100L,
+        )
+
+        assertEquals(original, result)
+    }
+
+    @Test
     fun `negated relationship never creates intimacy`() {
         val original = CompanionRelationshipState()
 
