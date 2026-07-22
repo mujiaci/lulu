@@ -101,6 +101,14 @@ jobs:
             --tests "*LuluExpressionOutputTransformerTest" \
             --tests "*CompanionPresenceContractTransformerTest" 2>&1 | tee ci-logs/regression-tests.log
 
+      - name: Android Lint
+        id: android_lint
+        run: |
+          mkdir -p ci-logs
+          set -o pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon --no-build-cache :app:lintRelease 2>&1 | tee ci-logs/android-lint.log
+
       - name: Gradle Build
         id: gradle_build
         run: |
