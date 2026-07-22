@@ -12,6 +12,7 @@
 | checkpoint 读取 | `MemoryBankService.getProcessedSourceNodeIds` | 合并 checkpoint 与已保存记忆的来源节点，完整重建时可忽略已保存来源 |
 | 确定性提取 | `buildDeterministicMemoryCandidates` | 只处理明确偏好、边界和纠正；它可以先保存，但不能替语义提取宣告批次成功 |
 | 语义提取 | `AffectiveMemoryExtractor` | 模型输出 JSON；解析后校验类型、来源证据、用户信号和耐久性 |
+| 格式修复与重试 | `parseExtractionResult`、`retryTransientMemoryExtraction` | JSON 仅执行一次去不可见字符/尾逗号的保守修复；网络、连接、限流和服务暂不可用最多累计尝试三次 |
 | 三态判定 | `classifySemanticMemoryExtraction` | `SUCCESS_WITH_MEMORIES`、`SUCCESS_EMPTY`、`FAILED_RETRYABLE` |
 | 保存 | `MemoryBankService.saveExtractedMemories` | 标准化、按内容去重、写入来源节点和事件/提取时间 |
 | checkpoint 推进 | `MemoryBankService.markExtractionProcessed` | 只在语义成功有记忆或模型明确返回空列表时推进 |
@@ -67,10 +68,9 @@
 
 下列内容仍属于后续 P1，不能误认为已经实现：
 
-- 将过渡的 `branch_id=selected` 替换成真实、稳定的消息分支标识；
+- 编辑、删除或切换旧消息分支后，将旧分支对应批次标为 `INVALIDATED` 并完整重建；
 - 记忆管理页读取批次表并展示 App 重启后仍存在的失败重试队列；
-- 自动执行临时失败重试；
-- JSON 有限格式修复与重试上限；
+
 - 编辑、删除、切换分支后的精确批次失效；
 - 角色级保护区设置；
 - 记忆页的失败/空结果/失效批次列表和手动重试；
