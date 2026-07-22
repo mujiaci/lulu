@@ -46,6 +46,30 @@ class CompanionRelationshipInitializationTest {
     }
 
     @Test
+    fun `complete character card initializes structured relationship facts once`() {
+        val result = initializeCompanionRelationshipFromCharacterCard(
+            current = CompanionRelationshipState(),
+            characterCard = """
+                关系：恋人
+                认识时长：三年
+                共同经历：一起准备考试、共同旅行
+                关系阶段：稳定交往
+                安全感：遇到冲突仍会说明原因
+                依恋表达：克制但会用行动照顾
+                互动习惯：每天互道晚安、重要决定先商量
+                边界：不使用羞辱性称呼
+                潜在矛盾：忙碌时容易误解彼此
+            """.trimIndent(),
+            nowMillis = 100L,
+        )
+        assertEquals("三年", result.knownDuration)
+        assertEquals(listOf("一起准备考试", "共同旅行"), result.sharedExperiences)
+        assertEquals("稳定交往", result.stage)
+        assertEquals(listOf("不使用羞辱性称呼"), result.declaredBoundaries)
+        assertEquals(listOf("character_card"), result.lastEvidenceIds)
+    }
+
+    @Test
     fun `real interaction state always wins over card initialization`() {
         val existing = CompanionRelationshipState(
             roleLabel = "关系冷却中",
