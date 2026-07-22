@@ -436,7 +436,7 @@ class MemoryBankServiceExtractionTest {
                 ),
                 MemoryBankEntity(
                     id = 8,
-                    content = "用户喜欢雨天窝在床上聊天。",
+                    content = "用户写论文大纲卡住时，喜欢雨天窝在床上聊天。",
                     memoryKind = "user_preference",
                     assistantId = "assistant-1",
                     importance = 3,
@@ -580,10 +580,9 @@ class MemoryBankServiceExtractionTest {
         assertEquals("assistant-1", dao.lastAssistantKeywordTypeSearch?.assistantId)
     }
 
-    @Test
-    fun `search memories keeps assistant filter without keyword or type`() = runBlocking {
+    @fun `search memories keeps assistant filter without keyword or type`() = runBlocking {
         val dao = RecordingMemoryBankDAO(
-            recentMemories = listOf(
+            assistantMemories = listOf(
                 MemoryBankEntity(id = 1, assistantId = "assistant-1", content = "one"),
                 MemoryBankEntity(id = 2, assistantId = "assistant-2", content = "two"),
             ),
