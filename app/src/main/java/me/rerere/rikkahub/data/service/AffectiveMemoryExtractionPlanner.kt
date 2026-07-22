@@ -7,7 +7,7 @@ import kotlinx.datetime.toInstant
 import java.security.MessageDigest
 
 const val DEFAULT_MEMORY_EXTRACTION_INTERVAL = 20
-const val MEMORY_EXTRACTION_TAIL_BUFFER = 10
+const val DEFAULT_MEMORY_EXTRACTION_PROTECTED_RECENT_COUNT = 10
 
 data class AffectiveMemoryExtractionPlan(
     val turns: List<MemoryExtractionTurn>,
@@ -56,11 +56,12 @@ fun buildAffectiveMemoryExtractionPlan(
     messageNodes: List<MessageNode>,
     processedSourceNodeIds: Set<String>,
     extractionInterval: Int = DEFAULT_MEMORY_EXTRACTION_INTERVAL,
+    protectedRecentCount: Int = DEFAULT_MEMORY_EXTRACTION_PROTECTED_RECENT_COUNT,
     direction: MemoryExtractionDirection = MemoryExtractionDirection.OLDEST_FIRST,
 ): AffectiveMemoryExtractionPlan? {
     if (extractionInterval <= 0) return null
     val logicalTurns = messageNodes.toMemoryExtractionTurns()
-    val stableTurns = logicalTurns.dropLast(MEMORY_EXTRACTION_TAIL_BUFFER)
+    val stableTurns = logicalTurns.dropLast(protectedRecentCount.coerceAtLeast(0))
     // The role setting is the exact batch size (20 is only the default). Build standard
     // contiguous windows before consulting the checkpoint so legacy holes cannot stitch
     // fragments from two different windows into one extraction request.
