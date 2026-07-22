@@ -595,6 +595,22 @@ private fun CompanionInteractionTimeline.applyInteractionEvent(
             ) else contact
         }
     }
+    fun updateLatest(status: CompanionOutboundStatus): List<CompanionOutboundContact> {
+        val latest = outboundContacts
+            .filterNot { it.status.isTerminalOutboundStatus() }
+            .maxByOrNull(CompanionOutboundContact::generatedAt)
+            ?: return outboundContacts
+        return outboundContacts.map { contact ->
+            if (contact.id == latest.id) {
+                contact.copy(
+                    status = status,
+                    openedAt = if (status == CompanionOutboundStatus.OPENED) event.occurredAt else contact.openedAt,
+                    resolvedAt = if (status.isTerminalOutboundStatus()) event.occurredAt else contact.resolvedAt,
+                    result = event.detail ?: contact.result,
+                )
+            } else contact
+        }
+    }
     return when (event.kind) {
         CompanionInteractionEventKind.LOCAL_HEARTBEAT -> copy(lastHeartbeatAt = event.occurredAt)
         CompanionInteractionEventKind.USER_ACTIVITY -> copy(lastUserActivityAt = event.occurredAt)
@@ -616,7 +632,11 @@ private fun CompanionInteractionTimeline.applyInteractionEvent(
         )
         CompanionInteractionEventKind.OUTBOUND_OPENED -> copy(
             lastOpenedAt = event.occurredAt,
-            outboundContacts = updateContact(CompanionOutboundStatus.OPENED),
+            outboundContacts = if (matchingId.isNullOrBlank()) {
+                updateLatest(CompanionOutboundStatus.OPENED)
+            } else {
+                updateContact(CompanionOutboundStatus.OPENED)
+            },
         )
         CompanionInteractionEventKind.OUTBOUND_UNANSWERED ->
             copy(outboundContacts = updateContact(CompanionOutboundStatus.UNANSWERED))
@@ -629,7 +649,13 @@ private fun CompanionInteractionTimeline.applyInteractionEvent(
         CompanionInteractionEventKind.DECLINED ->
             copy(outboundContacts = resolveLatest(CompanionOutboundStatus.DECLINED))
         CompanionInteractionEventKind.REMINDER_COMPLETED ->
-            copy(outboundContacts = updateContact(CompanionOutboundStatus.REMINDER_COMPLETED))
+            copy(
+                outboundContacts = if (matchingId.isNullOrBlank()) {
+                    updateLatest(CompanionOutboundStatus.REMINDER_COMPLETED)
+                } else {
+                    updateContact(CompanionOutboundStatus.REMINDER_COMPLETED)
+                },
+            )
         CompanionInteractionEventKind.OUTBOUND_FAILED ->
             copy(outboundContacts = updateContact(CompanionOutboundStatus.FAILED))
         CompanionInteractionEventKind.OUTBOUND_CANCELLED ->
@@ -659,6 +685,7 @@ internal fun userReplyInteractionEvents(
     occurredAt: Long,
 ): List<CompanionInteractionEvent> = buildList {
     add(CompanionInteractionEvent(CompanionInteractionEventKind.USER_REPLY, occurredAt))
+    add(CompanionInteractionEvent(CompanionInteractionEventKind.OUTBOUND_OPENED, occurredAt))
     val normalized = text.trim().lowercase()
     add(
         when {
@@ -666,6 +693,18 @@ internal fun userReplyInteractionEvents(
                 CompanionInteractionEvent(CompanionInteractionEventKind.USER_BUSY, occurredAt, detail = "user_busy")
             DECLINE_REPLY_MARKERS.any(normalized::contains) ->
                 CompanionInteractionEvent(CompanionInteractionEventKind.DECLINED, occurredAt, detail = "user_declined")
+            REMINDER_COMPLETED_MARKERS.any(normalized::contains) ->
+                CompanionInteractionEvent(
+                    CompanionInteractionEventKind.REMINDER_COMPLETED,
+                    occurredAt,
+                    detail = "user_reported_completion",
+                )
+            TOPIC_CHANGED_MARKERS.any(normalized::contains) ->
+                CompanionInteractionEvent(
+                    CompanionInteractionEventKind.TOPIC_CHANGED,
+                    occurredAt,
+                    detail = "user_changed_topic",
+                )
             else -> CompanionInteractionEvent(CompanionInteractionEventKind.OUTBOUND_REPLIED, occurredAt)
         },
     )
@@ -673,6 +712,8 @@ internal fun userReplyInteractionEvents(
 
 private val BUSY_REPLY_MARKERS = setOf("在忙", "忙着", "没空", "稍后", "等会", "晚点", "busy", "later")
 private val DECLINE_REPLY_MARKERS = setOf("别发", "别问", "不想聊", "不要提醒", "拒绝", "stop", "leave me alone")
+private val REMINDER_COMPLETED_MARKERS = setOf("做完了", "完成了", "已经完成", "弄好了", "办完了", "done", "finished")
+private val TOPIC_CHANGED_MARKERS = setOf("换个话题", "说点别的", "不说这个", "聊点别的", "change the subject")
 private const val MAX_OUTBOUND_CONTACT_HISTORY = 80
 
 private fun CompanionState.hasVisibleStateContent(): Boolean = listOf(
