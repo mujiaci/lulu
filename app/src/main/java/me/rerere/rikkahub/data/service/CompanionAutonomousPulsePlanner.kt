@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.service
 
 import me.rerere.rikkahub.data.companion.CompanionConcernStatus
+import me.rerere.rikkahub.data.companion.CompanionOutboundStatus
 import me.rerere.rikkahub.data.companion.CompanionSnapshot
 import me.rerere.rikkahub.data.datastore.ProactiveMessageSetting
 import java.util.concurrent.TimeUnit
@@ -34,7 +35,13 @@ object CompanionAutonomousPulsePlanner {
 
         val activeWorkCount = input.snapshot.activeWorkCount(input.nowMillis)
         if (input.setting.naturalScheduling) {
+            val latestFeedback = input.snapshot.interactionTimeline.outboundContacts
+                .maxByOrNull { it.generatedAt }
+                ?.status
             val naturalDelay = when {
+                latestFeedback == CompanionOutboundStatus.DECLINED -> 360..720
+                latestFeedback == CompanionOutboundStatus.USER_BUSY -> 180..360
+                latestFeedback == CompanionOutboundStatus.UNANSWERED -> 120..240
                 input.snapshot.relationship.unresolvedTension >= 0.6f -> 180..300
                 activeWorkCount > 0 && input.minutesSinceLastChat >= 45 -> 8..18
                 activeWorkCount > 0 -> 18..35
@@ -45,7 +52,7 @@ object CompanionAutonomousPulsePlanner {
             }.stableMinute(input)
             return CompanionAutonomousPulsePlan(
                 delayMinutes = naturalDelay,
-                reason = "natural;${buildReason(input, activeWorkCount)}",
+                reason = "natural;feedback=${latestFeedback?.name ?: "none"};${buildReason(input, activeWorkCount)}",
             )
         }
         val desired = when {
