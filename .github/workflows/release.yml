@@ -81,6 +81,8 @@ jobs:
             --tests "*MemoryArchiveTest" \
             --tests "*CompanionRuntimeReducerTest" \
             --tests "*MemoryBankContextTest" \
+            --tests "*MemoryBankServiceExtractionTest" \
+            --tests "*AILoggingManagerTest" \
             --tests "*CompanionPresenceStateTest" \
             --tests "*CompanionTurnReminderPlannerTest" \
             --tests "*LuluStatusDialogTest" \
