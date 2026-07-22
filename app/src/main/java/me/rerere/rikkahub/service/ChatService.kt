@@ -2042,7 +2042,7 @@ class ChatService(
                     memoryBankService.failExtractionBatch(
                         batchId,
                         if (error is CancellationException) "cancelled"
-                        else "${error::class.simpleName}: ${error.message.orEmpty()}",
+                        else error::class.simpleName ?: "unexpected_error",
                     )
                 }
                 if (error is CancellationException) throw error
