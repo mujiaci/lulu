@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T21:11:33.162156+00:00",
-  "commit": "0b5b34836f4493e2c04653363922d35875cd3e4d",
+  "generatedAt": "2026-07-22T21:13:18.650915+00:00",
+  "commit": "9f28c682eec017fe3030bc500e29c9e52a00b5fe",
   "branch": "master",
   "summary": {
     "files": 1100,
-    "lines": 261587,
+    "lines": 261585,
     "symbols": 5300,
     "byModule": {
       "app": 638,
@@ -30941,7 +30941,7 @@
       "path": "app/src/test/java/me/rerere/rikkahub/data/service/AffectiveMemoryExtractorTest.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 247,
+      "lines": 245,
       "package": "me.rerere.rikkahub.data.service",
       "categories": [
         "记忆"
