@@ -596,6 +596,72 @@ class MemoryBankServiceExtractionTest {
     }
 }
 
+
+    @Test
+    fun `daily archive and covered atomic memories are mutually exclusive in recall`() {
+        val memories = listOf(
+            MemoryBankEntity(
+                id = 10,
+                content = "这一天的派生摘要",
+                type = "daily_summary",
+                memoryKind = "daily_archive",
+                sourceMemoryIdsJson = """["1","2"]""",
+                importance = 5,
+            ),
+            MemoryBankEntity(id = 1, content = "原子记忆一", importance = 4),
+            MemoryBankEntity(id = 2, content = "原子记忆二", importance = 4),
+            MemoryBankEntity(id = 3, content = "另一条独立记忆", importance = 3),
+        )
+
+        val selected = selectMemoryRecallItems(memories, maxItems = 4)
+
+        assertTrue(selected.any { it.id == 10 })
+        assertTrue(selected.any { it.id == 3 })
+        assertFalse(selected.any { it.id == 1 || it.id == 2 })
+    }
+
+    @Test
+    fun `derived daily archive persists source memory ids`() {
+        val zone = java.time.ZoneId.of("UTC")
+        val dayOne = java.time.Instant.parse("2026-07-20T10:00:00Z").toEpochMilli()
+        val now = java.time.Instant.parse("2026-07-22T10:00:00Z").toEpochMilli()
+        val archives = buildMissingDailyMemoryArchives(
+            memories = listOf(
+                MemoryBankEntity(id = 1, content = "记忆一", assistantId = "assistant-1", createdAt = dayOne),
+                MemoryBankEntity(id = 2, content = "记忆二", assistantId = "assistant-1", createdAt = dayOne + 1_000),
+            ),
+            nowMillis = now,
+            zoneId = zone,
+        )
+
+        assertEquals("""["1","2"]""", archives.single().sourceMemoryIdsJson)
+        assertEquals(now, archives.single().memoryCreatedAt)
+        assertEquals(now, archives.single().memoryUpdatedAt)
+    }
+
+    @Test
+    fun `extracted memory distinguishes inferred event and record times`() {
+        val entity = AffectiveMemoryCandidate(
+            type = "relationship",
+            content = "她明确说这件事对关系很重要",
+            userSignal = "用户明确说明",
+            sourceMessageNodeIds = listOf("node-1"),
+            sourceMessageAtMillis = 100L,
+        ).toEntity(
+            assistantId = "assistant-1",
+            conversationId = "conversation-1",
+            createdAt = 500L,
+        )
+
+        assertEquals(100L, entity.sourceMessageAt)
+        assertEquals(100L, entity.occurredAt)
+        assertTrue(entity.occurredAtInferred)
+        assertEquals(500L, entity.extractedAt)
+        assertEquals(500L, entity.memoryCreatedAt)
+        assertEquals(500L, entity.memoryUpdatedAt)
+    }
+}
+
 private class RecordingMemoryBankDAO(
     private val assistantMemories: List<MemoryBankEntity> = emptyList(),
     private val recentMemories: List<MemoryBankEntity> = emptyList(),
