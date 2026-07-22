@@ -383,6 +383,13 @@ class GenerationHandler(
         )
             .sortedByDescending { it.priority }
             .joinToString("\n") { it.content.trim() }
+        val toolDefinitionsForBudget = tools.joinToString("\n\n") { tool ->
+            buildString {
+                appendLine("name: ${tool.name}")
+                appendLine("description: ${tool.description}")
+                tool.parameters()?.let { appendLine("parameters: $it") }
+            }
+        }
         val contextEnvelope = buildCompanionContextEnvelope(
             assistant = assistant,
             source = apiUsageSource,
@@ -390,7 +397,9 @@ class GenerationHandler(
             characterCore = effectiveSystemPrompt,
             globalLorebook = globalLorebookContext,
             roleLorebook = roleLorebookContext,
-            otherMandatoryPrompt = systemExtensions,
+            otherMandatoryPrompt = listOf(systemExtensions, toolDefinitionsForBudget)
+                .filter(String::isNotBlank)
+                .joinToString("\n\n"),
         )
         val limitedMessages = contextEnvelope.messages
             .compactOldToolOutputsForPrompt()
