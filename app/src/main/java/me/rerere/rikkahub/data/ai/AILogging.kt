@@ -48,6 +48,7 @@ data class GenerationTokenDetail(
 )
 
 private const val MAX_LOGS = 32
+private const val REDACTED_ERROR = "调用失败（详情已脱敏）"
 
 class AILoggingManager {
     private val logs = MutableStateFlow<List<AILogging>>(emptyList())
