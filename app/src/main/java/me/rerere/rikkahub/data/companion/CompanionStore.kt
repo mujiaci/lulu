@@ -108,6 +108,13 @@ class CompanionStore(
         }
     }
 
+    suspend fun deleteFavorite(assistantId: String, favoriteId: String) {
+        if (assistantId.isBlank() || favoriteId.isBlank()) return
+        updateSnapshot(assistantId) { snapshot ->
+            snapshot.copy(favorites = snapshot.favorites.filterNot { it.id == favoriteId })
+        }
+    }
+
     suspend fun deleteCommitment(assistantId: String, commitmentId: String) {
         if (assistantId.isBlank() || commitmentId.isBlank()) return
         updateSnapshot(assistantId) { snapshot ->
