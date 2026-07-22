@@ -11,17 +11,17 @@
 
 ## 索引状态
 
-- 基准提交：`94e553fd87d3c7fabbb9628b5f7a028a64aa0f83`
+- 基准提交：`ac12b3f27b0aec5b1bed89bba363b726ffa14927`
 - 分支：`master`
-- 已索引文件：1092
-- 已索引代码/文本行：261088
-- 已发现类、接口、对象、函数及 Composable：5261
+- 已索引文件：1093
+- 已索引代码/文本行：261209
+- 已发现类、接口、对象、函数及 Composable：5268
 
 ## 模块概览
 
 | 模块 | 文件数 |
 |---|---:|
-| `app` | 629 |
+| `app` | 630 |
 | `web-ui` | 131 |
 | `document` | 76 |
 | `ai` | 47 |
@@ -46,7 +46,7 @@
 
 | 扩展名 | 文件数 |
 |---|---:|
-| `.kt` | 697 |
+| `.kt` | 698 |
 | `.tsx` | 74 |
 | `.java` | 64 |
 | `.md` | 58 |
@@ -108,7 +108,7 @@
 - `ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderPromptCacheTest.kt`
 - `ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt`
 - `ai/src/test/java/me/rerere/ai/provider/providers/OpenAIImageTransportTest.kt`
-- ……另有 88 个文件，见 `code-index.json`
+- ……另有 89 个文件，见 `code-index.json`
 
 ### 主动代理
 

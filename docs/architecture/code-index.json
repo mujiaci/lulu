@@ -1,14 +1,14 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T17:53:03.272158+00:00",
-  "commit": "94e553fd87d3c7fabbb9628b5f7a028a64aa0f83",
+  "generatedAt": "2026-07-22T17:56:30.722257+00:00",
+  "commit": "ac12b3f27b0aec5b1bed89bba363b726ffa14927",
   "branch": "master",
   "summary": {
-    "files": 1092,
-    "lines": 261088,
-    "symbols": 5261,
+    "files": 1093,
+    "lines": 261209,
+    "symbols": 5268,
     "byModule": {
-      "app": 629,
+      "app": 630,
       "web-ui": 131,
       "document": 76,
       "ai": 47,
@@ -30,7 +30,7 @@
       "gradle": 2
     },
     "byExtension": {
-      ".kt": 697,
+      ".kt": 698,
       ".tsx": 74,
       ".java": 64,
       ".md": 58,
@@ -102,6 +102,7 @@
       "app/src/main/java/me/rerere/rikkahub/data/ai/AIRequestInterceptor.kt",
       "app/src/main/java/me/rerere/rikkahub/data/ai/ApiUsageStore.kt",
       "app/src/main/java/me/rerere/rikkahub/data/ai/CompanionContextEnvelope.kt",
+      "app/src/main/java/me/rerere/rikkahub/data/ai/FinalCompanionContextBudget.kt",
       "app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt",
       "app/src/main/java/me/rerere/rikkahub/data/ai/RequestLoggingInterceptor.kt",
       "app/src/main/java/me/rerere/rikkahub/data/ai/mcp/McpConfig.kt",
@@ -1043,6 +1044,11 @@
       "imports": 6
     },
     {
+      "from": "me.rerere.rikkahub.data.ai",
+      "to": "me.rerere.ai.ui.UIMessage",
+      "imports": 6
+    },
+    {
       "from": "me.rerere.rikkahub.data.datastore",
       "to": "me.rerere.rikkahub.data.ai.prompts",
       "imports": 6
@@ -1135,11 +1141,6 @@
     {
       "from": "me.rerere.rikkahub",
       "to": "me.rerere.rikkahub.ui.pages.extensions",
-      "imports": 5
-    },
-    {
-      "from": "me.rerere.rikkahub.data.ai",
-      "to": "me.rerere.ai.ui.UIMessage",
       "imports": 5
     },
     {
@@ -1549,6 +1550,11 @@
     },
     {
       "from": "me.rerere.rikkahub.data.ai",
+      "to": "me.rerere.ai.core.MessageRole",
+      "imports": 3
+    },
+    {
+      "from": "me.rerere.rikkahub.data.ai",
       "to": "me.rerere.rikkahub.data.model.Assistant",
       "imports": 3
     },
@@ -1740,11 +1746,6 @@
     {
       "from": "me.rerere.rikkahub.ui.components.message",
       "to": "me.rerere.rikkahub.utils.JsonInstant",
-      "imports": 3
-    },
-    {
-      "from": "me.rerere.rikkahub.ui.components.message",
-      "to": "me.rerere.hugeicons.stroke.Cancel01",
       "imports": 3
     }
   ],
@@ -5634,6 +5635,53 @@
           "name": "estimateCompanionPromptTokens",
           "kind": "function",
           "line": 184
+        }
+      ]
+    },
+    {
+      "path": "app/src/main/java/me/rerere/rikkahub/data/ai/FinalCompanionContextBudget.kt",
+      "module": "app",
+      "extension": ".kt",
+      "lines": 121,
+      "package": "me.rerere.rikkahub.data.ai",
+      "categories": [
+        "AI与上下文"
+      ],
+      "symbols": [
+        {
+          "name": "FinalCompanionContextResult",
+          "kind": "class",
+          "line": 13
+        },
+        {
+          "name": "enforceFinalCompanionContextBudget",
+          "kind": "function",
+          "line": 20
+        },
+        {
+          "name": "deduplicateSystemMessages",
+          "kind": "function",
+          "line": 74
+        },
+        {
+          "name": "systemCharLimit",
+          "kind": "function",
+          "line": 83
+        },
+        {
+          "name": "compactText",
+          "kind": "function",
+          "line": 95
+        },
+        {
+          "name": "estimateMessagesTokens",
+          "kind": "function",
+          "line": 104
+        },
+        {
+          "name": "finalCompanionInputBudget",
+          "kind": "function",
+          "line": 110
         }
       ]
     },
