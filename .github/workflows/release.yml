@@ -2,28 +2,22 @@ name: Signed APK Build
 
 on:
   push:
-    branches:
-      - master
+    branches: [master]
+  workflow_dispatch:
   issue_comment:
     types: [created]
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "GitHub Release tag. Leave empty to use signed-build-<run_number>."
-        required: false
-        type: string
 
 permissions:
   contents: write
   issues: write
 
 concurrency:
-  group: signed-apk-build-${{ github.event_name }}-${{ github.event_name == 'issue_comment' && github.event.issue.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name != 'issue_comment' }}
+  group: signed-apk-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    if: ${{ github.event_name != 'issue_comment' || github.event.comment.body == '/build-lulu' }}
+    if: github.event_name != 'issue_comment' || github.event.comment.body == '/build-lulu'
     runs-on: ubuntu-latest
     timeout-minutes: 45
 
@@ -33,180 +27,83 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Report chatops build start
-        if: github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runUrl = "https://github.com/" + context.repo.owner + "/" + context.repo.repo +
-              "/actions/runs/" + context.runId
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: [
-                "🔄 Lulu 最终验收已开始。",
-                "",
-                "- 提交：\`" + context.sha.slice(0, 7) + "\`",
-                "- 运行：" + runUrl
-              ].join("\n")
-            })
-
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: "22"
+          node-version: '22'
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 10
 
-      - name: Install web-ui dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install web dependencies
         working-directory: web-ui
+        run: pnpm install --frozen-lockfile
 
-      - name: Gradle cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
-
-      - name: Prepare signing files
+      - name: Prepare signing
         run: |
-          set -euo pipefail
-          {
-            echo "storeFile=release-public.key"
-            echo "storePassword=lulu-release-password"
-            echo "keyAlias=lulu"
-            echo "keyPassword=lulu-release-password"
-          } > local.properties
+          cat > local.properties <<'EOF'
+          storeFile=release-public.key
+          storePassword=lulu-release-password
+          keyAlias=lulu
+          keyPassword=lulu-release-password
+          EOF
 
-      - name: Companion and memory regression tests
-        id: regression_tests
+      - name: Run unit tests
         run: |
           mkdir -p ci-logs
-          set -o pipefail
           chmod +x ./gradlew
-          ./gradlew --no-daemon --no-build-cache clean :app:testDebugUnitTest \
-            --tests "*CompanionLifeClaimOutputTransformerTest" \
-            --tests "*CompanionGameToolTest" \
-            --tests "*CompanionIntentPlannerTest" \
-            --tests "*AffectivePrivateImpressionTest" \
-            --tests "*MemoryArchiveTest" \
-            --tests "*CompanionRuntimeReducerTest" \
-            --tests "*CompanionRelationshipInitializationTest" \
-            --tests "*CompanionCommitmentReducerTest" \
-            --tests "*CompanionResponsibilitySplitterTest" \
-            --tests "*CompanionExplainableStateTest" \
-            --tests "*CompanionPerceptionLegacyStateTest" \
-            --tests "*CompanionInteractionTimelineTest" \
-            --tests "*CompanionHeartbeatTest" \
-            --tests "*MemoryBankContextTest" \
-            --tests "*MemoryBankServiceExtractionTest" \
-            --tests "*AILoggingManagerTest" \
-            --tests "*CompanionContextEnvelopeTest" \
-            --tests "*PromptInjectionTransformerTest" \
-            --tests "*CompanionPresenceStateTest" \
-            --tests "*CompanionTurnReminderPlannerTest" \
-            --tests "*LuluStatusDialogTest" \
-            --tests "*StudyRulesTest" \
-            --tests "*CompanionLifeEventFactoryTest" \
-            --tests "*CompanionDigitalActivitiesTest" \
-            --tests "*LuluExpressionOutputTransformerTest" \
-            --tests "*CompanionPresenceContractTransformerTest" 2>&1 | tee ci-logs/regression-tests.log
+          set -o pipefail
+          ./gradlew --no-daemon --no-build-cache :app:testDebugUnitTest 2>&1 | tee ci-logs/tests.log
 
-      - name: Android Lint
-        id: android_lint
+      - name: Run Android Lint report
         continue-on-error: true
         run: |
           mkdir -p ci-logs
           set -o pipefail
-          chmod +x ./gradlew
-          ./gradlew --no-daemon --no-build-cache :app:lintRelease 2>&1 | tee ci-logs/android-lint.log
+          ./gradlew --no-daemon --no-build-cache :app:lintRelease 2>&1 | tee ci-logs/lint.log
 
-      - name: Gradle Build
-        id: gradle_build
+      - name: Build signed release APK
         run: |
           mkdir -p ci-logs
           set -o pipefail
-          chmod +x ./gradlew
-          ./gradlew --no-daemon --no-build-cache assembleRelease -x uploadCrashlyticsMappingFileRelease 2>&1 | tee ci-logs/gradle-build.log
+          ./gradlew --no-daemon --no-build-cache assembleRelease -x uploadCrashlyticsMappingFileRelease 2>&1 | tee ci-logs/build.log
 
-      - name: Collect APK files
+      - name: Collect APK
         run: |
           set -euo pipefail
           mkdir -p apk-artifacts
-          release_apk="$(find app/build/outputs/apk/release -name '*-release.apk' -print -quit)"
-          if [ -z "$release_apk" ]; then
-            echo "::error title=Missing release APK::Could not find the release APK."
-            find app/build/outputs/apk/release -name '*.apk' -print
-            exit 1
-          fi
-          cp "$release_apk" apk-artifacts/lulu-signed.apk
-          ls -lh apk-artifacts
+          apk="$(find app/build/outputs/apk/release -name '*-release.apk' -print -quit)"
+          test -n "$apk"
+          cp "$apk" apk-artifacts/lulu-signed.apk
 
-      - name: Upload artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
-        if: success()
         with:
-          name: signed-apk
-          path: apk-artifacts/*.apk
+          name: signed-apk-${{ github.run_number }}
+          path: apk-artifacts/lulu-signed.apk
           if-no-files-found: error
 
-      - name: Publish GitHub Release
-        if: success()
+      - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || '' }}
         run: |
           set -euo pipefail
-
-          tag="$RELEASE_TAG"
-          if [ -z "$tag" ]; then
-            tag="signed-build-${GITHUB_RUN_NUMBER}"
-          fi
-
-          title="Lulu ${tag}"
-          notes="Automated signed APK build from ${GITHUB_SHA}."
-
+          tag="signed-build-${GITHUB_RUN_NUMBER}"
           if gh release view "$tag" >/dev/null 2>&1; then
-            gh release upload "$tag" apk-artifacts/*.apk --clobber
+            gh release upload "$tag" apk-artifacts/lulu-signed.apk --clobber
           else
-            gh release create "$tag" apk-artifacts/*.apk --title "$title" --notes "$notes"
+            gh release create "$tag" apk-artifacts/lulu-signed.apk \
+              --title "Lulu ${tag}" \
+              --notes "Automated signed APK build from ${GITHUB_SHA}."
           fi
-
-      - name: Report successful chatops build
-        if: success() && github.event_name == 'issue_comment'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const runUrl = "https://github.com/" + context.repo.owner + "/" + context.repo.repo +
-              "/actions/runs/" + context.runId
-            const tag = "signed-build-" + context.runNumber
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: [
-                "✅ Lulu 最新 master 已完成最终验收。",
-                "",
-                "- 提交：\`" + context.sha.slice(0, 7) + "\`",
-                "- 回归测试：通过",
-                "- Android Lint：报告已生成（不阻断 APK）",
-                "- 签名 APK：已构建并发布",
-                "- Release：\`" + tag + "\`",
-                "- 运行：" + runUrl
-              ].join("\n")
-            })
 
       - name: Upload failure logs
         if: failure()
@@ -218,91 +115,35 @@ jobs:
           retention-days: 14
 
       - name: Create failure issue
-        if: failure()
+        if: failure() && github.event_name != 'issue_comment'
         uses: actions/github-script@v7
-        env:
-          STEPS_CONTEXT: ${{ toJson(steps) }}
         with:
           script: |
-            const fs = require("fs")
-            const path = require("path")
-
-            const logDir = "ci-logs"
-            const logFiles = fs.existsSync(logDir)
-              ? fs.readdirSync(logDir)
-                  .filter(name => name.endsWith(".log"))
-                  .map(name => path.join(logDir, name))
+            const fs = require('fs')
+            const path = require('path')
+            const dir = 'ci-logs'
+            const lines = fs.existsSync(dir)
+              ? fs.readdirSync(dir)
+                  .filter(name => name.endsWith('.log'))
+                  .flatMap(name => fs.readFileSync(path.join(dir, name), 'utf8').split(/\r?\n/))
               : []
-
-            const allLines = logFiles.flatMap(file => {
-              const heading = ["", "===== " + file + " ====="]
-              const lines = fs.readFileSync(file, "utf8").split(/\r?\n/)
-              return heading.concat(lines)
-            })
-
-            const importantPattern = /(^e: |FAILURE:|What went wrong:|Execution failed|Compilation error|Unresolved reference|error:|Exception|BUILD FAILED)/i
-            let summaryLines = allLines.filter(line => importantPattern.test(line)).slice(-100)
-            if (summaryLines.length === 0) {
-              summaryLines = allLines.slice(-120)
-            }
-
-            let errorSummary = summaryLines.join("\n").trim()
-            if (!errorSummary) {
-              let steps = {}
-              try {
-                steps = JSON.parse(process.env.STEPS_CONTEXT || "{}")
-              } catch (_) {}
-              const failedSteps = Object.entries(steps)
-                .filter(([, value]) => value && value.outcome === "failure")
-                .map(([name]) => name)
-              errorSummary = failedSteps.length
-                ? "Failed steps: " + failedSteps.join(", ")
-                : "The workflow failed before a Gradle log was produced. Open the run link for details."
-            }
-            errorSummary = errorSummary.slice(-7000)
-
+            const pattern = /(^e: |FAILURE:|What went wrong:|Execution failed|Compilation error|Unresolved reference|error:|Exception|BUILD FAILED)/i
+            const selected = lines.filter(line => pattern.test(line)).slice(-100)
+            const summary = (selected.length ? selected : lines.slice(-120)).join('\n').slice(-7000)
             const shortSha = context.sha.slice(0, 7)
-            const marker = "<!-- lulu-ci-failure:" + context.sha + " -->"
-            const runUrl = "https://github.com/" + context.repo.owner + "/" + context.repo.repo +
-              "/actions/runs/" + context.runId
-            const commitUrl = "https://github.com/" + context.repo.owner + "/" + context.repo.repo +
-              "/commit/" + context.sha
-            const title = "[CI] Build failed on " + shortSha
-            const body = [
-              marker,
-              "## Lulu 自动构建失败",
-              "",
-              "- **运行：** " + runUrl,
-              "- **提交：** [" + shortSha + "](" + commitUrl + ")",
-              "- **分支：** `" + context.ref.replace("refs/heads/", "") + "`",
-              "",
-              "## 错误摘要",
-              "",
-              "```text",
-              errorSummary,
-              "```",
-              "",
-              "完整日志也已作为本次 Action 的 `ci-failure-logs` artifact 上传。"
-            ].join("\n")
-
-            const { data: openIssues } = await github.rest.issues.listForRepo({
+            await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              state: "open",
-              per_page: 100
+              title: `[CI] Build failed on ${shortSha}`,
+              body: [
+                `<!-- lulu-ci-failure:${context.sha} -->`,
+                '## Lulu 自动构建失败',
+                '',
+                `- **运行：** https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`,
+                `- **提交：** ${shortSha}`,
+                '',
+                '```text',
+                summary || 'Workflow failed before a Gradle log was produced.',
+                '```'
+              ].join('\n')
             })
-            const existing = openIssues.find(issue =>
-              !issue.pull_request && (issue.body || "").includes(marker)
-            )
-            if (existing) {
-              core.info("Failure issue already exists: #" + existing.number)
-              return
-            }
-
-            const { data: issue } = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title,
-              body
-            })
-            core.notice("Created failure issue #" + issue.number)
