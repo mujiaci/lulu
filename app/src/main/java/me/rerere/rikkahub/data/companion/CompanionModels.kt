@@ -361,14 +361,14 @@ data class CompanionRelationshipEvent(
     val boundaryDelta: Float = 0f,
     val tensionDelta: Float = 0f,
     val evidence: String,
-    val reason: String = evidence,
-    val confidence: Float = 1f,
-    val stageAfter: String? = null,
-    val evidenceIds: List<String> = listOf(sourceId),
     val createdAt: Long = System.currentTimeMillis(),
     val sourceMessageAt: Long? = null,
     val occurredAt: Long? = null,
     val extractedAt: Long? = null,
+    val reason: String = evidence,
+    val confidence: Float = 1f,
+    val stageAfter: String? = null,
+    val evidenceIds: List<String> = listOf(sourceId),
 )
 
 @Serializable
@@ -415,11 +415,6 @@ data class CompanionCommitment(
     val subjectKey: String,
     val promise: String,
     val dueAt: Long,
-    val promisorId: String = assistantId,
-    val beneficiary: String = "user",
-    val responsibility: String = promise,
-    val schedule: CompanionCommitmentSchedule = CompanionCommitmentSchedule(),
-    val executionMethod: String = "",
     val status: CompanionCommitmentStatus = CompanionCommitmentStatus.PROPOSED,
     val actionPlan: CompanionActionPlan = CompanionActionPlan(),
     val sourceConversationId: String? = null,
@@ -430,6 +425,11 @@ data class CompanionCommitment(
     val statusReason: String? = null,
     val lastActionResult: CompanionActionResult? = null,
     val attemptCount: Int = 0,
+    val promisorId: String = assistantId,
+    val beneficiary: String = "user",
+    val responsibility: String = promise,
+    val schedule: CompanionCommitmentSchedule = CompanionCommitmentSchedule(),
+    val executionMethod: String = "",
     val history: List<CompanionCommitmentHistoryEntry> = emptyList(),
 )
 
