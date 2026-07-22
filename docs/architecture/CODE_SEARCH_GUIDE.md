@@ -11,6 +11,8 @@
 | 记忆服务 | `app/src/main/java/me/rerere/rikkahub/data/service/MemoryBankService.kt` | 记忆搜索、保存、向量化、维护、纠正、归档、checkpoint 相关逻辑 |
 | 记忆触发与执行 | `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt` | 普通聊天/通话后的自动提取、历史重整、模型调用、三态结果判定和 checkpoint 推进 |
 | 每日定时任务 | `app/src/main/java/me/rerere/rikkahub/data/service/DailySummaryService.kt` | `daily_cron` 调度与插件事件；注意它不等同于记忆系统的派生 daily summary |
+| 上下文/token 调试 | `GenerationHandler.kt`、`AILogging.kt`、`DeveloperPage.kt` | 按场景记录分层 token、模型与耗时；仅保留最近32次脱敏内存记录，不保存正文或完整提示词 |
+| 记忆批次 UI | `MemoryBankVM.kt`、`MemoryBankPage.kt` | 展示分支级成功点、稳定区、剩余消息、持久失败/空结果/失效批次与手动重试 |
 | 主动消息 | `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageService.kt` | 主动判断、生成和发送的主要服务；下一阶段需拆出实际调用链 |
 
 ## 下一轮必须定位的调用链
