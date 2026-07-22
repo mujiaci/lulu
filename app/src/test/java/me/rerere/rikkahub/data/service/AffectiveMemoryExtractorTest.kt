@@ -49,6 +49,51 @@ class AffectiveMemoryExtractorTest {
         )
     }
     @Test
+    fun `parser performs one conservative repair for trailing commas`() {
+        val result = AffectiveMemoryExtractor.parseExtractionResult(
+            """{"memories":[{"type":"user_fact","content":"我记得她明天要考试。","userSignal":"她说明天考试","sourceMessageNodeIds":["node-1"],},],}""",
+        )
+
+        assertEquals(1, result.memories.size)
+        assertEquals("user_fact", result.memories.single().type)
+    }
+
+    @Test
+    fun `transient extraction failures retry only up to the configured limit`() = runBlocking {
+        var attempts = 0
+        var retryCallbacks = 0
+        val value = retryTransientMemoryExtraction(
+            maxAttempts = 3,
+            baseDelayMillis = 0L,
+            onRetry = { _, _ -> retryCallbacks += 1 },
+        ) {
+            attempts += 1
+            if (attempts < 3) throw IOException("temporary")
+            "ok"
+        }
+
+        assertEquals("ok", value)
+        assertEquals(3, attempts)
+        assertEquals(2, retryCallbacks)
+    }
+
+    @Test
+    fun `non transient extraction failure is not retried`() = runBlocking {
+        var attempts = 0
+        runCatching {
+            retryTransientMemoryExtraction(
+                maxAttempts = 3,
+                baseDelayMillis = 0L,
+            ) {
+                attempts += 1
+                error("invalid response")
+            }
+        }
+
+        assertEquals(1, attempts)
+    }
+
+    @Test
     fun `extraction prompt requires first person in-character memory summaries`() {
         val prompt = AffectiveMemoryExtractor.buildExtractionPrompt(
             turns = listOf(
