@@ -68,6 +68,8 @@ import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
 import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorStatus
 import me.rerere.rikkahub.data.companion.CompanionContextFact
 import me.rerere.rikkahub.data.companion.CompanionConversationTurn
+import me.rerere.rikkahub.data.companion.CompanionInteractionEvent
+import me.rerere.rikkahub.data.companion.CompanionInteractionEventKind
 import me.rerere.rikkahub.data.companion.CompanionModelPresence
 import me.rerere.rikkahub.data.companion.CompanionPerceptionInput
 import me.rerere.rikkahub.data.companion.CompanionRuntime
@@ -230,15 +232,14 @@ class ProactiveMessageService : KoinComponent {
                 ?: settings.getCurrentAssistant()
             val nowMillis = java.lang.System.currentTimeMillis()
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            val lastTriggeredTime = prefs.getLong("last_triggered_time", 0L)
             val activeTargetedTrigger = prefs.getLong(KEY_TARGETED_TRIGGER_TIME, 0L)
             val companionRuntime = org.koin.core.context.GlobalContext.get().get<CompanionRuntime>()
+            val snapshot = companionRuntime.snapshot(assistant.id.toString())
             val pulseInput = CompanionAutonomousPulseInput(
                 setting = setting,
-                snapshot = companionRuntime.snapshot(assistant.id.toString()),
+                snapshot = snapshot,
                 minutesSinceLastChat = minutesSinceLastChat
-                    ?: lastTriggeredTime
-                        .takeIf { it > 0L }
+                    ?: snapshot.interactionTimeline.lastUserActivityAt
                         ?.let { ((nowMillis - it) / 60_000L).coerceAtLeast(0L) }
                     ?: Long.MAX_VALUE,
                 activeTargetedTriggerMillis = activeTargetedTrigger,
@@ -1900,7 +1901,37 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                 )
             }
         }
-        persistCompanionState(assistant, unifiedState, nowMillis, lifeEvents)
+        persistCompanionState(
+            assistant = assistant,
+            state = unifiedState,
+            nowMillis = nowMillis,
+            lifeEvents = lifeEvents,
+            interactionEvents = evidenceReference
+                ?.takeIf(String::isNotBlank)
+                ?.let { contactId ->
+                    listOf(
+                        CompanionInteractionEvent(
+                            kind = CompanionInteractionEventKind.OUTBOUND_GENERATED,
+                            occurredAt = nowMillis,
+                            contactId = contactId,
+                            sourceMessageId = contactId,
+                        ),
+                        CompanionInteractionEvent(
+                            kind = CompanionInteractionEventKind.OUTBOUND_SENT,
+                            occurredAt = nowMillis,
+                            contactId = contactId,
+                            sourceMessageId = contactId,
+                        ),
+                        CompanionInteractionEvent(
+                            kind = CompanionInteractionEventKind.OUTBOUND_DELIVERED,
+                            occurredAt = nowMillis,
+                            contactId = contactId,
+                            sourceMessageId = contactId,
+                        ),
+                    )
+                }
+                .orEmpty(),
+        )
     }
 
     private suspend fun persistProactiveToolEvidence(
@@ -1931,12 +1962,14 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         state: CompanionState,
         nowMillis: Long,
         lifeEvents: List<CompanionLifeEvent> = emptyList(),
+        interactionEvents: List<CompanionInteractionEvent> = emptyList(),
     ) {
         companionRuntime.applyTurn(
             CompanionTurnMutation(
                 assistantId = assistant.id.toString(),
                 state = state,
                 lifeEvents = lifeEvents,
+                interactionEvents = interactionEvents,
                 nowMillis = nowMillis,
             ),
         )
@@ -2131,10 +2164,13 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
         memoryContext: String,
     ): CompanionIntentDecision {
         val nowMillis = System.currentTimeMillis()
-        val minutesSinceLastChat = historyMessages.lastOrNull()
-            ?.createdAt
-            ?.toInstant(TimeZone.currentSystemDefault())
-            ?.toEpochMilliseconds()
+        val snapshot = companionRuntime.snapshot(assistant.id.toString())
+        val lastUserActivityAt = snapshot.interactionTimeline.lastUserActivityAt
+            ?: historyMessages.lastOrNull { it.role == MessageRole.USER }
+                ?.createdAt
+                ?.toInstant(TimeZone.currentSystemDefault())
+                ?.toEpochMilliseconds()
+        val minutesSinceLastChat = lastUserActivityAt
             ?.let { ((nowMillis - it) / 60_000L).coerceAtLeast(0) }
             ?: Long.MAX_VALUE
         val perception = companionRuntime.perception(
