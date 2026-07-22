@@ -65,12 +65,20 @@ object CompanionPerceptionAssembler {
             "Companion snapshot belongs to a different assistant"
         }
 
+        val effectiveSnapshot = snapshot.copy(
+            relationship = initializeCompanionRelationshipFromCharacterCard(
+                current = snapshot.relationship,
+                characterCard = input.persona,
+                nowMillis = input.nowMillis,
+            ),
+        )
+
         return CompanionPerceptionPacket(
             assistantId = assistantId,
             assistantName = input.assistantName.clean(MAX_ASSISTANT_NAME_LENGTH),
             persona = input.persona.clean(MAX_PERSONA_LENGTH),
             conversationId = input.conversationId?.trim()?.takeIf(String::isNotBlank),
-            snapshot = snapshot,
+            snapshot = effectiveSnapshot,
             recentTurns = input.recentTurns
                 .takeLast(MAX_RECENT_TURNS)
                 .mapNotNull { turn -> turn.normalized() },
