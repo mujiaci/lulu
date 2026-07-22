@@ -568,13 +568,32 @@ class MemoryBankService(
         assistantId: String,
         conversationId: String,
         includeSavedMemories: Boolean = true,
+        selectedBranchIdAtSequence: ((Int) -> String)? = null,
     ): Set<String> = withContext(Dispatchers.IO) {
+        if (selectedBranchIdAtSequence != null) {
+            return@withContext memoryBankDAO.getExtractionBatches(assistantId, conversationId)
+                .asSequence()
+                .filter { batch ->
+                    batch.status == MemoryExtractionBatchStatus.SUCCESS_WITH_MEMORIES.name ||
+                        batch.status == MemoryExtractionBatchStatus.SUCCESS_EMPTY.name
+                }
+                .filter { batch ->
+                    batch.branchId == selectedBranchIdAtSequence(batch.batchEndSequence)
+                }
+                .flatMap { batch -> batch.sourceNodeIdsJson.decodeMemoryNodeIds().asSequence() }
+                .toSet()
+        }
+
         val checkpointIds = memoryBankDAO.getExtractionCheckpoint(assistantId, conversationId)
             ?.processedSourceNodeIdsJson
             .decodeMemoryNodeIds()
         val memoryIds = if (includeSavedMemories) memoryBankDAO.getMemoriesByAssistant(assistantId)
             .asSequence()
-            .filter { it.conversationId == conversationId && !it.sourceMessageNodeIdsJson.isNullOrBlank() }
+            .filter {
+                it.conversationId == conversationId &&
+                    !it.deprecated &&
+                    !it.sourceMessageNodeIdsJson.isNullOrBlank()
+            }
             .flatMap { memory ->
                 runCatching {
                     JsonInstant.decodeFromString<List<String>>(memory.sourceMessageNodeIdsJson.orEmpty())
@@ -669,8 +688,9 @@ class MemoryBankService(
         now: Long = System.currentTimeMillis(),
     ): MemoryExtractionBatchEntity = withContext(Dispatchers.IO) {
         require(sourceNodeIds.isNotEmpty()) { "A memory extraction batch cannot be empty" }
-        val batchId = buildMemoryExtractionBatchId(assistantId, conversationId, sourceNodeIds)
+        val batchId = buildMemoryExtractionBatchId(assistantId, conversationId, branchId, sourceNodeIds)
         val previous = memoryBankDAO.getExtractionBatch(batchId)
+        val resumesSameSource = previous?.status != MemoryExtractionBatchStatus.INVALIDATED.name
         val next = MemoryExtractionBatchEntity(
             batchId = batchId,
             assistantId = assistantId,
@@ -684,11 +704,11 @@ class MemoryBankService(
             sourceStartedAt = sourceStartedAt,
             sourceEndedAt = sourceEndedAt,
             status = MemoryExtractionBatchStatus.PROCESSING.name,
-            attemptCount = (previous?.attemptCount ?: 0) + 1,
+            attemptCount = if (resumesSameSource) (previous?.attemptCount ?: 0) + 1 else 1,
             lastError = null,
             modelId = modelId,
             extractionVersion = extractionVersion,
-            generatedMemoryIdsJson = previous?.generatedMemoryIdsJson ?: "[]",
+            generatedMemoryIdsJson = if (resumesSameSource) previous?.generatedMemoryIdsJson ?: "[]" else "[]",
             createdAt = previous?.createdAt ?: now,
             updatedAt = now,
             completedAt = null,
@@ -752,6 +772,90 @@ class MemoryBankService(
         conversationId: String,
     ): List<MemoryExtractionBatchEntity> = withContext(Dispatchers.IO) {
         memoryBankDAO.getExtractionBatches(assistantId, conversationId)
+    }
+
+    suspend fun invalidateExtractionBatches(
+        assistantId: String,
+        conversationId: String,
+        affectedSequence: Int,
+        invalidateFollowing: Boolean,
+        selectedBranchIdAtSequence: (Int) -> String,
+        fallbackSourceNodeIds: Collection<String>,
+        reason: String,
+        now: Long = System.currentTimeMillis(),
+    ): MemoryExtractionInvalidationResult = withContext(Dispatchers.IO) {
+        require(affectedSequence > 0) { "Affected message sequence must be positive" }
+        val invalidated = memoryBankDAO.getExtractionBatches(assistantId, conversationId).filter { batch ->
+            val sourceNodeIds = batch.sourceNodeIdsJson.decodeMemoryNodeIds()
+            val isLegacyIdentity = batch.batchId == buildLegacyMemoryExtractionBatchId(
+                assistantId = batch.assistantId,
+                conversationId = batch.conversationId,
+                sourceNodeIds = sourceNodeIds,
+            )
+            val belongsToSelectedBranch = isLegacyIdentity ||
+                batch.branchId == selectedBranchIdAtSequence(batch.batchEndSequence)
+            val touchesMutation = if (invalidateFollowing) {
+                batch.batchEndSequence >= affectedSequence
+            } else {
+                affectedSequence in batch.batchStartSequence..batch.batchEndSequence
+            }
+            belongsToSelectedBranch &&
+                touchesMutation &&
+                batch.status != MemoryExtractionBatchStatus.INVALIDATED.name
+        }
+        val invalidatedSourceNodeIds = (
+            fallbackSourceNodeIds + invalidated.flatMap { it.sourceNodeIdsJson.decodeMemoryNodeIds() }
+            ).filter { it.isNotBlank() }.toSet()
+
+        val checkpoint = memoryBankDAO.getExtractionCheckpoint(assistantId, conversationId)
+        if (checkpoint != null && invalidatedSourceNodeIds.isNotEmpty()) {
+            val remaining = checkpoint.processedSourceNodeIdsJson.decodeMemoryNodeIds()
+                .filterNot(invalidatedSourceNodeIds::contains)
+            if (remaining.isEmpty()) {
+                memoryBankDAO.deleteExtractionCheckpoint(assistantId, conversationId)
+            } else {
+                memoryBankDAO.upsertExtractionCheckpoint(
+                    checkpoint.copy(
+                        processedSourceNodeIdsJson = JsonInstant.encodeToString(
+                            ListSerializer(String.serializer()),
+                            remaining,
+                        ),
+                        updatedAt = now,
+                    ),
+                )
+            }
+        }
+
+        val generatedMemoryIds = invalidated
+            .flatMap { batch ->
+                runCatching {
+                    JsonInstant.decodeFromString<List<Int>>(batch.generatedMemoryIdsJson)
+                }.getOrDefault(emptyList())
+            }
+            .distinct()
+        generatedMemoryIds.forEach { memoryId ->
+            memoryBankDAO.markMemoryDeprecated(
+                id = memoryId,
+                deprecatedReason = reason.take(MAX_MEMORY_EXTRACTION_ERROR_LENGTH),
+                supersededByMemoryId = null,
+                correctedAt = now,
+            )
+        }
+        invalidated.forEach { batch ->
+            memoryBankDAO.upsertExtractionBatch(
+                batch.copy(
+                    status = MemoryExtractionBatchStatus.INVALIDATED.name,
+                    lastError = reason.take(MAX_MEMORY_EXTRACTION_ERROR_LENGTH),
+                    generatedMemoryIdsJson = "[]",
+                    updatedAt = now,
+                    completedAt = null,
+                ),
+            )
+        }
+        MemoryExtractionInvalidationResult(
+            invalidatedBatchCount = invalidated.size,
+            deprecatedMemoryCount = generatedMemoryIds.size,
+        )
     }
 
     suspend fun recallMemories(query: String, count: Int): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
@@ -1621,12 +1725,34 @@ private const val MAX_DAILY_ARCHIVE_CONTENT_LENGTH = 1_800
 private const val MAX_MONTHLY_ARCHIVE_CONTENT_LENGTH = 2_800
 
 
+data class MemoryExtractionInvalidationResult(
+    val invalidatedBatchCount: Int,
+    val deprecatedMemoryCount: Int,
+)
+
 internal fun buildMemoryExtractionBatchId(
+    assistantId: String,
+    conversationId: String,
+    branchId: String,
+    sourceNodeIds: List<String>,
+): String {
+    require(sourceNodeIds.isNotEmpty()) { "A memory extraction batch cannot be empty" }
+    return listOf(
+        assistantId,
+        conversationId,
+        branchId,
+        sourceNodeIds.first(),
+        sourceNodeIds.last(),
+        sourceNodeIds.size.toString(),
+    ).joinToString("|")
+}
+
+private fun buildLegacyMemoryExtractionBatchId(
     assistantId: String,
     conversationId: String,
     sourceNodeIds: List<String>,
 ): String {
-    require(sourceNodeIds.isNotEmpty()) { "A memory extraction batch cannot be empty" }
+    if (sourceNodeIds.isEmpty()) return ""
     return listOf(
         assistantId,
         conversationId,
