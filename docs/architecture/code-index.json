@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T17:45:04.361066+00:00",
-  "commit": "f2bf9c4e9df39434011abe93bcc9648207e794ca",
+  "generatedAt": "2026-07-22T17:45:34.148097+00:00",
+  "commit": "dfb0edab0da456604e2bca0574ea42f5bb22f7cb",
   "branch": "master",
   "summary": {
     "files": 1089,
-    "lines": 260819,
+    "lines": 260863,
     "symbols": 5257,
     "byModule": {
       "app": 627,
@@ -30089,7 +30089,7 @@
       "path": "app/src/test/java/me/rerere/rikkahub/data/companion/CompanionCommitmentReducerTest.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 178,
+      "lines": 222,
       "package": "me.rerere.rikkahub.data.companion",
       "categories": [
         "关系与承诺"
@@ -30103,12 +30103,12 @@
         {
           "name": "transition",
           "kind": "function",
-          "line": 138
+          "line": 182
         },
         {
           "name": "commitment",
           "kind": "function",
-          "line": 155
+          "line": 199
         }
       ]
     },
