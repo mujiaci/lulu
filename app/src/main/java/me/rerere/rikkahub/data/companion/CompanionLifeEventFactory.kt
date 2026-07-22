@@ -195,7 +195,15 @@ fun CompanionLifeEvent.isMeaningfulDigitalLifeEvidence(): Boolean {
         CompanionLifeEventType.JOURNAL,
         CompanionLifeEventType.MUSIC,
         CompanionLifeEventType.GAME,
-        CompanionLifeEventType.MEMORY_REVIEW -> true
+        CompanionLifeEventType.MEMORY_REVIEW,
+        CompanionLifeEventType.UNSENT_NOTE,
+        CompanionLifeEventType.FAVORITE_ORGANIZATION,
+        CompanionLifeEventType.EXPERIENCE_REVIEW,
+        CompanionLifeEventType.CONCERN_ORGANIZATION,
+        CompanionLifeEventType.REPLAY_REVIEW,
+        CompanionLifeEventType.SHARED_PLAN,
+        CompanionLifeEventType.COMMITMENT_REVIEW,
+        CompanionLifeEventType.STATE_REVIEW -> true
         CompanionLifeEventType.TOOL_ACTION -> title.startsWith("设置了") || title.startsWith("写入了")
         else -> false
     }
