@@ -135,11 +135,11 @@ internal fun CompanionExplainableState.toPromptLines(nowMillis: Long): List<Stri
 private fun CompanionStateSignal.normalizedSignal(): CompanionStateSignal = copy(
     value = value.coerceIn(0f, 1f),
     reason = reason.trim().take(240),
-    evidenceIds = evidenceIds.map(String::trim).filter(String::isNotBlank).distinct().takeLast(20),
+    evidenceIds = evidenceIds.map { it.trim() }.filter(String::isNotBlank).distinct().takeLast(20),
     confidence = confidence.coerceIn(0f, 1f),
 )
 
-private fun List<String>.cleanItems(): List<String> = map(String::trim)
+private fun List<String>.cleanItems(): List<String> = map { it.trim() }
     .filter(String::isNotBlank)
     .distinct()
     .takeLast(12)
