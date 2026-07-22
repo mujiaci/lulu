@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchEntity
 import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 
@@ -34,6 +35,24 @@ interface MemoryBankDAO {
         assistantId: String,
         conversationId: String,
     ): MemoryExtractionCheckpointEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertExtractionBatch(batch: MemoryExtractionBatchEntity)
+
+    @Query("SELECT * FROM memory_extraction_batch WHERE batch_id = :batchId")
+    suspend fun getExtractionBatch(batchId: String): MemoryExtractionBatchEntity?
+
+    @Query(
+        """
+        SELECT * FROM memory_extraction_batch
+        WHERE assistant_id = :assistantId AND conversation_id = :conversationId
+        ORDER BY batch_start_sequence ASC, created_at ASC
+        """,
+    )
+    suspend fun getExtractionBatches(
+        assistantId: String,
+        conversationId: String,
+    ): List<MemoryExtractionBatchEntity>
 
     @Query("DELETE FROM memory_extraction_checkpoint WHERE assistant_id = :assistantId AND conversation_id = :conversationId")
     suspend fun deleteExtractionCheckpoint(assistantId: String, conversationId: String)
@@ -65,6 +84,9 @@ interface MemoryBankDAO {
     @Query("DELETE FROM memory_extraction_checkpoint WHERE assistant_id = :assistantId")
     suspend fun deleteExtractionCheckpointsByAssistant(assistantId: String)
 
+    @Query("DELETE FROM memory_extraction_batch WHERE assistant_id = :assistantId")
+    suspend fun deleteExtractionBatchesByAssistant(assistantId: String)
+
     @Query("DELETE FROM memory_graph_edge")
     suspend fun deleteAllMemoryGraphEdges()
 
@@ -73,6 +95,9 @@ interface MemoryBankDAO {
 
     @Query("DELETE FROM memory_extraction_checkpoint")
     suspend fun deleteAllExtractionCheckpoints()
+
+    @Query("DELETE FROM memory_extraction_batch")
+    suspend fun deleteAllExtractionBatches()
 
     @Query("SELECT * FROM memory_bank WHERE id = :id")
     suspend fun getMemoryById(id: Int): MemoryBankEntity?

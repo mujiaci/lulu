@@ -14,6 +14,8 @@ import me.rerere.ai.provider.RerankItem
 import me.rerere.ai.provider.RerankParams
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchStatus
 import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import me.rerere.rikkahub.data.datastore.SettingsStore
@@ -40,6 +42,9 @@ private const val MAINTENANCE_PREFS_NAME = "memory_bank_maintenance"
 private const val LAST_LIGHT_MAINTENANCE_KEY = "last_light_maintenance_at"
 private const val LAST_HEAVY_MAINTENANCE_KEY = "last_heavy_maintenance_at"
 private const val MAX_PROCESSED_MEMORY_NODE_IDS = 5_000
+private const val CURRENT_MEMORY_EXTRACTION_VERSION = 1
+private const val MAX_MEMORY_EXTRACTION_ATTEMPTS = 3
+private const val MAX_MEMORY_EXTRACTION_ERROR_LENGTH = 1_000
 private const val STORED_IMPRESSION_MEMORY_LIMIT = 400
 private const val MAX_ARCHIVES_CREATED_PER_MAINTENANCE = 6
 private val PRIVATE_IMPRESSION_MEMORY_KINDS = setOf(
@@ -292,12 +297,14 @@ class MemoryBankService(
     suspend fun deleteMemoriesByAssistant(assistantId: String) = withContext(Dispatchers.IO) {
         memoryBankDAO.deleteMemoryGraphEdgesForAssistant(assistantId)
         memoryBankDAO.deleteExtractionCheckpointsByAssistant(assistantId)
+        memoryBankDAO.deleteExtractionBatchesByAssistant(assistantId)
         memoryBankDAO.deleteMemoriesByAssistant(assistantId)
     }
 
     suspend fun deleteAllMemories() = withContext(Dispatchers.IO) {
         memoryBankDAO.deleteAllMemoryGraphEdges()
         memoryBankDAO.deleteAllExtractionCheckpoints()
+        memoryBankDAO.deleteAllExtractionBatches()
         memoryBankDAO.deleteAllMemories()
     }
 
@@ -646,6 +653,105 @@ class MemoryBankService(
         conversationId: String,
     ) = withContext(Dispatchers.IO) {
         memoryBankDAO.deleteExtractionCheckpoint(assistantId, conversationId)
+    }
+
+    suspend fun beginExtractionBatch(
+        assistantId: String,
+        conversationId: String,
+        branchId: String,
+        batchStartSequence: Int,
+        batchEndSequence: Int,
+        sourceNodeIds: List<String>,
+        sourceStartedAt: Long,
+        sourceEndedAt: Long,
+        modelId: String?,
+        extractionVersion: Int = CURRENT_MEMORY_EXTRACTION_VERSION,
+        now: Long = System.currentTimeMillis(),
+    ): MemoryExtractionBatchEntity = withContext(Dispatchers.IO) {
+        require(sourceNodeIds.isNotEmpty()) { "A memory extraction batch cannot be empty" }
+        val batchId = buildMemoryExtractionBatchId(assistantId, conversationId, sourceNodeIds)
+        val previous = memoryBankDAO.getExtractionBatch(batchId)
+        val next = MemoryExtractionBatchEntity(
+            batchId = batchId,
+            assistantId = assistantId,
+            conversationId = conversationId,
+            branchId = branchId,
+            batchStartSequence = batchStartSequence,
+            batchEndSequence = batchEndSequence,
+            startSourceNodeId = sourceNodeIds.first(),
+            endSourceNodeId = sourceNodeIds.last(),
+            sourceNodeIdsJson = JsonInstant.encodeToString(ListSerializer(String.serializer()), sourceNodeIds),
+            sourceStartedAt = sourceStartedAt,
+            sourceEndedAt = sourceEndedAt,
+            status = MemoryExtractionBatchStatus.PROCESSING.name,
+            attemptCount = (previous?.attemptCount ?: 0) + 1,
+            lastError = null,
+            modelId = modelId,
+            extractionVersion = extractionVersion,
+            generatedMemoryIdsJson = previous?.generatedMemoryIdsJson ?: "[]",
+            createdAt = previous?.createdAt ?: now,
+            updatedAt = now,
+            completedAt = null,
+        )
+        memoryBankDAO.upsertExtractionBatch(next)
+        next
+    }
+
+    suspend fun completeExtractionBatch(
+        batchId: String,
+        status: MemoryExtractionBatchStatus,
+        generatedMemoryIds: Collection<Int>,
+        now: Long = System.currentTimeMillis(),
+    ): MemoryExtractionBatchEntity = withContext(Dispatchers.IO) {
+        require(
+            status == MemoryExtractionBatchStatus.SUCCESS_WITH_MEMORIES ||
+                status == MemoryExtractionBatchStatus.SUCCESS_EMPTY,
+        ) { "Only successful statuses can complete an extraction batch" }
+        val current = requireNotNull(memoryBankDAO.getExtractionBatch(batchId)) {
+            "Memory extraction batch not found: $batchId"
+        }
+        val completed = current.copy(
+            status = status.name,
+            lastError = null,
+            generatedMemoryIdsJson = JsonInstant.encodeToString(
+                ListSerializer(Int.serializer()),
+                generatedMemoryIds.distinct(),
+            ),
+            updatedAt = now,
+            completedAt = now,
+        )
+        memoryBankDAO.upsertExtractionBatch(completed)
+        completed
+    }
+
+    suspend fun failExtractionBatch(
+        batchId: String,
+        error: String,
+        maxAttempts: Int = MAX_MEMORY_EXTRACTION_ATTEMPTS,
+        now: Long = System.currentTimeMillis(),
+    ): MemoryExtractionBatchEntity = withContext(Dispatchers.IO) {
+        val current = requireNotNull(memoryBankDAO.getExtractionBatch(batchId)) {
+            "Memory extraction batch not found: $batchId"
+        }
+        val failed = current.copy(
+            status = if (current.attemptCount >= maxAttempts.coerceAtLeast(1)) {
+                MemoryExtractionBatchStatus.FAILED_MANUAL_REVIEW.name
+            } else {
+                MemoryExtractionBatchStatus.FAILED_RETRYABLE.name
+            },
+            lastError = error.trim().ifBlank { "unknown_error" }.take(MAX_MEMORY_EXTRACTION_ERROR_LENGTH),
+            updatedAt = now,
+            completedAt = null,
+        )
+        memoryBankDAO.upsertExtractionBatch(failed)
+        failed
+    }
+
+    suspend fun getExtractionBatches(
+        assistantId: String,
+        conversationId: String,
+    ): List<MemoryExtractionBatchEntity> = withContext(Dispatchers.IO) {
+        memoryBankDAO.getExtractionBatches(assistantId, conversationId)
     }
 
     suspend fun recallMemories(query: String, count: Int): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
@@ -1513,3 +1619,19 @@ private const val MIN_MONTHLY_ARCHIVE_SOURCE_COUNT = 2
 private const val MAX_DAILY_ARCHIVE_ITEMS = 6
 private const val MAX_DAILY_ARCHIVE_CONTENT_LENGTH = 1_800
 private const val MAX_MONTHLY_ARCHIVE_CONTENT_LENGTH = 2_800
+
+
+internal fun buildMemoryExtractionBatchId(
+    assistantId: String,
+    conversationId: String,
+    sourceNodeIds: List<String>,
+): String {
+    require(sourceNodeIds.isNotEmpty()) { "A memory extraction batch cannot be empty" }
+    return listOf(
+        assistantId,
+        conversationId,
+        sourceNodeIds.first(),
+        sourceNodeIds.last(),
+        sourceNodeIds.size.toString(),
+    ).joinToString("|")
+}

@@ -3,6 +3,8 @@ package me.rerere.rikkahub.data.service
 import kotlinx.coroutines.runBlocking
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchEntity
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchStatus
 import me.rerere.rikkahub.data.db.entity.MemoryExtractionCheckpointEntity
 import me.rerere.rikkahub.data.db.entity.MemoryGraphEdgeEntity
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
@@ -37,6 +39,52 @@ class MemoryBankServiceExtractionTest {
 
         assertEquals(setOf("node-1", "node-2"), service.getProcessedSourceNodeIds("assistant-1", "conversation-1"))
         assertEquals(123L, dao.extractionCheckpoint?.updatedAt)
+    }
+
+    @Test
+    fun `memory extraction batch persists attempts failure and completion`() = runBlocking {
+        val dao = RecordingMemoryBankDAO()
+        val service = MemoryBankService(dao, okHttpClient = null, context = null)
+        val first = service.beginExtractionBatch(
+            "assistant-1", "conversation-1", "selected", 21, 40,
+            listOf("node-21", "node-40"), 100L, 200L, "model-1", now = 300L,
+        )
+        assertEquals(MemoryExtractionBatchStatus.PROCESSING.name, first.status)
+        assertEquals(1, first.attemptCount)
+        val failed = service.failExtractionBatch(first.batchId, "invalid_json", now = 400L)
+        assertEquals(MemoryExtractionBatchStatus.FAILED_RETRYABLE.name, failed.status)
+        assertEquals("invalid_json", failed.lastError)
+        val retry = service.beginExtractionBatch(
+            "assistant-1", "conversation-1", "selected", 21, 40,
+            listOf("node-21", "node-40"), 100L, 200L, "model-1", now = 500L,
+        )
+        assertEquals(2, retry.attemptCount)
+        val completed = service.completeExtractionBatch(
+            retry.batchId, MemoryExtractionBatchStatus.SUCCESS_WITH_MEMORIES, listOf(7, 8), now = 600L,
+        )
+        assertEquals(MemoryExtractionBatchStatus.SUCCESS_WITH_MEMORIES.name, completed.status)
+        assertTrue(completed.generatedMemoryIdsJson.contains("7"))
+        assertEquals(600L, completed.completedAt)
+    }
+
+    @Test
+    fun `third failed memory extraction attempt requires manual review`() = runBlocking {
+        val dao = RecordingMemoryBankDAO()
+        val service = MemoryBankService(dao, okHttpClient = null, context = null)
+        var batch = service.beginExtractionBatch(
+            "assistant-1", "conversation-1", "selected", 1, 20,
+            listOf("node-1", "node-20"), 10L, 20L, "model-1",
+        )
+        repeat(2) {
+            service.failExtractionBatch(batch.batchId, "network_error")
+            batch = service.beginExtractionBatch(
+                "assistant-1", "conversation-1", "selected", 1, 20,
+                listOf("node-1", "node-20"), 10L, 20L, "model-1",
+            )
+        }
+        val failed = service.failExtractionBatch(batch.batchId, "network_error")
+        assertEquals(MemoryExtractionBatchStatus.FAILED_MANUAL_REVIEW.name, failed.status)
+        assertEquals(3, failed.attemptCount)
     }
 
     @Test
@@ -117,7 +165,7 @@ class MemoryBankServiceExtractionTest {
 
         service.deleteAllMemories()
 
-        assertEquals(listOf("edges", "checkpoints", "memories"), dao.deleteAllCalls)
+        assertEquals(listOf("edges", "checkpoints", "batches", "memories"), dao.deleteAllCalls)
     }
 
     @Test
@@ -485,6 +533,7 @@ private class RecordingMemoryBankDAO(
     var lastAssistantKeywordTypeSearch: AssistantKeywordTypeSearch? = null
     var recalledAt: Long = 0L
     var extractionCheckpoint: MemoryExtractionCheckpointEntity? = null
+    val extractionBatches = linkedMapOf<String, MemoryExtractionBatchEntity>()
 
     override suspend fun insertMemory(memory: MemoryBankEntity): Long {
         inserted += memory
@@ -507,6 +556,20 @@ private class RecordingMemoryBankDAO(
         it.assistantId == assistantId && it.conversationId == conversationId
     }
 
+    override suspend fun upsertExtractionBatch(batch: MemoryExtractionBatchEntity) {
+        extractionBatches[batch.batchId] = batch
+    }
+
+    override suspend fun getExtractionBatch(batchId: String): MemoryExtractionBatchEntity? =
+        extractionBatches[batchId]
+
+    override suspend fun getExtractionBatches(
+        assistantId: String,
+        conversationId: String,
+    ): List<MemoryExtractionBatchEntity> = extractionBatches.values.filter {
+        it.assistantId == assistantId && it.conversationId == conversationId
+    }
+
     override suspend fun updateMemory(memory: MemoryBankEntity) = unsupported()
     override suspend fun deleteMemory(memory: MemoryBankEntity) = unsupported()
     override suspend fun deleteMemoryById(id: Int) = unsupported()
@@ -514,6 +577,7 @@ private class RecordingMemoryBankDAO(
     override suspend fun deleteMemoryGraphEdgesForAssistant(assistantId: String) = unsupported()
     override suspend fun deleteMemoriesByAssistant(assistantId: String) = unsupported()
     override suspend fun deleteExtractionCheckpointsByAssistant(assistantId: String) = unsupported()
+    override suspend fun deleteExtractionBatchesByAssistant(assistantId: String) = unsupported()
     override suspend fun deleteExtractionCheckpoint(assistantId: String, conversationId: String) = unsupported()
     override suspend fun deleteAllMemoryGraphEdges() {
         deleteAllCalls += "edges"
@@ -522,6 +586,11 @@ private class RecordingMemoryBankDAO(
     override suspend fun deleteAllExtractionCheckpoints() {
         deleteAllCalls += "checkpoints"
         extractionCheckpoint = null
+    }
+
+    override suspend fun deleteAllExtractionBatches() {
+        deleteAllCalls += "batches"
+        extractionBatches.clear()
     }
 
     override suspend fun deleteAllMemories() {

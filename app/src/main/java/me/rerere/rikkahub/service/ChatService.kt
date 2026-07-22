@@ -140,6 +140,7 @@ import me.rerere.rikkahub.data.repository.FavoriteRepository
 import me.rerere.rikkahub.data.model.NodeFavoriteTarget
 import me.rerere.rikkahub.data.service.AffectiveMemoryExtractor
 import me.rerere.rikkahub.data.service.MemoryBankService
+import me.rerere.rikkahub.data.db.entity.MemoryExtractionBatchStatus
 import me.rerere.rikkahub.data.service.MemoryExtractionDirection
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.buildAffectiveMemoryExtractionPlan
@@ -1813,6 +1814,7 @@ class ChatService(
         direction: MemoryExtractionDirection = MemoryExtractionDirection.OLDEST_FIRST,
         includeSavedMemorySources: Boolean = true,
     ): Job = appScope.launch {
+            var activeExtractionBatchId: String? = null
             runCatching {
                 val processedSourceNodeIds = memoryBankService.getProcessedSourceNodeIds(
                     assistantId = assistant.id.toString(),
@@ -1830,9 +1832,27 @@ class ChatService(
                     ?.let { settings.findModelById(it) }
                     ?.takeIf { it.type == ModelType.CHAT }
                     ?: model
+                val batchNodeIds = plan.turns.map { it.nodeId }
+                val messageNodePositions = conversation.messageNodes
+                    .mapIndexed { index, node -> node.id.toString() to index + 1 }
+                    .toMap()
+                val extractionBatch = memoryBankService.beginExtractionBatch(
+                    assistantId = assistant.id.toString(),
+                    conversationId = conversationId.toString(),
+                    branchId = "selected",
+                    batchStartSequence = batchNodeIds.mapNotNull(messageNodePositions::get).minOrNull() ?: 0,
+                    batchEndSequence = batchNodeIds.mapNotNull(messageNodePositions::get).maxOrNull() ?: 0,
+                    sourceNodeIds = batchNodeIds,
+                    sourceStartedAt = plan.turns.minOfOrNull { it.createdAtMillis } ?: 0L,
+                    sourceEndedAt = plan.turns.maxOfOrNull { it.createdAtMillis } ?: 0L,
+                    modelId = extractionModel.id.toString(),
+                )
+                activeExtractionBatchId = extractionBatch.batchId
                 val deterministicCandidates = buildDeterministicMemoryCandidates(plan.turns)
                 val extractionProvider = extractionModel.findProvider(settings.providers)
                 if (extractionProvider == null) {
+                    memoryBankService.failExtractionBatch(extractionBatch.batchId, "provider_unavailable")
+                    activeExtractionBatchId = null
                     Log.w(TAG, "Memory extraction skipped: no provider for model=${extractionModel.id}")
                     return@runCatching
                 }
@@ -1932,7 +1952,18 @@ class ChatService(
                             conversationId = conversationId.toString(),
                             sourceNodeIds = plan.turns.map { it.nodeId },
                         )
+                        memoryBankService.completeExtractionBatch(
+                            extractionBatch.batchId,
+                            MemoryExtractionBatchStatus.SUCCESS_EMPTY,
+                            emptyList(),
+                        )
+                    } else {
+                        memoryBankService.failExtractionBatch(
+                            extractionBatch.batchId,
+                            "semantic_extraction_failed_or_rejected",
+                        )
                     }
+                    activeExtractionBatchId = null
                     Logging.log(
                         TAG,
                         "Memory extraction found no durable memories for conversation=$conversationId reason=${plan.reason} outcome=$semanticOutcome checkpointed=${semanticOutcome.advancesCheckpoint}",
@@ -1983,7 +2014,18 @@ class ChatService(
                         conversationId = conversationId.toString(),
                         sourceNodeIds = plan.turns.map { it.nodeId },
                     )
+                    memoryBankService.completeExtractionBatch(
+                        extractionBatch.batchId,
+                        MemoryExtractionBatchStatus.SUCCESS_WITH_MEMORIES,
+                        savedMemories.map { it.id },
+                    )
+                } else {
+                    memoryBankService.failExtractionBatch(
+                        extractionBatch.batchId,
+                        "semantic_extraction_failed_or_rejected",
+                    )
                 }
+                activeExtractionBatchId = null
                 runCatching {
                     memoryBankService.processPendingVectors()
                     memoryBankService.runAutoMaintenanceIfDue()
@@ -1996,6 +2038,13 @@ class ChatService(
                     "Saved ${savedMemories.size}/${candidates.size} affective memories for conversation=$conversationId reason=${plan.reason}",
                 )
             }.onFailure { error ->
+                activeExtractionBatchId?.let { batchId ->
+                    memoryBankService.failExtractionBatch(
+                        batchId,
+                        if (error is CancellationException) "cancelled"
+                        else "${error::class.simpleName}: ${error.message.orEmpty()}",
+                    )
+                }
                 if (error is CancellationException) throw error
                 Log.w(TAG, "Affective memory extraction failed for conversation=$conversationId", error)
             }
