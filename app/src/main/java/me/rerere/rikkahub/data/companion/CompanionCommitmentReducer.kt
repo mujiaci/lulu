@@ -54,6 +54,10 @@ object CompanionCommitmentReducer {
             this[sameIdIndex] = normalized.copy(
                 createdAt = minOf(existing.createdAt, normalized.createdAt),
                 updatedAt = maxOf(existing.updatedAt, normalized.updatedAt, nowMillis),
+                history = (existing.history + normalized.history)
+                    .distinctBy { "${it.fromStatus}:${it.toStatus}:${it.occurredAt}:${it.reason}" }
+                    .sortedBy { it.occurredAt }
+                    .takeLast(MAX_COMMITMENT_HISTORY),
             )
             return
         }
@@ -70,9 +74,29 @@ object CompanionCommitmentReducer {
                 updatedAt = nowMillis,
                 resolvedAt = nowMillis,
                 statusReason = "Replaced by commitment ${normalized.id}",
+                history = previous.history.appendTransition(
+                    from = previous.status,
+                    to = CompanionCommitmentStatus.SUPERSEDED,
+                    occurredAt = nowMillis,
+                    reason = "Replaced by commitment ${normalized.id}",
+                ),
             )
         }
-        add(normalized.copy(updatedAt = maxOf(normalized.updatedAt, nowMillis)))
+        val initialHistory = normalized.history.ifEmpty {
+            listOf(
+                CompanionCommitmentHistoryEntry(
+                    toStatus = normalized.status,
+                    occurredAt = maxOf(normalized.createdAt, 0L),
+                    reason = "Commitment recorded",
+                ),
+            )
+        }
+        add(
+            normalized.copy(
+                updatedAt = maxOf(normalized.updatedAt, nowMillis),
+                history = initialHistory.takeLast(MAX_COMMITMENT_HISTORY),
+            ),
+        )
     }
 
     private fun MutableList<CompanionCommitment>.transition(
@@ -87,18 +111,36 @@ object CompanionCommitmentReducer {
         val existing = this[index]
         if (change.status !in existing.status.allowedNextStatuses()) return
         val resolvedAt = if (change.status.isTerminal()) nowMillis else null
+        val reason = change.reason.trim().take(500)
         this[index] = existing.copy(
             dueAt = change.nextDueAt ?: existing.dueAt,
             status = change.status,
             updatedAt = nowMillis,
             resolvedAt = resolvedAt,
-            statusReason = change.reason.trim().takeIf(String::isNotBlank),
+            statusReason = reason.takeIf(String::isNotBlank),
+            history = existing.history.appendTransition(
+                from = existing.status,
+                to = change.status,
+                occurredAt = nowMillis,
+                reason = reason,
+            ),
         )
     }
 
     private fun CompanionCommitment.normalized(): CompanionCommitment = copy(
         subjectKey = normalizeCompanionSubjectKey(subjectKey),
         promise = promise.trim(),
+        promisorId = promisorId.trim().ifBlank { assistantId },
+        beneficiary = beneficiary.trim().ifBlank { "user" },
+        responsibility = responsibility.trim().ifBlank { promise.trim() }.take(500),
+        schedule = schedule.copy(
+            timeDescription = schedule.timeDescription.trim().take(160),
+            frequency = schedule.frequency.trim().take(120),
+            condition = schedule.condition.trim().take(240),
+        ),
+        executionMethod = executionMethod.trim().take(160),
+        history = history.sortedBy { it.occurredAt }.takeLast(MAX_COMMITMENT_HISTORY),
+
         actionPlan = actionPlan.copy(
             toolName = actionPlan.toolName?.trim()?.takeIf(String::isNotBlank),
             argumentsJson = actionPlan.argumentsJson.trim().ifBlank { "{}" },
@@ -117,6 +159,20 @@ object CompanionCommitmentReducer {
         ),
         attemptCount = attemptCount.coerceAtLeast(0),
     ).sanitizedHumanFacingText()
+
+    private fun List<CompanionCommitmentHistoryEntry>.appendTransition(
+        from: CompanionCommitmentStatus,
+        to: CompanionCommitmentStatus,
+        occurredAt: Long,
+        reason: String,
+    ): List<CompanionCommitmentHistoryEntry> = (
+        this + CompanionCommitmentHistoryEntry(
+            fromStatus = from,
+            toStatus = to,
+            occurredAt = occurredAt,
+            reason = reason,
+        )
+    ).takeLast(MAX_COMMITMENT_HISTORY)
 
     private fun CompanionCommitmentStatus.allowedNextStatuses(): Set<CompanionCommitmentStatus> = when (this) {
         CompanionCommitmentStatus.PROPOSED -> setOf(
@@ -171,4 +227,6 @@ object CompanionCommitmentReducer {
         CompanionCommitmentStatus.CANCELLED -> 7
         CompanionCommitmentStatus.SUPERSEDED -> 8
     }
+
+    private const val MAX_COMMITMENT_HISTORY = 80
 }
