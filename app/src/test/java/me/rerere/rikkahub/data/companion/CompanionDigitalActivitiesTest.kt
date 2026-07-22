@@ -67,6 +67,28 @@ class CompanionDigitalActivitiesTest {
     }
 
     @Test
+    fun legacySnapshotMigratesWithEmptyFavoritesWithoutLosingLifeEvents() {
+        val legacyEvent = CompanionLifeEvent(
+            assistantId = "role",
+            type = CompanionLifeEventType.JOURNAL,
+            title = "旧日记",
+        )
+        val migrated = CompanionPersistedState(
+            version = 9,
+            snapshots = listOf(CompanionSnapshot(assistantId = "role", lifeEvents = listOf(legacyEvent))),
+        ).normalizedCompanionState()
+
+        assertEquals(CURRENT_COMPANION_SCHEMA_VERSION, migrated.version)
+        assertEquals(listOf(legacyEvent), migrated.snapshots.single().lifeEvents)
+        assertTrue(migrated.snapshots.single().favorites.isEmpty())
+    }
+
+    @Test
+    fun emptyCandidateSetDoesNotInventAnActivity() {
+        assertNull(CompanionDigitalActivitySelector.select(emptyList(), emptyList(), 100L))
+    }
+
+    @Test
     fun completionClaimsRequireCompletedStoredEvidence() {
         val completed = CompanionLifeEvent(
             assistantId = "role",
