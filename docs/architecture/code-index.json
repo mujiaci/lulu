@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T17:52:28.691803+00:00",
-  "commit": "dcf54a3fd301d8d94ee445f1988777367f939d70",
+  "generatedAt": "2026-07-22T17:53:03.272158+00:00",
+  "commit": "94e553fd87d3c7fabbb9628b5f7a028a64aa0f83",
   "branch": "master",
   "summary": {
     "files": 1092,
-    "lines": 261083,
+    "lines": 261088,
     "symbols": 5261,
     "byModule": {
       "app": 629,
@@ -1915,7 +1915,7 @@
       "path": ".github/workflows/apply-memory-diagnostics-ui.yml",
       "module": ".github",
       "extension": ".yml",
-      "lines": 53,
+      "lines": 58,
       "package": null,
       "categories": [
         "记忆",
