@@ -37,6 +37,14 @@ internal fun reduceCompanionNeuroState(
                 )
                 CompanionLifeEventType.JOURNAL,
                 CompanionLifeEventType.REFLECTION,
+                CompanionLifeEventType.UNSENT_NOTE,
+                CompanionLifeEventType.FAVORITE_ORGANIZATION,
+                CompanionLifeEventType.EXPERIENCE_REVIEW,
+                CompanionLifeEventType.CONCERN_ORGANIZATION,
+                CompanionLifeEventType.REPLAY_REVIEW,
+                CompanionLifeEventType.SHARED_PLAN,
+                CompanionLifeEventType.COMMITMENT_REVIEW,
+                CompanionLifeEventType.STATE_REVIEW,
                 -> state.adjust(
                     serotonin = 0.035f,
                     cortisol = -0.03f,
