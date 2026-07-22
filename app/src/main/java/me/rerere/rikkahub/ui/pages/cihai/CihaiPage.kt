@@ -52,6 +52,7 @@ import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorKind
 import me.rerere.rikkahub.data.companion.CompanionAlwaysOnAnchorStatus
 import me.rerere.rikkahub.data.companion.CompanionCommitment
 import me.rerere.rikkahub.data.companion.CompanionCommitmentStatus
+import me.rerere.rikkahub.data.companion.CompanionFavorite
 import me.rerere.rikkahub.data.companion.CompanionLifeEvent
 import me.rerere.rikkahub.data.companion.CompanionLifeEventStatus
 import me.rerere.rikkahub.data.companion.CompanionPrivateImpression
@@ -100,6 +101,7 @@ fun CihaiPage(onBack: () -> Unit) {
     val meaningfulLifeEvents = selectedSnapshot.lifeEvents
         .filter { it.isMeaningfulDigitalLifeEvidence() }
         .sortedByDescending { it.endedAt ?: it.startedAt }
+    val deliberateFavorites = selectedSnapshot.favorites.sortedByDescending { it.createdAt }
     val recentActivityEvents = selectedSnapshot.lifeEvents
         .filter { event ->
             event.status != CompanionLifeEventStatus.CANCELLED &&
@@ -223,7 +225,26 @@ fun CihaiPage(onBack: () -> Unit) {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        if (recentActivityEvents.isEmpty()) {
+                        if (deliberateFavorites.isNotEmpty()) {
+                            item(key = "favorite-title") {
+                                Text(
+                                    text = "角色自己留下的消息",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                            }
+                            items(deliberateFavorites, key = { "favorite-" + it.id }) { favorite ->
+                                FavoriteCard(
+                                    favorite = favorite,
+                                    onDelete = {
+                                        scope.launch {
+                                            companionStore.deleteFavorite(selectedAssistantId, favorite.id)
+                                        }
+                                    },
+                                )
+                            }
+                        }
+                        if (recentActivityEvents.isEmpty() && deliberateFavorites.isEmpty()) {
                             item(key = "empty-activity") {
                                 EmptyCihaiSection(
                                     title = "还没有新的角色动态",
@@ -943,6 +964,46 @@ private fun RelationshipTextCard(
 }
 
 @Composable
+private fun FavoriteCard(
+    favorite: CompanionFavorite,
+    onDelete: () -> Unit,
+) {
+    Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "收藏的消息",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onDelete) {
+                    Icon(
+                        imageVector = HugeIcons.Delete01,
+                        contentDescription = "删除这条收藏",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            Text("为什么留下：${favorite.reason}", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = "当时的感受：${favorite.feeling}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "消息 ID：${favorite.messageId} · ${formatTime(favorite.createdAt)}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
 private fun LifeEventCard(
     event: CompanionLifeEvent,
     onDelete: () -> Unit,
@@ -1012,6 +1073,14 @@ private fun me.rerere.rikkahub.data.companion.CompanionLifeEventType.lifeEventLa
     me.rerere.rikkahub.data.companion.CompanionLifeEventType.MUSIC -> "音乐"
     me.rerere.rikkahub.data.companion.CompanionLifeEventType.GAME -> "游戏"
     me.rerere.rikkahub.data.companion.CompanionLifeEventType.REFLECTION -> "整理想法"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.UNSENT_NOTE -> "未发送便签"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.FAVORITE_ORGANIZATION -> "整理收藏"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.EXPERIENCE_REVIEW -> "回顾经历"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.CONCERN_ORGANIZATION -> "整理关注"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.REPLAY_REVIEW -> "观看回放"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.SHARED_PLAN -> "共同计划"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.COMMITMENT_REVIEW -> "承诺复盘"
+    me.rerere.rikkahub.data.companion.CompanionLifeEventType.STATE_REVIEW -> "状态整理"
     me.rerere.rikkahub.data.companion.CompanionLifeEventType.WAITING -> "自主等待"
 }
 
