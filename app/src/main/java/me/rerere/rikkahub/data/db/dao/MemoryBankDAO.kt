@@ -278,7 +278,8 @@ interface MemoryBankDAO {
         SET deprecated = 1,
             deprecated_reason = :deprecatedReason,
             superseded_by_memory_id = :supersededByMemoryId,
-            corrected_at = :correctedAt
+            corrected_at = :correctedAt,
+            memory_updated_at = COALESCE(:correctedAt, memory_updated_at)
         WHERE id = :id
         """
     )
