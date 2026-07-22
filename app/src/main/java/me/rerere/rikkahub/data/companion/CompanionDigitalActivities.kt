@@ -199,7 +199,7 @@ fun CompanionDigitalActivityKind.lifeEventType(): CompanionLifeEventType = when 
     CompanionDigitalActivityKind.ORGANIZE_STATE -> CompanionLifeEventType.STATE_REVIEW
 }
 
-fun CompanionLifeEventType.isDigitalActivityType(): Boolean = CompanionDigitalActivityKind.entries
+fun CompanionLifeEventType.isDigitalActivityType(): Boolean = CompanionDigitalActivityKind.values()
     .any { it.lifeEventType() == this }
 
 private fun CompanionDigitalActivityKind.defaultTitle(): String = when (this) {
