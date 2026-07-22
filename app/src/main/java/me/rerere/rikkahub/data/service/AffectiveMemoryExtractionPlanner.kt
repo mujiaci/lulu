@@ -25,7 +25,7 @@ internal fun buildSelectedConversationBranchId(messageNodes: List<MessageNode>):
     }.joinToString("|")
     val digest = MessageDigest.getInstance("SHA-256")
         .digest(selectedPath.toByteArray(Charsets.UTF_8))
-        .joinToString("") { byte -> "%02x".format(byte) }
+        .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
     return "selected:${digest.take(24)}"
 }
 
