@@ -11,17 +11,17 @@
 
 ## 索引状态
 
-- 基准提交：`a30dba8291723f0068fca89bf23ff66da838fcca`
+- 基准提交：`956ecced04485e756b935dc6dbb08aef697f5f94`
 - 分支：`master`
-- 已索引文件：1099
-- 已索引代码/文本行：261439
-- 已发现类、接口、对象、函数及 Composable：5294
+- 已索引文件：1100
+- 已索引代码/文本行：261570
+- 已发现类、接口、对象、函数及 Composable：5299
 
 ## 模块概览
 
 | 模块 | 文件数 |
 |---|---:|
-| `app` | 637 |
+| `app` | 638 |
 | `web-ui` | 131 |
 | `document` | 76 |
 | `ai` | 47 |
@@ -46,7 +46,7 @@
 
 | 扩展名 | 文件数 |
 |---|---:|
-| `.kt` | 705 |
+| `.kt` | 706 |
 | `.tsx` | 74 |
 | `.java` | 64 |
 | `.md` | 58 |
@@ -367,6 +367,7 @@
 - `app/src/main/java/me/rerere/rikkahub/data/service/AffectiveMemoryExtractor.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/service/DailySummaryService.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/service/MemoryBankService.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/service/MemoryCandidateQualityGate.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/service/MemoryVector.kt`
 - `app/src/main/java/me/rerere/rikkahub/ui/pages/memory/MemoryBankPage.kt`
 - `app/src/main/java/me/rerere/rikkahub/ui/pages/memory/MemoryBankVM.kt`
@@ -393,8 +394,7 @@
 - `docs/superpowers/specs/2026-07-10-memory-worldbook-presence-recovery-design.md`
 - `plugins/supabase_memory/README.md`
 - `plugins/supabase_memory/main.js`
-- `plugins/supabase_memory/manifest.json`
-- ……另有 1 个文件，见 `code-index.json`
+- ……另有 2 个文件，见 `code-index.json`
 
 ## 关键符号快速入口
 
