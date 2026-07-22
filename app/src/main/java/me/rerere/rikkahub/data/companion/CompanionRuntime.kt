@@ -93,8 +93,9 @@ fun reconcileCompanionFollowUpDrafts(
     snapshot: CompanionSnapshot,
     latestUserText: String,
 ): List<CompanionFollowUpDraft> {
-    if (!latestUserText.containsRescheduleIntent()) return drafts
-    return drafts.map { draft ->
+    val expandedDrafts = expandExplicitCompanionResponsibilities(drafts)
+    if (!latestUserText.containsRescheduleIntent()) return expandedDrafts
+    return expandedDrafts.map { draft ->
         val candidates = snapshot.commitments.filter { commitment ->
             commitment.status in setOf(
                 CompanionCommitmentStatus.PROPOSED,
@@ -117,6 +118,62 @@ fun reconcileCompanionFollowUpDrafts(
         }
     }
 }
+
+/**
+ * Split a single explicit supervision request into independently executable duties.
+ * This is deliberately conservative: ordinary mentions of sleep, study, or waking
+ * do not create commitments unless the source text clearly asks the character to
+ * remember, supervise, remind, or take responsibility.
+ */
+internal fun expandExplicitCompanionResponsibilities(
+    drafts: List<CompanionFollowUpDraft>,
+): List<CompanionFollowUpDraft> = drafts
+    .flatMap { draft ->
+        val source = draft.sourceText.trim()
+        if (!source.containsExplicitResponsibilityIntent()) return@flatMap listOf(draft)
+        val families = buildList {
+            if (WAKE_RESPONSIBILITY_MARKERS.any(source::contains)) add("wake")
+            if (SLEEP_RESPONSIBILITY_MARKERS.any(source::contains)) add("sleep")
+            if (STUDY_RESPONSIBILITY_MARKERS.any(source::contains)) add("study")
+        }.distinct()
+        if (families.size < 2) {
+            listOf(draft)
+        } else {
+            families.map { family ->
+                draft.copy(
+                    category = family,
+                    subjectKeyOverride = null,
+                    commitmentIdOverride = null,
+                )
+            }
+        }
+    }
+    .distinctBy { draft ->
+        listOf(
+            draft.assistantId,
+            draft.sourceConversationId.orEmpty(),
+            draft.sourceMessageId.orEmpty(),
+            draft.category.family(),
+        ).joinToString("|")
+    }
+
+private fun String.containsExplicitResponsibilityIntent(): Boolean =
+    EXPLICIT_RESPONSIBILITY_MARKERS.any(::contains)
+
+private val EXPLICIT_RESPONSIBILITY_MARKERS = listOf(
+    "监督",
+    "督促",
+    "提醒",
+    "叫我",
+    "帮我记",
+    "负责",
+    "记得让我",
+    "以后要",
+)
+
+private val WAKE_RESPONSIBILITY_MARKERS = listOf("起床", "叫醒", "早起")
+private val SLEEP_RESPONSIBILITY_MARKERS = listOf("睡觉", "睡眠", "休息", "早睡")
+private val STUDY_RESPONSIBILITY_MARKERS = listOf("学习", "复习", "背书", "做题")
 
 private fun String.containsRescheduleIntent(): Boolean {
     val normalized = lowercase()
