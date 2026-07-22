@@ -20,6 +20,12 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.cihai.CihaiEntry
 import me.rerere.rikkahub.data.cihai.CihaiEntryKind
 import me.rerere.rikkahub.data.cihai.CihaiService
+import me.rerere.rikkahub.data.companion.CompanionDigitalActivityKind
+import me.rerere.rikkahub.data.companion.CompanionDigitalActivityRequest
+import me.rerere.rikkahub.data.companion.CompanionDigitalLifeActivityService
+import me.rerere.rikkahub.data.companion.CompanionFavoriteSource
+import me.rerere.rikkahub.data.companion.CompanionLifeEventStatus
+import me.rerere.rikkahub.data.companion.CompanionStore
 import me.rerere.rikkahub.service.LocalTimeContextFormatter
 import me.rerere.rikkahub.utils.readClipboardText
 import me.rerere.rikkahub.utils.writeClipboardText
@@ -395,6 +401,102 @@ class LocalTools(private val context: Context) {
                         }.toString()
                     )
                 )
+            },
+        )
+    }
+
+    private fun createDigitalLifeTool(assistantId: String): Tool {
+        require(assistantId.isNotBlank()) { "Digital life tool requires an assistant ID" }
+        return Tool(
+            name = "manage_companion_digital_life",
+            description = """
+                Save a deliberately chosen message or complete one registered digital-life activity.
+                Never call by chance or after a fixed number of turns. favorite_message requires the exact
+                message_id, a concrete reason it matters to this character, and the character's feeling.
+                run_activity requires a registered activity_kind plus a real result summary. Activities
+                involving a game, replay, shared plan, or commitment require evidence_reference.
+                A success response is the only permission to later say the action was completed.
+            """.trimIndent().replace("\n", " "),
+            parameters = {
+                InputSchema.Obj(
+                    properties = buildJsonObject {
+                        put("action", buildJsonObject {
+                            put("type", "string")
+                            put("description", "favorite_message or run_activity")
+                        })
+                        put("message_id", buildJsonObject { put("type", "string") })
+                        put("reason", buildJsonObject { put("type", "string") })
+                        put("feeling", buildJsonObject { put("type", "string") })
+                        put("activity_kind", buildJsonObject {
+                            put("type", "string")
+                            put("description", "One of: " + CompanionDigitalActivityKind.entries.joinToString(",") { it.name })
+                        })
+                        put("title", buildJsonObject { put("type", "string") })
+                        put("summary", buildJsonObject { put("type", "string") })
+                        put("evidence_reference", buildJsonObject { put("type", "string") })
+                        put("details", buildJsonObject { put("type", "string") })
+                        put("related_memory_ids", buildJsonObject {
+                            put("type", "string")
+                            put("description", "Optional comma-separated persisted memory IDs")
+                        })
+                    },
+                    required = listOf("action"),
+                )
+            },
+            execute = {
+                val params = it.jsonObject
+                val service = CompanionDigitalLifeActivityService(GlobalContext.get().get<CompanionStore>())
+                val action = params["action"]?.jsonPrimitive?.contentOrNull.orEmpty()
+                val payload = when (action) {
+                    "favorite_message" -> {
+                        val favorite = service.favoriteMessage(
+                            assistantId = assistantId,
+                            messageId = params["message_id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            reason = params["reason"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            feeling = params["feeling"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            source = CompanionFavoriteSource.AUTONOMOUS,
+                        )
+                        buildJsonObject {
+                            put("success", favorite != null)
+                            put("favorite_id", favorite?.id.orEmpty())
+                            put("message", if (favorite == null) "Favorite rejected: significance evidence is incomplete" else "Favorite saved")
+                        }
+                    }
+                    "run_activity" -> {
+                        val kind = params["activity_kind"]?.jsonPrimitive?.contentOrNull
+                            ?.let { raw -> runCatching { CompanionDigitalActivityKind.valueOf(raw) }.getOrNull() }
+                        if (kind == null) {
+                            buildJsonObject {
+                                put("success", false)
+                                put("message", "Unknown or missing registered activity_kind")
+                            }
+                        } else {
+                            val event = service.execute(
+                                CompanionDigitalActivityRequest(
+                                    assistantId = assistantId,
+                                    kind = kind,
+                                    title = params["title"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                                    summary = params["summary"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                                    evidenceReference = params["evidence_reference"]?.jsonPrimitive?.contentOrNull,
+                                    details = params["details"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                                    relatedMemoryIds = params["related_memory_ids"]?.jsonPrimitive?.contentOrNull
+                                        .orEmpty().split(",").map(String::trim).filter(String::isNotBlank),
+                                ),
+                            )
+                            buildJsonObject {
+                                put("success", event.status == CompanionLifeEventStatus.COMPLETED)
+                                put("event_id", event.id)
+                                put("status", event.status.name)
+                                put("message", event.summary)
+                            }
+                        }
+                    }
+                    else -> buildJsonObject {
+                        put("success", false)
+                        put("message", "Unknown action")
+                    }
+                }
+                listOf(UIMessagePart.Text(payload.toString()))
             },
         )
     }
