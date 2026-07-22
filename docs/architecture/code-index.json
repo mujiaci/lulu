@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T20:01:48.840433+00:00",
-  "commit": "64ab4487338a68be0149f04911f5673b74581b30",
+  "generatedAt": "2026-07-22T20:02:10.912946+00:00",
+  "commit": "f22e21513f99b450f9b0bd3c238cb4dbe56a9e58",
   "branch": "master",
   "summary": {
     "files": 1098,
-    "lines": 261516,
+    "lines": 261518,
     "symbols": 5294,
     "byModule": {
       "app": 636,
@@ -1942,7 +1942,7 @@
       "path": ".github/workflows/release.yml",
       "module": ".github",
       "extension": ".yml",
-      "lines": 141,
+      "lines": 143,
       "package": null,
       "categories": [
         "构建与发布"
