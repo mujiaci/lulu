@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-22T17:33:30.537363+00:00",
-  "commit": "a46ea56dc39982311be458935dc86ad08b18b552",
+  "generatedAt": "2026-07-22T17:45:04.361066+00:00",
+  "commit": "f2bf9c4e9df39434011abe93bcc9648207e794ca",
   "branch": "master",
   "summary": {
     "files": 1089,
-    "lines": 260776,
-    "symbols": 5255,
+    "lines": 260819,
+    "symbols": 5257,
     "byModule": {
       "app": 627,
       "web-ui": 131,
@@ -7703,7 +7703,7 @@
       "path": "app/src/main/java/me/rerere/rikkahub/data/companion/CompanionCommitmentReducer.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 232,
+      "lines": 275,
       "package": "me.rerere.rikkahub.data.companion",
       "categories": [
         "关系与承诺"
@@ -7737,37 +7737,47 @@
         {
           "name": "upsert",
           "kind": "function",
-          "line": 43
+          "line": 45
         },
         {
           "name": "transition",
           "kind": "function",
-          "line": 102
+          "line": 104
+        },
+        {
+          "name": "splitCompoundCommitments",
+          "kind": "function",
+          "line": 132
+        },
+        {
+          "name": "splitCommitmentClauses",
+          "kind": "function",
+          "line": 148
         },
         {
           "name": "normalized",
           "kind": "function",
-          "line": 130
+          "line": 173
         },
         {
           "name": "appendTransition",
           "kind": "function",
-          "line": 163
+          "line": 206
         },
         {
           "name": "allowedNextStatuses",
           "kind": "function",
-          "line": 177
+          "line": 220
         },
         {
           "name": "isTerminal",
           "kind": "function",
-          "line": 213
+          "line": 256
         },
         {
           "name": "sortRank",
           "kind": "function",
-          "line": 219
+          "line": 262
         }
       ]
     },
