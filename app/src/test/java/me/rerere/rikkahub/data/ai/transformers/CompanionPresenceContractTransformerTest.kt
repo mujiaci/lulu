@@ -39,11 +39,15 @@ class CompanionPresenceContractTransformerTest {
         assertTrue(injected.contains("emoji:"))
         assertTrue(injected.contains("sticker:"))
         assertTrue(injected.contains("bubble_pacing:"))
-        assertTrue(injected.contains("唯一快照"))
-        assertTrue(injected.contains("不得补造"))
+        assertTrue(injected.contains("唯一事实快照"))
+        assertTrue(injected.contains("recent_digital_life"))
+        assertTrue(injected.contains("active_concerns"))
+        assertTrue(injected.contains("active_commitments"))
+        assertTrue(injected.contains("状态连续"))
+        assertTrue(injected.contains("没有真实内在反应时留空"))
         assertTrue(injected.contains("避免客服总结"))
-        assertTrue(injected.contains("屏幕内可见微动作"))
-        assertTrue(injected.length < 1_500)
+        assertTrue(injected.contains("多数普通轮次可留空"))
+        assertTrue(injected.length < 1_800)
     }
 
     @Test
@@ -55,7 +59,7 @@ class CompanionPresenceContractTransformerTest {
         assertFalse(contract.contains("精力："))
         assertFalse(contract.contains("关系位置："))
         assertFalse(contract.contains("未说出口的想法："))
-        assertTrue(contract.contains("唯一快照"))
+        assertTrue(contract.contains("唯一事实快照"))
     }
 
     @Test
