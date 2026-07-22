@@ -21,8 +21,8 @@ class CompanionContextEnvelopeTest {
             otherMandatoryPrompt = "",
         )
 
-        assertEquals(60, envelope.messages.size)
-        assertEquals(440, envelope.droppedHistoryMessages)
+        assertEquals(48, envelope.messages.size)
+        assertEquals(452, envelope.droppedHistoryMessages)
         assertEquals("message-500", envelope.messages.last().toText())
     }
 
@@ -40,8 +40,8 @@ class CompanionContextEnvelopeTest {
             otherMandatoryPrompt = "",
         )
 
-        assertEquals(30, envelope.messages.size)
-        assertEquals(70, envelope.droppedHistoryMessages)
+        assertEquals(24, envelope.messages.size)
+        assertEquals(76, envelope.droppedHistoryMessages)
     }
 
     @Test
@@ -86,6 +86,56 @@ class CompanionContextEnvelopeTest {
         assertTrue(envelope.messages.first().toText().contains("first 200 turns"))
         assertEquals(20, envelope.messages.count { !it.toText().contains("<rolling_summary") })
         assertTrue(envelope.sections.first { it.label == "滚动摘要" }.estimatedTokens > 0)
+    }
+
+    @Test
+    fun `only newest rolling summary is sent even when multiple paths injected it`() {
+        val oldSummary = "<rolling_summary>old facts</rolling_summary>"
+        val newSummary = "<rolling_summary>new facts</rolling_summary>"
+        val envelope = buildCompanionContextEnvelope(
+            assistant = Assistant(),
+            source = ApiUsageSource.CHAT,
+            messages = listOf(
+                UIMessage.system(oldSummary),
+                UIMessage.user("hello"),
+                UIMessage.user(newSummary),
+                UIMessage.system(newSummary),
+                UIMessage.user("continue"),
+            ),
+            characterCore = "persona",
+            globalLorebook = "",
+            roleLorebook = "",
+            otherMandatoryPrompt = "",
+        )
+
+        val summaries = envelope.messages.filter { it.toText().contains("<rolling_summary") }
+        assertEquals(1, summaries.size)
+        assertEquals(newSummary, summaries.single().toText())
+    }
+
+    @Test
+    fun `adjacent duplicate conversational messages are sent once`() {
+        val envelope = buildCompanionContextEnvelope(
+            assistant = Assistant(),
+            source = ApiUsageSource.CHAT,
+            messages = listOf(
+                UIMessage.user("same request"),
+                UIMessage.user("same request"),
+                UIMessage.assistant("same answer"),
+                UIMessage.assistant("same answer"),
+                UIMessage.user("next"),
+            ),
+            characterCore = "persona",
+            globalLorebook = "",
+            roleLorebook = "",
+            otherMandatoryPrompt = "",
+        )
+
+        assertEquals(
+            listOf("same request", "same answer", "next"),
+            envelope.messages.map { it.toText() },
+        )
+        assertEquals(2, envelope.droppedHistoryMessages)
     }
 
     @Test(expected = CompanionContextOverflowException::class)
