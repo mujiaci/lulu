@@ -2492,7 +2492,7 @@ internal fun nextAlwaysOnAnchorReviewAt(
     return review.toInstant().toEpochMilli()
 }
 
-private val AUTONOMOUS_SELF_ACTIVITY_TOOLS = setOf("play_companion_game")
+private val AUTONOMOUS_SELF_ACTIVITY_TOOLS = setOf("play_companion_game", "manage_companion_digital_life")
 
 internal fun composeProactiveGenerationMessages(
     historyMessages: List<UIMessage>,
