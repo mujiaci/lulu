@@ -25,7 +25,9 @@ object CompanionCommitmentReducer {
 
         changes.forEach { change ->
             when (change) {
-                is CompanionCommitmentChange.Upsert -> commitments.upsert(change.commitment, nowMillis)
+                is CompanionCommitmentChange.Upsert -> change.commitment
+                    .splitCompoundCommitments()
+                    .forEach { commitments.upsert(it, nowMillis) }
                 is CompanionCommitmentChange.Transition -> commitments.transition(change, nowMillis)
             }
         }
@@ -125,6 +127,47 @@ object CompanionCommitmentReducer {
                 reason = reason,
             ),
         )
+    }
+
+    private fun CompanionCommitment.splitCompoundCommitments(): List<CompanionCommitment> {
+        val source = responsibility.ifBlank { promise }.trim()
+        val clauses = splitCommitmentClauses(source)
+        if (clauses.size <= 1) return listOf(this)
+        return clauses.mapIndexed { index, clause ->
+            val stableSuffix = clause.lowercase().hashCode().toUInt().toString(16)
+            copy(
+                id = "$id:part:${index + 1}:$stableSuffix",
+                subjectKey = "$subjectKey:part:$stableSuffix",
+                promise = clause,
+                responsibility = clause,
+                history = emptyList(),
+            )
+        }
+    }
+
+    private fun splitCommitmentClauses(text: String): List<String> {
+        val normalized = text
+            .replace(Regex("(?m)^\\s*[-*•]+\\s*"), "")
+            .replace(Regex("(?m)^\\s*\\d+[.、)]\\s*"), "")
+            .trim()
+        val strongParts = normalized
+            .split(Regex("[\\n；;]+"))
+            .map(String::trim)
+            .filter { it.length >= 2 }
+        if (strongParts.size > 1) return strongParts.distinct()
+
+        val enumeration = normalized
+            .split('、')
+            .map(String::trim)
+            .filter { it.length >= 2 }
+        if (enumeration.size <= 1) return listOf(normalized)
+        val explicitActionPrefixes = listOf(
+            "监督", "提醒", "叫醒", "催", "检查", "确认", "陪", "帮助", "记录", "安排", "联系", "跟进",
+        )
+        val everyPartIsAction = enumeration.all { part ->
+            explicitActionPrefixes.any(part::startsWith)
+        }
+        return if (everyPartIsAction) enumeration.distinct() else listOf(normalized)
     }
 
     private fun CompanionCommitment.normalized(): CompanionCommitment = copy(
