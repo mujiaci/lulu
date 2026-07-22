@@ -81,6 +81,7 @@ jobs:
             --tests "*MemoryArchiveTest" \
             --tests "*CompanionRuntimeReducerTest" \
             --tests "*CompanionInteractionTimelineTest" \
+            --tests "*CompanionHeartbeatTest" \
             --tests "*MemoryBankContextTest" \
             --tests "*MemoryBankServiceExtractionTest" \
             --tests "*AILoggingManagerTest" \
