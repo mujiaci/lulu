@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.layout.weight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -33,7 +34,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -88,7 +89,7 @@ fun StatsPage(vm: StatsVM = koinViewModel()) {
         containerColor = CustomColors.topBarColors.containerColor,
     ) { padding ->
         Column(modifier = Modifier.fillMaxSize().padding(padding)) {
-            PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+            SecondaryTabRow(selectedTabIndex = pagerState.currentPage) {
                 listOf("缓存", "控制台", "时长监测").forEachIndexed { index, title ->
                     Tab(
                         selected = pagerState.currentPage == index,
