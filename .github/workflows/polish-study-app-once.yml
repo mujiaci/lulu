@@ -1,0 +1,160 @@
+name: Polish study app once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/polish-study-app-once.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  polish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Polish study app layouts
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyPage.kt')
+          text = path.read_text(encoding='utf-8')
+
+          # Main study hub: compact the global header and make every section start higher.
+          text = text.replace(
+              'contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 14.dp),\n                verticalArrangement = Arrangement.spacedBy(14.dp),',
+              'contentPadding = padding + PaddingValues(horizontal = 16.dp, top = 6.dp, bottom = 16.dp),\n                verticalArrangement = Arrangement.spacedBy(10.dp),',
+              1,
+          )
+
+          old_header = '''                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(48.dp).clickable { navController.popBackStack() },
+                            shape = CircleShape,
+                            color = if (isGachaSection) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.72f),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isGachaSection) Color.White.copy(alpha = 0.14f) else StudyColors.blue.copy(alpha = 0.12f),
+                            ),
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    HugeIcons.ArrowLeft01,
+                                    contentDescription = "返回",
+                                    tint = if (isGachaSection) Color.White else MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
+                        }
+                    }
+                }
+                item {
+                    SectionChips(
+                        selected = section,
+                        onSelected = { section = it },
+                        dark = isGachaSection,
+                    )
+                }
+'''
+          new_header = '''                stickyHeader {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = pageColor.copy(alpha = 0.96f),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Surface(
+                                modifier = Modifier.size(42.dp).clickable { navController.popBackStack() },
+                                shape = CircleShape,
+                                color = if (isGachaSection) Color.White.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.78f),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isGachaSection) Color.White.copy(alpha = 0.14f) else StudyColors.blue.copy(alpha = 0.12f),
+                                ),
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        HugeIcons.ArrowLeft01,
+                                        contentDescription = "返回",
+                                        tint = if (isGachaSection) Color.White else MaterialTheme.colorScheme.onSurface,
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                }
+                            }
+                            Box(modifier = Modifier.weight(1f)) {
+                                SectionChips(
+                                    selected = section,
+                                    onSelected = { section = it },
+                                    dark = isGachaSection,
+                                )
+                            }
+                        }
+                    }
+                }
+'''
+          if old_header in text:
+              text = text.replace(old_header, new_header, 1)
+
+          # Pomodoro setup page: use a compact top bar and tighter card rhythm.
+          text = text.replace(
+              '''            LargeFlexibleTopAppBar(
+                title = { Text("番茄钟") },
+                navigationIcon = { BackButton() },
+                actions = {
+                    TextButton(onClick = { showThemePicker = true }) { Text("配色") }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )''',
+              '''            androidx.compose.material3.TopAppBar(
+                title = { Text("番茄钟") },
+                navigationIcon = { BackButton() },
+                actions = {
+                    TextButton(onClick = { showThemePicker = true }) { Text("配色") }
+                },
+                scrollBehavior = scrollBehavior,
+                colors = CustomColors.topBarColors,
+            )''',
+              1,
+          )
+          text = text.replace(
+              'contentPadding = padding + PaddingValues(16.dp),\n            verticalArrangement = Arrangement.spacedBy(14.dp),',
+              'contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 10.dp),\n            verticalArrangement = Arrangement.spacedBy(10.dp),',
+              1,
+          )
+          text = text.replace(
+              'modifier = Modifier.fillMaxWidth(),\n                ) {\n                    Icon(HugeIcons.Play, null)',
+              'modifier = Modifier.fillMaxWidth().height(54.dp),\n                ) {\n                    Icon(HugeIcons.Play, null)',
+              1,
+          )
+
+          # Across the study app, reduce oversized internal gaps without flattening hierarchy.
+          text = text.replace('verticalArrangement = Arrangement.spacedBy(16.dp)', 'verticalArrangement = Arrangement.spacedBy(12.dp)')
+          text = text.replace('verticalArrangement = Arrangement.spacedBy(14.dp)', 'verticalArrangement = Arrangement.spacedBy(12.dp)')
+          text = text.replace('contentPadding = PaddingValues(20.dp)', 'contentPadding = PaddingValues(16.dp)')
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Build debug APK
+        run: ./gradlew :app:assembleDebug --stacktrace
+
+      - name: Commit polished study app
+        run: |
+          rm -f .github/workflows/polish-study-app-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "feat: polish study app interaction layouts"
+          git push origin HEAD:master
