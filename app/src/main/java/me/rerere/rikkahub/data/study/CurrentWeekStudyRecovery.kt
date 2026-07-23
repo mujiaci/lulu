@@ -6,10 +6,10 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 /**
- * Temporary, explicit recovery plan for 2026-07-22..2026-07-26.
+ * Explicit recovery plan for 2026-07-22..2026-07-26.
  *
  * The learner used this week's rest/recovery day on 2026-07-22 because she was
- * unwell and completed none of the planned tasks.  The missed work is therefore
+ * unwell and completed none of the planned tasks. The missed work is therefore
  * redistributed across four days instead of being dumped onto the next day.
  * 2026-07-26 becomes a light catch-up/weekly-closing day and must not be treated
  * as a second full rest day.
@@ -20,8 +20,8 @@ object CurrentWeekStudyRecovery {
 
     private val plans: Map<LocalDate, DailyStudyPlan> = listOf(
         daily(
-            date = LocalDate.of(2026, 7, 23),
-            title = "病后补任务第1段：合并题续段 + 法理2 + 完形",
+            LocalDate.of(2026, 7, 23),
+            "病后补任务第1段：合并题续段 + 法理2 + 完形",
             law("刑法第3-7章合并题继续 50-60 分钟：先承接昨天未完成的题组，记录完成题数；每道错题只标一个主错因，不提前画正式连接图"),
             review("刑法错题账本 15-20 分钟：只登记隔日与7-14日重做日期，不把整理扩成抄写"),
             review("法理第2章闭卷回忆 20 分钟：复述目录树和关键词，未达到约70%就保留卡点，不惩罚式加时"),
@@ -30,8 +30,8 @@ object CurrentWeekStudyRecovery {
             health("今天仍按180分钟总预算执行；身体不适后的欠账分四天回收，23:30前停止，不熬夜清空"),
         ),
         daily(
-            date = LocalDate.of(2026, 7, 24),
-            title = "补任务第2段：合并题收口 + 法理2验收 + 翻译",
+            LocalDate.of(2026, 7, 24),
+            "补任务第2段：合并题收口 + 法理2验收 + 翻译",
             law("刑法第3-7章合并题收口 50-60 分钟：完成后核对题量和主错因；未收口就继续做题，不能用画图替代"),
             review("刑法正式连接框架/思维导图 35-40 分钟：仅在合并题已经完成后开始；写主干、层级、易混点和题目锚点"),
             review("法理第2章闭卷验收 20 分钟：达到约70%后下一学习日进入第3章；未通过只补最卡的结构"),
@@ -40,8 +40,8 @@ object CurrentWeekStudyRecovery {
             health("固定必做控制在约153分钟，剩余约27分钟只吸收题组、翻译或身体状态的波动"),
         ),
         daily(
-            date = LocalDate.of(2026, 7, 25),
-            title = "补任务第3段：刑法闭环 + 法理滚动 + 阅读",
+            LocalDate.of(2026, 7, 25),
+            "补任务第3段：刑法闭环 + 法理滚动 + 阅读",
             review("刑法第3-7章闭环 45-50 分钟：收完正式连接图，并完成第一轮关键词口头复述；核对错题隔日/7-14日日期"),
             review("法理第3章第一轮入口 20分钟；如果第2章仍未达到约70%，则只补第2章最卡结构，不按日历硬跳章"),
             english(ExamStudyPlan.dailyVocabularyTaskTitle),
@@ -50,8 +50,8 @@ object CurrentWeekStudyRecovery {
             health("周末仍按180分钟总预算；加码不是欠账，不完成不顺延"),
         ),
         daily(
-            date = LocalDate.of(2026, 7, 26),
-            title = "本周已用休息日后的轻补日：只收口，不开刑法第8章",
+            LocalDate.of(2026, 7, 26),
+            "本周已用休息日后的轻补日：只收口，不开刑法第8章",
             review("本周刑法验收 35-40 分钟：核对第3-7章合并题、主错因、错题回炉日期、正式连接图和第一轮关键词痕迹，只补一个最大缺口"),
             review("法理当前章节闭卷回忆 20 分钟：处理本周卡点，留下下一章的明确入口"),
             english(ExamStudyPlan.dailyVocabularyTaskTitle),
@@ -59,7 +59,7 @@ object CurrentWeekStudyRecovery {
             review("周计划复盘 20-25 分钟：记录本周真实有效分钟和完成率；因7月22日身体不适，不以本周数据自动升级下周负荷"),
             health("7月22日已经使用本周休息/恢复日；今天安排约150分钟轻补，但不启动刑法第8章、不熬夜、不补全部历史欠账"),
         ),
-    ).associateBy(DailyStudyPlan::date)
+    ).associateBy { it.date }
 
     fun planFor(date: LocalDate): DailyStudyPlan? = plans[date]
 
@@ -78,7 +78,7 @@ object CurrentWeekStudyRecovery {
         val manualTasks = state.tasks.filter { it.source != StudyTaskSource.Plan }
         val previousByTitle = state.tasks
             .filter { it.source == StudyTaskSource.Plan }
-            .associateBy(StudyTask::title)
+            .associateBy { it.title }
         val planTasks = plan.tasks.mapIndexed { index, task ->
             val title = "${task.kind.label}｜${task.title}"
             val previous = previousByTitle[title]
@@ -92,11 +92,11 @@ object CurrentWeekStudyRecovery {
                 source = StudyTaskSource.Plan,
             )
         }
-        if (state.activePlanDate == dateText &&
-            state.tasks.filter { it.source == StudyTaskSource.Plan }.map(StudyTask::title) == planTasks.map(StudyTask::title)
-        ) {
-            return state
-        }
+        val currentPlanTitles = state.tasks
+            .filter { it.source == StudyTaskSource.Plan }
+            .map { it.title }
+        val nextPlanTitles = planTasks.map { it.title }
+        if (state.activePlanDate == dateText && currentPlanTitles == nextPlanTitles) return state
         return state.copy(
             today = dateText,
             tasks = planTasks + manualTasks,
@@ -130,7 +130,7 @@ object CurrentWeekStudyRecovery {
     ): String? {
         if (planFor(date) == null) return null
         val formatter = DateTimeFormatter.ofPattern("HH:mm")
-        val unfinished = tasks.filterNot(StudyTask::done)
+        val unfinished = tasks.filterNot { it.done }
         return buildString {
             appendLine("日期：$date；当前时间：${currentTime.format(formatter)}。")
             appendLine("今天属于2026-07-22身体不适后的非惩罚式补任务周。7月22日已作为本周恢复/休息日，7月26日不是第二个休息日。")
