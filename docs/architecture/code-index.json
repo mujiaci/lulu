@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T07:54:00.866863+00:00",
-  "commit": "32ef17d136919ba82aca1bc6d0aa8f932089e16c",
+  "generatedAt": "2026-07-23T07:58:08.849018+00:00",
+  "commit": "efe099f77a8a778f0974a92a1fb5d6ce67501d50",
   "branch": "master",
   "summary": {
-    "files": 1104,
-    "lines": 262261,
+    "files": 1105,
+    "lines": 262383,
     "symbols": 5309,
     "byModule": {
       "app": 639,
@@ -19,8 +19,8 @@
       "common": 21,
       "root": 11,
       ".agents": 10,
+      ".github": 10,
       "website": 10,
-      ".github": 9,
       "highlight": 9,
       "web": 7,
       ".claude": 5,
@@ -39,8 +39,8 @@
       ".xml": 37,
       ".pro": 15,
       ".kts": 11,
+      ".yml": 9,
       ".js": 9,
-      ".yml": 8,
       ".html": 7,
       ".css": 4,
       ".yaml": 3,
@@ -360,6 +360,7 @@
     ],
     "构建与发布": [
       ".github/workflows/code-index.yml",
+      ".github/workflows/compact-study-header-once.yml",
       ".github/workflows/deploy-website.yml",
       ".github/workflows/polish-voice-call-once.yml",
       ".github/workflows/release.yml",
@@ -1928,6 +1929,17 @@
       "module": ".github",
       "extension": ".yml",
       "lines": 77,
+      "package": null,
+      "categories": [
+        "构建与发布"
+      ],
+      "symbols": []
+    },
+    {
+      "path": ".github/workflows/compact-study-header-once.yml",
+      "module": ".github",
+      "extension": ".yml",
+      "lines": 122,
       "package": null,
       "categories": [
         "构建与发布"

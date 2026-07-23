@@ -11,10 +11,10 @@
 
 ## 索引状态
 
-- 基准提交：`32ef17d136919ba82aca1bc6d0aa8f932089e16c`
+- 基准提交：`efe099f77a8a778f0974a92a1fb5d6ce67501d50`
 - 分支：`master`
-- 已索引文件：1104
-- 已索引代码/文本行：262261
+- 已索引文件：1105
+- 已索引代码/文本行：262383
 - 已发现类、接口、对象、函数及 Composable：5309
 
 ## 模块概览
@@ -32,8 +32,8 @@
 | `common` | 21 |
 | `root` | 11 |
 | `.agents` | 10 |
+| `.github` | 10 |
 | `website` | 10 |
-| `.github` | 9 |
 | `highlight` | 9 |
 | `web` | 7 |
 | `.claude` | 5 |
@@ -55,8 +55,8 @@
 | `.xml` | 37 |
 | `.pro` | 15 |
 | `.kts` | 11 |
+| `.yml` | 9 |
 | `.js` | 9 |
-| `.yml` | 8 |
 | `.html` | 7 |
 | `.css` | 4 |
 | `.yaml` | 3 |
@@ -250,6 +250,7 @@
 ### 构建与发布
 
 - `.github/workflows/code-index.yml`
+- `.github/workflows/compact-study-header-once.yml`
 - `.github/workflows/deploy-website.yml`
 - `.github/workflows/polish-voice-call-once.yml`
 - `.github/workflows/release.yml`
