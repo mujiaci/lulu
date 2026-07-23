@@ -64,6 +64,7 @@ import me.rerere.rikkahub.R
 import me.rerere.rikkahub.RouteActivity
 import me.rerere.rikkahub.data.ai.GenerationChunk
 import me.rerere.rikkahub.data.ai.GenerationHandler
+import me.rerere.rikkahub.data.ai.PerformanceMonitor
 import me.rerere.rikkahub.data.ai.ApiUsageSource
 import me.rerere.rikkahub.data.ai.mcp.McpManager
 import me.rerere.rikkahub.data.ai.tools.LocalTools
@@ -1865,6 +1866,7 @@ class ChatService(
         direction: MemoryExtractionDirection = MemoryExtractionDirection.OLDEST_FIRST,
         includeSavedMemorySources: Boolean = true,
     ): Job = appScope.launch {
+            val extractionStartedAt = System.nanoTime()
             var activeExtractionBatchId: String? = null
             runCatching {
                 val processedSourceNodeIds = memoryBankService.getProcessedSourceNodeIds(
@@ -2133,6 +2135,7 @@ class ChatService(
                 if (error is CancellationException) throw error
                 Log.w(TAG, "Affective memory extraction failed for conversation=$conversationId", error)
             }
+            PerformanceMonitor.recordNanos("Memory Extraction", extractionStartedAt, assistant.name)
         }
 
 
@@ -2443,6 +2446,7 @@ class ChatService(
         assistant: Assistant,
         perception: CompanionPerceptionPacket,
     ): ChatTurnPlanResult {
+        val plannerStartedAt = System.nanoTime()
         val input = CompanionChatTurnPlanInput(perception = perception)
         val plannerModelId = settings.luluIntentModelId ?: assistant.chatModelId ?: settings.chatModelId
         val modelPlan = plannerModelId
@@ -2463,6 +2467,7 @@ class ChatService(
             availableToolNames = perception.availableToolNames,
         )
         val basePlan = modelPlan ?: CompanionChatTurnPlan()
+        PerformanceMonitor.recordNanos("Planner", plannerStartedAt, assistant.name)
         return ChatTurnPlanResult(
             plan = basePlan.copy(
                 toolRequests = (requiredFactChecks + basePlan.toolRequests)

@@ -114,7 +114,7 @@ fun DesktopPage() {
             DesktopApp("游戏", HugeIcons.Puzzle, "game") { navController.navigate(Screen.GameHub) },
             DesktopApp("聊天", HugeIcons.BubbleChat, "chat") { navController.navigate(Screen.ChatRooms) },
             DesktopApp("我的", HugeIcons.User, "user") { navController.navigate(Screen.UserProfile) },
-            DesktopApp("缓存统计", HugeIcons.Chart, "stats") { navController.navigate(Screen.Stats) },
+            DesktopApp("性能监测", HugeIcons.Chart, "performance") { navController.navigate(Screen.Stats) },
             DesktopApp("收藏", HugeIcons.Favourite, "favorite") { navController.navigate(Screen.Favorite) },
             DesktopApp("日志", HugeIcons.Bug01, "logs") { navController.navigate(Screen.Log) },
             DesktopApp("角色", HugeIcons.Bot, "assistant") { navController.navigate(Screen.Assistant) },

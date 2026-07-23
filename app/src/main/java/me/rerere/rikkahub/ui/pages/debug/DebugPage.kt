@@ -139,7 +139,7 @@ fun DebugPage(vm: DebugVM = koinViewModel()) {
 }
 
 @Composable
-private fun TokenLoggingPage(vm: DebugVM) {
+fun TokenLoggingPage(vm: DebugVM = koinViewModel()) {
     val logs by vm.aiLogs.collectAsStateWithLifecycle()
     val generations = logs.filterIsInstance<AILogging.Generation>().asReversed()
     LazyColumn(

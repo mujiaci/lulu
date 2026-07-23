@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +33,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +44,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,6 +54,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.launch
+import me.rerere.rikkahub.data.ai.PerformanceMonitor
+import me.rerere.rikkahub.data.ai.PerformanceTiming
+import me.rerere.rikkahub.ui.pages.debug.TokenLoggingPage
 import me.rerere.rikkahub.R
 import me.rerere.rikkahub.data.ai.ApiUsageRecord
 import me.rerere.rikkahub.data.ai.ApiUsageSummary
@@ -63,64 +74,162 @@ import java.util.Locale
 @Composable
 fun StatsPage(vm: StatsVM = koinViewModel()) {
     val stats by vm.stats.collectAsStateWithLifecycle()
-
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val pagerState = rememberPagerState { 3 }
+    val scope = rememberCoroutineScope()
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeFlexibleTopAppBar(
-                title = { Text(stringResource(R.string.stats_page_title)) },
+            TopAppBar(
+                title = { Text("性能监测") },
                 navigationIcon = { BackButton() },
-                scrollBehavior = scrollBehavior,
                 colors = CustomColors.topBarColors,
             )
         },
         containerColor = CustomColors.topBarColors.containerColor,
     ) { padding ->
-        if (stats.isLoading) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(padding),
-                contentAlignment = Alignment.Center
-            ) {
-                CircularProgressIndicator()
+        Column(modifier = Modifier.fillMaxSize().padding(padding)) {
+            PrimaryTabRow(selectedTabIndex = pagerState.currentPage) {
+                listOf("缓存", "控制台", "时长监测").forEachIndexed { index, title ->
+                    Tab(
+                        selected = pagerState.currentPage == index,
+                        onClick = { scope.launch { pagerState.animateScrollToPage(index) } },
+                        text = { Text(title) },
+                    )
+                }
             }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = padding + PaddingValues(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                item {
-                    CacheRecordsCard(
-                        records = stats.cacheRecords,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
-                }
-                item {
-                    CacheStatsCard(
-                        stats = stats,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
-                }
-                item {
-                    HeatmapCard(
-                        conversationsPerDay = stats.conversationsPerDay,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
-                }
-                item {
-                    StatsGrid(
-                        stats = stats,
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                    )
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxWidth().weight(1f),
+            ) { page ->
+                when (page) {
+                    0 -> CacheMonitorContent(stats)
+                    1 -> TokenLoggingPage()
+                    else -> DurationMonitorContent()
                 }
             }
         }
     }
 }
+
+@Composable
+private fun CacheMonitorContent(stats: AppStats) {
+    if (stats.isLoading) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            item { CacheRecordsCard(records = stats.cacheRecords) }
+            item { CacheStatsCard(stats = stats) }
+        }
+    }
+}
+
+@Composable
+private fun DurationMonitorContent() {
+    val timings by PerformanceMonitor.timings.collectAsStateWithLifecycle()
+    val summaries = remember(timings) { buildTimingSummaries(timings) }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text("聊天全链路耗时", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        "记录 Prompt、首 Token、模型、工具、Planner、Memory 与总耗时。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                TextButton(onClick = PerformanceMonitor::clear) { Text("清空") }
+            }
+        }
+        if (summaries.isEmpty()) {
+            item {
+                Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+                    Text(
+                        "还没有耗时记录。发送一条消息后，这里会自动出现各阶段数据。",
+                        modifier = Modifier.padding(16.dp),
+                    )
+                }
+            }
+        }
+        items(summaries, key = { it.stage }) { summary ->
+            Card(colors = CustomColors.cardColorsOnSurfaceContainer) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(summary.stage, style = MaterialTheme.typography.titleMedium)
+                        Text("${summary.latestMillis} ms", color = MaterialTheme.colorScheme.primary)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Text("平均 ${summary.averageMillis} ms", style = MaterialTheme.typography.bodySmall)
+                        Text("最大 ${summary.maxMillis} ms", style = MaterialTheme.typography.bodySmall)
+                        Text("${summary.count} 次", style = MaterialTheme.typography.bodySmall)
+                    }
+                    summary.latestDetail.takeIf(String::isNotBlank)?.let { detail ->
+                        Text(
+                            detail,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class TimingSummary(
+    val stage: String,
+    val latestMillis: Long,
+    val averageMillis: Long,
+    val maxMillis: Long,
+    val count: Int,
+    val latestDetail: String,
+)
+
+private fun buildTimingSummaries(timings: List<PerformanceTiming>): List<TimingSummary> =
+    timings
+        .groupBy { it.stage }
+        .map { (stage, records) ->
+            TimingSummary(
+                stage = stage,
+                latestMillis = records.first().durationMillis,
+                averageMillis = records.map { it.durationMillis }.average().toLong(),
+                maxMillis = records.maxOf { it.durationMillis },
+                count = records.size,
+                latestDetail = records.first().detail,
+            )
+        }
+        .sortedBy { summary ->
+            listOf("总耗时", "Prompt 构建", "首 Token", "模型请求", "工具执行", "Planner", "Memory Extraction")
+                .indexOf(summary.stage)
+                .let { if (it < 0) Int.MAX_VALUE else it }
+        }
 
 @Composable
 private fun CacheStatsCard(stats: AppStats, modifier: Modifier = Modifier) {

@@ -78,6 +78,7 @@ class GenerationHandler(
         apiUsageSource: ApiUsageSource = ApiUsageSource.CHAT,
         apiUsageTitle: String = "",
     ): Flow<GenerationChunk> = flow {
+        val pipelineStartedAt = System.nanoTime()
         val provider = model.findProvider(settings.providers) ?: error("Provider not found")
         val providerImpl = providerManager.getProviderByType(provider)
 
@@ -255,7 +256,12 @@ class GenerationHandler(
                                 error("Invalid tool arguments JSON for ${tool.toolName}: ${it.message}")
                             }
                             Log.i(TAG, "generateText: executing tool ${toolDef.name} with args: $args")
-                            val result = toolDef.execute(args)
+                            val toolStartedAt = System.nanoTime()
+                            val result = try {
+                                toolDef.execute(args)
+                            } finally {
+                                PerformanceMonitor.recordNanos("工具执行", toolStartedAt, toolDef.name)
+                            }
                             executedTools += tool.copy(output = result)
                         }.onFailure {
                             it.printStackTrace()
@@ -306,6 +312,7 @@ class GenerationHandler(
                 )
             )
         }
+        PerformanceMonitor.recordNanos("总耗时", pipelineStartedAt, apiUsageTitle.ifBlank { assistant.name })
 
     }.flowOn(Dispatchers.IO)
 
@@ -340,6 +347,7 @@ class GenerationHandler(
         apiUsageSource: ApiUsageSource = ApiUsageSource.CHAT,
         apiUsageTitle: String = "",
     ) {
+        val promptBuildStartedAt = System.nanoTime()
         val effectiveSystemPrompt =
             if (assistant.allowConversationSystemPrompt && !conversationSystemPrompt.isNullOrBlank()) {
                 conversationSystemPrompt
@@ -426,6 +434,7 @@ class GenerationHandler(
             settings = settings,
             processingStatus = processingStatus,
         )
+        PerformanceMonitor.recordNanos("Prompt 构建", promptBuildStartedAt, apiUsageTitle.ifBlank { assistant.name })
         val breakdown = buildGenerationTokenBreakdown(
             effectiveSystemPrompt = effectiveSystemPrompt,
             toolSystemPrompts = toolSystemPrompts,
@@ -469,11 +478,17 @@ class GenerationHandler(
             )
             aiLoggingManager.addLog(apiLog)
             try {
+                val requestStartedAt = System.nanoTime()
+                var firstChunkPending = true
                 providerImpl.streamText(
                     providerSetting = provider,
                     messages = internalMessages,
                     params = params
                 ).collect {
+                    if (firstChunkPending) {
+                        PerformanceMonitor.recordNanos("首 Token", requestStartedAt, apiUsageTitle.ifBlank { assistant.name })
+                        firstChunkPending = false
+                    }
                     messages = messages.handleMessageChunk(chunk = it, model = model)
                     it.usage?.let { usage ->
                         recordedUsage = recordedUsage.merge(usage)
@@ -488,6 +503,7 @@ class GenerationHandler(
                     }
                     onUpdateMessages(messages)
                 }
+                PerformanceMonitor.recordNanos("模型请求", requestStartedAt, apiUsageTitle.ifBlank { assistant.name })
                 aiLoggingManager.finishGeneration(apiLog.id)
                 recordedUsage?.let { usage ->
                     apiUsageStore.record(
@@ -515,11 +531,14 @@ class GenerationHandler(
             )
             aiLoggingManager.addLog(apiLog)
             try {
+                val requestStartedAt = System.nanoTime()
                 val chunk = providerImpl.generateText(
                     providerSetting = provider,
                     messages = internalMessages,
                     params = params,
                 )
+                PerformanceMonitor.recordNanos("首 Token", requestStartedAt, apiUsageTitle.ifBlank { assistant.name })
+                PerformanceMonitor.recordNanos("模型请求", requestStartedAt, apiUsageTitle.ifBlank { assistant.name })
                 messages = messages.handleMessageChunk(chunk = chunk, model = model)
                 chunk.usage?.let { usage ->
                     recordedUsage = recordedUsage.merge(usage)
