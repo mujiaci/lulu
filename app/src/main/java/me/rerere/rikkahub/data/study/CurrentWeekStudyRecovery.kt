@@ -32,7 +32,7 @@ object CurrentWeekStudyRecovery {
             review("法理第2章闭卷验收 20 分钟：达到约70%后下一学习日进入第3章；未通过只补最卡的结构"),
             english(ExamStudyPlan.dailyVocabularyTaskTitle),
             english("英语一真题翻译 25-30 分钟：先限时，再复盘1个语法错点和规范表达；深复盘超时拆到缓冲，不熬夜"),
-            health("固定必做控制在约153分钟，剩余约27分钟只吸收题组、翻译或身体状态的波动"),
+            health("固定任务按各时间范围的下限执行，超时只能吃掉当天缓冲，不能继续叠加"),
         ),
         daily(
             LocalDate.of(2026, 7, 25),
@@ -51,7 +51,7 @@ object CurrentWeekStudyRecovery {
             review("法理当前章节闭卷回忆 20 分钟：处理本周卡点，留下下一章的明确入口"),
             english(ExamStudyPlan.dailyVocabularyTaskTitle),
             english(ExamStudyPlan.dailyEnglishReviewTaskTitle),
-            review("周计划复盘 20-25 分钟：记录本周真实有效分钟和完成率；因7月22日身体不适，不以本周数据自动升级下周负荷"),
+            review("周计划复盘 20 分钟：记录本周真实有效分钟和完成率；因7月22日身体不适，不以本周数据自动升级下周负荷"),
             health("7月22日已经使用本周休息/恢复日；今天安排约150分钟轻补，但不启动刑法第8章、不熬夜、不补全部历史欠账"),
         ),
     ).associateBy { it.date }
@@ -65,13 +65,13 @@ object CurrentWeekStudyRecovery {
             "刑法：优先完成第3-7章合并题、主错因账本、隔日/7-14日回炉日期、正式连接框架和第一轮关键词口头复述；这些未闭环前不启动第8章",
             "法理：第2章闭卷达到约70%后进入第3章；未达到就只补最卡结构，不按日期跳章，也不回到第1章重复制造进度",
             "英语：每天120个单词；本周保住完形、翻译、阅读、周复盘，新题型只作为状态稳定后的加码，不完成不继续顺延",
-            "周验收：按真实有效分钟和完成率记账。因为本周存在生病恢复日，不据此自动升级7月27日后的负荷；下周先延续稳定档，再根据睡眠和白天完成情况调整",
+            "周验收：按真实有效分钟和完成率记账。因为本周存在生病恢复日，7月27日至8月2日继续保持180分钟稳定档，不自动升级到210分钟",
         ),
     )
 
     private val monthlyAllocations: Map<YearMonth, StudyMonthAllocation> = mapOf(
-        YearMonth.of(2026, 7) to StudyMonthAllocation(1_740, 1_080, 420, 0, 240),
-        YearMonth.of(2026, 8) to StudyMonthAllocation(7_410, 5_040, 1_560, 0, 810),
+        YearMonth.of(2026, 7) to StudyMonthAllocation(1_590, 960, 420, 0, 210),
+        YearMonth.of(2026, 8) to StudyMonthAllocation(7_380, 5_040, 1_560, 0, 780),
         YearMonth.of(2026, 9) to StudyMonthAllocation(9_780, 6_000, 1_680, 1_320, 780),
         YearMonth.of(2026, 10) to StudyMonthAllocation(11_790, 6_720, 2_100, 2_100, 870),
         YearMonth.of(2026, 11) to StudyMonthAllocation(12_000, 6_000, 2_400, 2_700, 900),
@@ -117,12 +117,12 @@ object CurrentWeekStudyRecovery {
 
     fun planFor(date: LocalDate): DailyStudyPlan? = plans[date]
 
-    fun plannedMinutes(date: LocalDate): Int = when (date) {
-        LocalDate.of(2026, 7, 23),
-        LocalDate.of(2026, 7, 24),
-        LocalDate.of(2026, 7, 25) -> 180
-        replacementStudyDate -> 150
-        usedRecoveryDate -> 0
+    fun plannedMinutes(date: LocalDate): Int = when {
+        date == usedRecoveryDate -> 0
+        date in LocalDate.of(2026, 7, 23)..LocalDate.of(2026, 7, 25) -> 180
+        date == replacementStudyDate -> 150
+        date in LocalDate.of(2026, 7, 27)..LocalDate.of(2026, 8, 2) ->
+            if (date.dayOfWeek == java.time.DayOfWeek.SUNDAY) 0 else 180
         else -> ExamStudyPlan.plannedStudyMinutes(date)
     }
 
@@ -166,20 +166,41 @@ object CurrentWeekStudyRecovery {
         )
     }
 
-    fun scheduleFor(date: LocalDate): List<StudyScheduleBlock>? {
-        val plan = planFor(date) ?: return null
-        val budget = plannedMinutes(date)
-        val coreTasks = plan.tasks.filter { it.kind != StudyPlanTaskKind.Health }
-        val law = coreTasks.filter { it.kind == StudyPlanTaskKind.Law }.joinToString("；") { it.title }
-        val review = coreTasks.filter { it.kind == StudyPlanTaskKind.Review }.joinToString("；") { it.title }
-        val english = coreTasks.filter { it.kind == StudyPlanTaskKind.English }.joinToString("；") { it.title }
-        return buildList {
-            add(StudyScheduleBlock("09:30-09:40", "低阻力启动", "先喝水、简单活动；如果仍不舒服，先做20个单词再判断状态。"))
-            if (law.isNotBlank()) add(StudyScheduleBlock("10:00-11:00", "刑法主块", law))
-            if (review.isNotBlank()) add(StudyScheduleBlock("14:00-15:00", "闭环与背诵", review))
-            if (english.isNotBlank()) add(StudyScheduleBlock("16:00-16:55", "英语", english))
-            add(StudyScheduleBlock("17:05-17:20", "缓冲与收尾", "今天总预算约${budget}分钟；只吸收本日超时，写明天第一步后停止。"))
-        }
+    fun scheduleFor(date: LocalDate): List<StudyScheduleBlock>? = when (date) {
+        LocalDate.of(2026, 7, 23) -> listOf(
+            StudyScheduleBlock("09:30-09:40", "低阻力启动", "喝水、简单活动；如果仍不舒服，先完成20个单词再判断状态。"),
+            StudyScheduleBlock("10:00-11:00", "刑法合并题", "第3-7章合并题续段，记录题量，每道错题只标一个主错因。"),
+            StudyScheduleBlock("14:00-14:40", "错题账本 + 法理2", "登记刑法错题回炉日期；法理第2章闭卷复述目录树和关键词。"),
+            StudyScheduleBlock("15:00-15:30", "单词", ExamStudyPlan.dailyVocabularyTaskTitle),
+            StudyScheduleBlock("16:00-16:25", "英语完形", "补回7月22日未完成块，只抓逻辑、词义和3个主要错因。"),
+            StudyScheduleBlock("16:35-16:50", "缓冲收尾", "只吸收本日超时，写明天第一步后停止。今日有效学习合计180分钟。"),
+        )
+        LocalDate.of(2026, 7, 24) -> listOf(
+            StudyScheduleBlock("09:30-09:40", "低阻力启动", "喝水和活动，确认今天只按任务范围下限执行。"),
+            StudyScheduleBlock("10:00-10:50", "刑法题组收口", "完成第3-7章合并题并核对题量、主错因。"),
+            StudyScheduleBlock("11:00-11:35", "正式连接图", "仅在题组已完成后画主干、层级、易混点和题目锚点。"),
+            StudyScheduleBlock("14:00-14:20", "法理2验收", "闭卷达到约70%后才允许下一学习日进入第3章。"),
+            StudyScheduleBlock("15:30-16:00", "单词", ExamStudyPlan.dailyVocabularyTaskTitle),
+            StudyScheduleBlock("16:15-16:40", "英语翻译", "先限时，再复盘1个语法错点和规范表达。"),
+            StudyScheduleBlock("16:50-17:00", "缓冲收尾", "今日有效学习合计180分钟；任何超时不得继续叠加。"),
+        )
+        LocalDate.of(2026, 7, 25) -> listOf(
+            StudyScheduleBlock("09:30-09:40", "低阻力启动", "喝水、活动并确认本日不新增硬任务。"),
+            StudyScheduleBlock("10:00-10:50", "刑法闭环", "收完连接图，完成第一轮关键词口头复述并核对错题回炉日期。"),
+            StudyScheduleBlock("14:00-14:20", "法理滚动", "第2章达标则进入第3章；未达标只补最卡结构。"),
+            StudyScheduleBlock("15:00-15:30", "单词", ExamStudyPlan.dailyVocabularyTaskTitle),
+            StudyScheduleBlock("16:00-16:35", "英语阅读", "限时后写题干定位、原文证据、主错因和正确选项理由。"),
+            StudyScheduleBlock("16:45-17:20", "机动缓冲", "优先吸收刑法或阅读超时；新题型只在仍有余力时加码。今日合计180分钟。"),
+        )
+        replacementStudyDate -> listOf(
+            StudyScheduleBlock("09:30-09:40", "轻补启动", "7月22日已经使用本周恢复日；今天只做收口。"),
+            StudyScheduleBlock("10:00-10:40", "刑法周验收", "核对题组、主错因、回炉日期、连接图和关键词，只补一个最大缺口。"),
+            StudyScheduleBlock("14:00-14:20", "法理回忆", "处理当前章节卡点，留下下一章明确入口。"),
+            StudyScheduleBlock("15:00-15:30", "单词", ExamStudyPlan.dailyVocabularyTaskTitle),
+            StudyScheduleBlock("16:00-16:30", "英语周复盘", "回看阅读和完形错题，记录正确率与下周重点。"),
+            StudyScheduleBlock("16:40-17:00", "周计划复盘", "记录真实有效分钟和完成率；不启动刑法第8章。今日合计150分钟。"),
+        )
+        else -> null
     }
 
     fun dynamicSchedulePrompt(
