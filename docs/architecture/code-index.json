@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T07:35:37.270206+00:00",
-  "commit": "33898064aa3a3a64881e3b8c7ce5b83e2e9dc5ab",
+  "generatedAt": "2026-07-23T07:43:59.889574+00:00",
+  "commit": "8db4fca96f30b9a68d956fd6125e04a64f2b8b64",
   "branch": "master",
   "summary": {
     "files": 1103,
-    "lines": 262063,
+    "lines": 262080,
     "symbols": 5309,
     "byModule": {
       "app": 639,
@@ -1970,7 +1970,7 @@
       "path": ".github/workflows/verify-performance-monitor-once.yml",
       "module": ".github",
       "extension": ".yml",
-      "lines": 40,
+      "lines": 57,
       "package": null,
       "categories": [
         "构建与发布"
