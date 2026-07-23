@@ -32,7 +32,9 @@ jobs:
         env:
           INDEX_COMMIT: ${{ github.sha }}
           INDEX_BRANCH: ${{ github.ref_name }}
-        run: python3 scripts/generate_code_index.py
+        run: |
+          python3 scripts/generate_code_index.py
+          python3 scripts/enrich_code_index.py
 
       - name: Validate generated index
         run: |
@@ -53,13 +55,14 @@ jobs:
               "summary",
               "featureFlows",
               "hotspots",
+              "symbolIndex",
               "files",
           }
           missing = sorted(required - data.keys())
           if missing:
               raise SystemExit(f"Code index is missing required keys: {', '.join(missing)}")
-          if data["schemaVersion"] < 2:
-              raise SystemExit("Code index schemaVersion must be at least 2")
+          if data["schemaVersion"] < 3:
+              raise SystemExit("Code index schemaVersion must be at least 3")
           if not data["files"]:
               raise SystemExit("Code index unexpectedly contains no files")
           if len(data["sourceFingerprint"]) != 64:
@@ -68,6 +71,12 @@ jobs:
               raise SystemExit("Core companion flow has no indexed entry points")
           if not data["hotspots"].get("largestFiles"):
               raise SystemExit("Code index contains no hotspot data")
+          if not data["hotspots"].get("highestApproximateFanIn"):
+              raise SystemExit("Code index contains no reverse dependency hotspots")
+          if data["summary"].get("resolvedImportEdges", 0) <= 0:
+              raise SystemExit("Code index did not resolve any local import edges")
+          if not data["symbolIndex"]:
+              raise SystemExit("Code index contains no symbol index")
           PY
 
       - name: Upload generated index for diagnostics
