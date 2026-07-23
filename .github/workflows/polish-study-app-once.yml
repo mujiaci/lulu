@@ -25,7 +25,6 @@ jobs:
           path = Path('app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyPage.kt')
           text = path.read_text(encoding='utf-8')
 
-          # Main study hub: compact the global header and make every section start higher.
           text = text.replace(
               'contentPadding = padding + PaddingValues(horizontal = 16.dp, vertical = 14.dp),\n                verticalArrangement = Arrangement.spacedBy(14.dp),',
               'contentPadding = padding + PaddingValues(horizontal = 16.dp, top = 6.dp, bottom = 16.dp),\n                verticalArrangement = Arrangement.spacedBy(10.dp),',
@@ -106,7 +105,6 @@ jobs:
           if old_header in text:
               text = text.replace(old_header, new_header, 1)
 
-          # Pomodoro setup page: use a compact top bar and tighter card rhythm.
           text = text.replace(
               '''            LargeFlexibleTopAppBar(
                 title = { Text("番茄钟") },
@@ -139,7 +137,6 @@ jobs:
               1,
           )
 
-          # Across the study app, reduce oversized internal gaps without flattening hierarchy.
           text = text.replace('verticalArrangement = Arrangement.spacedBy(16.dp)', 'verticalArrangement = Arrangement.spacedBy(12.dp)')
           text = text.replace('verticalArrangement = Arrangement.spacedBy(14.dp)', 'verticalArrangement = Arrangement.spacedBy(12.dp)')
           text = text.replace('contentPadding = PaddingValues(20.dp)', 'contentPadding = PaddingValues(16.dp)')
