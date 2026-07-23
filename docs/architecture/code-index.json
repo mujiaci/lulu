@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T09:04:04.924234+00:00",
-  "commit": "3c9d802a79e7dbd7f6c3a5f1ca8deb18006bcec9",
+  "generatedAt": "2026-07-23T09:05:15.908816+00:00",
+  "commit": "b7daa3b547d46dc61b9c258182f0abd3d5e0612f",
   "branch": "master",
   "summary": {
     "files": 1102,
-    "lines": 262214,
+    "lines": 262221,
     "symbols": 5327,
     "byModule": {
       "app": 640,
@@ -28067,7 +28067,7 @@
       "path": "app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyVM.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 317,
+      "lines": 324,
       "package": "me.rerere.rikkahub.ui.pages.study",
       "categories": [
         "界面"
@@ -28111,117 +28111,117 @@
         {
           "name": "toggleTask",
           "kind": "function",
-          "line": 158
+          "line": 165
         },
         {
           "name": "completePomodoro",
           "kind": "function",
-          "line": 167
+          "line": 174
         },
         {
           "name": "openMysteryBox",
           "kind": "function",
-          "line": 173
+          "line": 180
         },
         {
           "name": "draw",
           "kind": "function",
-          "line": 188
+          "line": 195
         },
         {
           "name": "drawPurpleTicket",
           "kind": "function",
-          "line": 221
+          "line": 228
         },
         {
           "name": "claimSuperMoment",
           "kind": "function",
-          "line": 237
+          "line": 244
         },
         {
           "name": "claimAchievement",
           "kind": "function",
-          "line": 243
+          "line": 250
         },
         {
           "name": "claimLevel",
           "kind": "function",
-          "line": 249
+          "line": 256
         },
         {
           "name": "refreshShop",
           "kind": "function",
-          "line": 255
+          "line": 262
         },
         {
           "name": "buyShopItem",
           "kind": "function",
-          "line": 257
+          "line": 264
         },
         {
           "name": "redeemEntertainment",
           "kind": "function",
-          "line": 263
+          "line": 270
         },
         {
           "name": "applyUniversalNormal",
           "kind": "function",
-          "line": 269
+          "line": 276
         },
         {
           "name": "applyBestUniversalNormal",
           "kind": "function",
-          "line": 275
+          "line": 282
         },
         {
           "name": "applyPenalty",
           "kind": "function",
-          "line": 287
+          "line": 294
         },
         {
           "name": "reduce",
           "kind": "function",
-          "line": 293
+          "line": 300
         },
         {
           "name": "emitReward",
           "kind": "function",
-          "line": 299
+          "line": 306
         },
         {
           "name": "StudyEffect",
           "kind": "interface",
-          "line": 306
+          "line": 313
         },
         {
           "name": "Message",
           "kind": "class",
-          "line": 307
+          "line": 314
         },
         {
           "name": "MysteryBoxReady",
           "kind": "object",
-          "line": 308
+          "line": 315
         },
         {
           "name": "MysteryBox",
           "kind": "class",
-          "line": 309
+          "line": 316
         },
         {
           "name": "DrawResults",
           "kind": "class",
-          "line": 310
+          "line": 317
         },
         {
           "name": "SuperMomentReady",
           "kind": "object",
-          "line": 311
+          "line": 318
         },
         {
           "name": "StudyDrawReveal",
           "kind": "class",
-          "line": 314
+          "line": 321
         }
       ]
     },
