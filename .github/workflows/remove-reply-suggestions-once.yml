@@ -1,17 +1,16 @@
 name: Remove reply suggestions once
 
 on:
-  push:
+  pull_request:
     branches: [master]
     paths:
-      - '.github/workflows/remove-reply-suggestions-once.yml'
+      - '.github/refactor-trigger.txt'
 
 permissions:
   contents: write
 
 jobs:
   refactor:
-    if: "!contains(github.event.head_commit.message, '[suggestion-removal-done]')"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -36,26 +35,21 @@ jobs:
           root = Path('.')
 
           def read(path):
-              p = root / path
-              return p.read_text(encoding='utf-8-sig')
+              return (root / path).read_text(encoding='utf-8-sig')
 
           def write(path, text):
-              p = root / path
-              p.write_text(text, encoding='utf-8', newline='\n')
+              (root / path).write_text(text, encoding='utf-8', newline='\n')
 
           def remove_braced_declaration(text, marker):
-              """Remove a Kotlin function/composable declaration containing marker."""
               pos = text.find(marker)
               if pos < 0:
                   return text, False
               line_start = text.rfind('\n', 0, pos) + 1
-              # Include annotations immediately above the declaration.
               start = line_start
               while start > 0:
                   prev_end = start - 1
                   prev_start = text.rfind('\n', 0, prev_end) + 1
-                  prev = text[prev_start:prev_end].strip()
-                  if prev.startswith('@'):
+                  if text[prev_start:prev_end].strip().startswith('@'):
                       start = prev_start
                   else:
                       break
@@ -92,7 +86,6 @@ jobs:
               raise RuntimeError(f'Unbalanced declaration for {marker}')
 
           def remove_argument_block(text, argument_name):
-              # Removes a named lambda argument: argumentName = { ... },
               pattern = re.compile(r'(?m)^\s*' + re.escape(argument_name) + r'\s*=\s*\{')
               while True:
                   m = pattern.search(text)
@@ -100,9 +93,9 @@ jobs:
                       return text
                   brace = text.find('{', m.start())
                   depth = 0
-                  i = brace
                   in_string = False
                   escaped = False
+                  i = brace
                   while i < len(text):
                       ch = text[i]
                       if ch == '"' and not escaped:
@@ -115,9 +108,7 @@ jobs:
                                   end = i + 1
                                   while end < len(text) and text[end] in ' \t': end += 1
                                   if end < len(text) and text[end] == ',': end += 1
-                                  while end < len(text) and text[end] in ' \t': end += 1
-                                  if end < len(text) and text[end] == '\r': end += 1
-                                  if end < len(text) and text[end] == '\n': end += 1
+                                  while end < len(text) and text[end] in ' \t\r\n': end += 1
                                   text = text[:m.start()] + text[end:]
                                   break
                       escaped = (ch == '\\' and not escaped)
@@ -126,36 +117,31 @@ jobs:
                   else:
                       raise RuntimeError(f'Unbalanced argument {argument_name}')
 
-          # 1) Conversation storage: remove generated suggestions from the domain model.
+          # Conversation model: remove suggestions state.
           path = 'app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt'
           text = read(path)
           text = re.sub(r'(?m)^\s*val chatSuggestions: List<String> = emptyList\(\),\s*\n', '', text)
           write(path, text)
 
-          # 2) ViewModel: remove public suggestion generation entry.
+          # ViewModel: remove public suggestion generation entry.
           path = 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatVM.kt'
           text = read(path)
           text, _ = remove_braced_declaration(text, 'fun generateSuggestion(')
           write(path, text)
 
-          # 3) Chat page: remove suggestion click plumbing but keep the page itself.
+          # Chat page: remove suggestion click plumbing.
           path = 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatPage.kt'
-          text = read(path)
-          text = remove_argument_block(text, 'onClickSuggestion')
+          text = remove_argument_block(read(path), 'onClickSuggestion')
           write(path, text)
 
-          # 4) Chat list: remove parameters, render branch, component, and now-unused suggestion imports.
+          # Chat list: remove suggestion parameters, rendering, component and imports.
           path = 'app/src/main/java/me/rerere/rikkahub/ui/pages/chat/ChatList.kt'
           text = read(path)
           text = re.sub(r'(?m)^\s*onClickSuggestion: \(String\) -> Unit = \{\},\s*\n', '', text)
           text = re.sub(r'(?m)^\s*onClickSuggestion: \(String\) -> Unit,\s*\n', '', text)
           text = re.sub(r'(?m)^\s*onClickSuggestion = onClickSuggestion,\s*\n', '', text)
-          text = re.sub(
-              r'(?ms)^\s*// Suggestion\s*\n\s*if \(conversation\.chatSuggestions\.isNotEmpty\(\) && !captureProgress\) \{.*?^\s*\}\s*\n',
-              '', text,
-          )
+          text = re.sub(r'(?ms)^\s*// Suggestion\s*\n\s*if \(conversation\.chatSuggestions\.isNotEmpty\(\) && !captureProgress\) \{.*?^\s*\}\s*\n', '', text)
           text, _ = remove_braced_declaration(text, 'private fun ChatSuggestionsRow(')
-          # Imports used only by the deleted row. Keep any import still referenced elsewhere.
           for imp, token in [
               ('androidx.compose.foundation.background', '.background('),
               ('androidx.compose.foundation.lazy.LazyRow', 'LazyRow('),
@@ -166,46 +152,34 @@ jobs:
                   text = re.sub(r'(?m)^import ' + re.escape(imp) + r'\s*\n', '', text)
           write(path, text)
 
-          # 5) Chat service: remove every invocation and the generator function itself.
+          # Chat service: remove reset, generation calls and generator function.
           path = 'app/src/main/java/me/rerere/rikkahub/service/ChatService.kt'
           text = read(path)
-          # Standalone launch block around generateSuggestion.
-          text = re.sub(
-              r'(?ms)^\s*launchWithConversationReference\(conversationId\) \{\s*generateSuggestion\(conversationId, finalConversation\)\s*\}\s*\n',
-              '', text,
-          )
+          text = re.sub(r'(?m)^\s*// reset suggestions\s*\n\s*updateConversation\([^\n]*chatSuggestions = emptyList\(\)[^\n]*\)\s*\n', '', text)
+          text = re.sub(r'(?ms)^\s*launchWithConversationReference\(conversationId\) \{\s*generateSuggestion\(conversationId, finalConversation\)\s*\}\s*\n', '', text)
           text = re.sub(r'(?m)^\s*appScope\.launch \{ generateSuggestion\([^\n]+\) \}\s*\n', '', text)
           text = re.sub(r'(?m)^\s*generateSuggestion\([^\n]+\)\s*\n', '', text)
-          # Remove declaration regardless of visibility/suspend modifier.
-          for marker in ['fun generateSuggestion(', 'suspend fun generateSuggestion(']:
-              while marker in text:
-                  new_text, changed = remove_braced_declaration(text, marker)
-                  if not changed: break
-                  text = new_text
-          # Long-term responsibility hard gate. A one-off meal check remains a short follow-up,
-          # and only explicit recurring/ongoing language can create an always-on anchor.
+          while 'fun generateSuggestion(' in text:
+              text, changed = remove_braced_declaration(text, 'fun generateSuggestion(')
+              if not changed: break
+
+          # Only explicit recurring or ongoing wording can create long-term responsibilities.
           old = '''        val responsibilityUpserts = plan.responsibilityAnchorUpserts.mapNotNull { draft ->
               draft.toAlwaysOnAnchorOrNull('''
-          if old in text:
-              text = text.replace(
-                  old,
-                  '''        val latestUserTextForResponsibility = messages
+          if old not in text:
+              raise RuntimeError('Could not find responsibilityUpserts block')
+          text = text.replace(old, '''        val latestUserTextForResponsibility = messages
               .lastOrNull { it.role == MessageRole.USER }
               ?.toText()
               .orEmpty()
           val responsibilityUpserts = if (latestUserTextForResponsibility.hasExplicitLongTermCadence()) {
               plan.responsibilityAnchorUpserts.mapNotNull { draft ->
-                  draft.toAlwaysOnAnchorOrNull(''',
-                  1,
-              )
-              # Close the new if/else after the existing mapNotNull block.
-              anchor = '                nowMillis = nowMillis,\n            )\n        }\n        if (responsibilityUpserts.isNotEmpty()'
-              replacement = '                nowMillis = nowMillis,\n                  )\n              }\n          } else {\n              emptyList()\n          }\n          if (responsibilityUpserts.isNotEmpty()'
-              if anchor not in text:
-                  raise RuntimeError('Could not close long-term responsibility gate')
-              text = text.replace(anchor, replacement, 1)
-          else:
-              raise RuntimeError('Could not find responsibilityUpserts block')
+                  draft.toAlwaysOnAnchorOrNull(''', 1)
+          anchor = '                nowMillis = nowMillis,\n            )\n        }\n        if (responsibilityUpserts.isNotEmpty()'
+          replacement = '                nowMillis = nowMillis,\n                  )\n              }\n          } else {\n              emptyList()\n          }\n          if (responsibilityUpserts.isNotEmpty()'
+          if anchor not in text:
+              raise RuntimeError('Could not close responsibility gate')
+          text = text.replace(anchor, replacement, 1)
 
           helper = '''
           private fun String.hasExplicitLongTermCadence(): Boolean {
@@ -220,82 +194,72 @@ jobs:
           )
           '''
           insert_at = text.rfind('\n}')
-          if insert_at < 0:
-              raise RuntimeError('Could not append long-term helper')
           text = text[:insert_at] + '\n' + helper + text[insert_at:]
           write(path, text)
 
-          # 6) Preferences/settings and settings UI: remove suggestion prompt/model/config fields.
-          # Keep deserialization tolerant of old backups by relying on ignoreUnknownKeys.
+          # Remove settings keys, fields, defaults, prompt and UI references.
           for p in root.rglob('*'):
               if not p.is_file() or p.suffix not in {'.kt', '.xml'}:
                   continue
               rel = p.as_posix()
-              if rel.endswith('ChatService.kt') or rel.endswith('ChatList.kt') or rel.endswith('ChatPage.kt') or rel.endswith('ChatVM.kt') or rel.endswith('Conversation.kt'):
+              if rel.endswith(('ChatService.kt', 'ChatList.kt', 'ChatPage.kt', 'ChatVM.kt', 'Conversation.kt')):
                   continue
               raw = p.read_text(encoding='utf-8-sig')
               original = raw
               if p.suffix == '.kt':
-                  # Whole prompt constant.
+                  raw = re.sub(r'(?m)^import .*DEFAULT_SUGGESTION_PROMPT\s*\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*val SUGGESTION_MODEL = .*\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*val SUGGESTION_PROMPT = .*\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*(val|var)\s+suggestionModelId\s*:[^\n]+\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*(val|var)\s+suggestionPrompt\s*:[^\n]+\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*suggestionModelId\s*=.*\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*suggestionPrompt\s*=.*\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*preferences\[SUGGESTION_MODEL\].*\n', '', raw)
+                  raw = re.sub(r'(?m)^\s*preferences\[SUGGESTION_PROMPT\].*\n', '', raw)
                   if 'DEFAULT_SUGGESTION_PROMPT' in raw:
-                      while 'DEFAULT_SUGGESTION_PROMPT' in raw:
-                          pos = raw.find('DEFAULT_SUGGESTION_PROMPT')
-                          line_start = raw.rfind('\n', 0, pos) + 1
-                          # Triple-quoted constant.
-                          triple_start = raw.find('"""', pos)
-                          triple_end = raw.find('"""', triple_start + 3) if triple_start >= 0 else -1
-                          if triple_start >= 0 and triple_end >= 0:
-                              end = triple_end + 3
-                              trim = raw.find('.trimIndent()', end)
-                              if trim >= 0 and trim - end < 80:
-                                  end = trim + len('.trimIndent()')
-                              while end < len(raw) and raw[end] in ' \t\r\n': end += 1
-                              raw = raw[:line_start] + raw[end:]
-                          else:
-                              # Property/reference line fallback.
-                              raw = re.sub(r'(?m)^.*DEFAULT_SUGGESTION_PROMPT.*\n?', '', raw, count=1)
-                  # Data properties and named arguments.
-                  raw = re.sub(r'(?mi)^\s*(val|var)\s+\w*suggestion\w*\s*:[^\n]+\n', '', raw)
-                  raw = re.sub(r'(?mi)^\s*\w*suggestion\w*\s*=\s*[^,\n]+,?\s*\n', '', raw)
-                  # UI blocks whose declaration/call title clearly references suggestions.
-                  for marker in ['SuggestionModel', 'SuggestionPrompt', 'suggestionModel', 'suggestionPrompt']:
-                      # Do not delete arbitrary containing functions; remove simple setting call blocks only.
-                      raw = re.sub(r'(?ms)^\s*[^\n{]*' + marker + r'[^\n{]*\{.*?^\s*\}\s*\n', '', raw)
+                      start = raw.find('internal val DEFAULT_SUGGESTION_PROMPT')
+                      if start >= 0:
+                          triple_start = raw.find('"""', start)
+                          triple_end = raw.find('"""', triple_start + 3)
+                          end = raw.find('.trimIndent()', triple_end) + len('.trimIndent()')
+                          while end < len(raw) and raw[end] in ' \t\r\n': end += 1
+                          raw = raw[:start] + raw[end:]
+                  # Remove obvious setting rows/components dedicated to suggestion model/prompt.
+                  raw = re.sub(r'(?ms)^\s*[^\n{]*(Suggestion|suggestion)[^\n{]*(Model|Prompt)[^\n{]*\{.*?^\s*\}\s*\n', '', raw)
               else:
                   raw = re.sub(r'(?mi)^\s*<string[^>]+name="[^"]*suggestion[^"]*"[^>]*>.*?</string>\s*\n?', '', raw)
                   raw = re.sub(r'(?mi)^\s*<string[^>]*>[^<]*(回复建议|聊天建议)[^<]*</string>\s*\n?', '', raw)
               if raw != original:
                   p.write_text(raw, encoding='utf-8', newline='\n')
 
-          # 7) Input/keyboard layout: remove vertical gaps and avoid stacking navigation bar inset on IME.
+          # Tight input layout: no suggestion row gap and no stacked nav-bar inset above IME.
           path = 'app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt'
           text = read(path)
           text = text.replace('                .imePadding()\n                .navigationBarsPadding()\n                .padding(horizontal = 8.dp),\n            verticalArrangement = Arrangement.spacedBy(8.dp)',
                               '                .imePadding()\n                .padding(horizontal = 8.dp),\n            verticalArrangement = Arrangement.spacedBy(0.dp)')
           write(path, text)
 
-          # Fail fast if executable suggestion pipeline references remain.
           residual = []
           for p in root.rglob('*.kt'):
-              rel = p.as_posix()
-              if '/build/' in rel or '/test/' in rel or '/androidTest/' in rel:
+              if '/build/' in p.as_posix() or '/test/' in p.as_posix() or '/androidTest/' in p.as_posix():
                   continue
               data = p.read_text(encoding='utf-8-sig')
-              for token in ('generateSuggestion(', 'chatSuggestions', 'DEFAULT_SUGGESTION_PROMPT'):
+              for token in ('generateSuggestion(', 'chatSuggestions', 'DEFAULT_SUGGESTION_PROMPT', 'suggestionModelId', 'suggestionPrompt'):
                   if token in data:
-                      residual.append(f'{rel}: {token}')
+                      residual.append(f'{p}: {token}')
           if residual:
-              raise RuntimeError('Reply suggestion pipeline remains:\n' + '\n'.join(residual))
+              raise RuntimeError('Suggestion pipeline remains:\n' + '\n'.join(residual))
 
       - name: Compile Android
         run: ./gradlew :app:compileDebugKotlin --no-daemon --stacktrace
 
-      - name: Commit refactor
+      - name: Commit directly to master
         shell: bash
         run: |
           rm -f .github/workflows/remove-reply-suggestions-once.yml
+          rm -f .github/refactor-trigger.txt
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -m "refactor: remove reply suggestions and separate long-term commitments [suggestion-removal-done]"
+          git commit -m "refactor: remove reply suggestions and separate long-term commitments"
           git push origin master
