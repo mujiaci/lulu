@@ -6,13 +6,8 @@ import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 /**
- * Explicit recovery plan for 2026-07-22..2026-07-26.
- *
- * The learner used this week's rest/recovery day on 2026-07-22 because she was
- * unwell and completed none of the planned tasks. The missed work is therefore
- * redistributed across four days instead of being dumped onto the next day.
- * 2026-07-26 becomes a light catch-up/weekly-closing day and must not be treated
- * as a second full rest day.
+ * Explicit recovery plan for 2026-07-22..2026-07-26 plus the capacity audit that
+ * keeps monthly/weekly descriptions aligned with the actual minute budget.
  */
 object CurrentWeekStudyRecovery {
     val usedRecoveryDate: LocalDate = LocalDate.of(2026, 7, 22)
@@ -61,15 +56,63 @@ object CurrentWeekStudyRecovery {
         ),
     ).associateBy { it.date }
 
+    private val correctedCurrentWeek = WeeklyStudyPlan(
+        id = "2026-07-w4",
+        title = "病后恢复周：刑法3-7章闭环 + 法理滚动 + 英语全题型",
+        dateRange = "2026-07-20 至 2026-07-26",
+        tasks = listOf(
+            "负荷：7月22日因身体不适已使用本周完整恢复日；7月23-25日各按180分钟执行，7月26日改为约150分钟轻补和周验收。本周不再设置第二个完整休息日，也不惩罚式加长其他三天",
+            "刑法：优先完成第3-7章合并题、主错因账本、隔日/7-14日回炉日期、正式连接框架和第一轮关键词口头复述；这些未闭环前不启动第8章",
+            "法理：第2章闭卷达到约70%后进入第3章；未达到就只补最卡结构，不按日期跳章，也不回到第1章重复制造进度",
+            "英语：每天120个单词；本周保住完形、翻译、阅读、周复盘，新题型只作为状态稳定后的加码，不完成不继续顺延",
+            "周验收：按真实有效分钟和完成率记账。因为本周存在生病恢复日，不据此自动升级7月27日后的负荷；下周先延续稳定档，再根据睡眠和白天完成情况调整",
+        ),
+    )
+
+    private val monthlyAllocations: Map<YearMonth, StudyMonthAllocation> = mapOf(
+        YearMonth.of(2026, 7) to StudyMonthAllocation(1_740, 1_080, 420, 0, 240),
+        YearMonth.of(2026, 8) to StudyMonthAllocation(7_410, 5_040, 1_560, 0, 810),
+        YearMonth.of(2026, 9) to StudyMonthAllocation(9_780, 6_000, 1_680, 1_320, 780),
+        YearMonth.of(2026, 10) to StudyMonthAllocation(11_790, 6_720, 2_100, 2_100, 870),
+        YearMonth.of(2026, 11) to StudyMonthAllocation(12_000, 6_000, 2_400, 2_700, 900),
+        YearMonth.of(2026, 12) to StudyMonthAllocation(6_240, 3_360, 840, 1_380, 660),
+    )
+
     init {
         installIntoExamStudyPlan()
     }
 
-    /** Makes the existing Today/Tomorrow dashboard consume the same corrected plans. */
+    /** Makes the existing Plan/Today/Tomorrow dashboard consume the corrections. */
     fun installIntoExamStudyPlan() {
         @Suppress("UNCHECKED_CAST")
-        val mutableDailyPlans = ExamStudyPlan.dailyPlans as? MutableMap<LocalDate, DailyStudyPlan>
-        mutableDailyPlans?.putAll(plans)
+        (ExamStudyPlan.dailyPlans as? MutableMap<LocalDate, DailyStudyPlan>)?.putAll(plans)
+
+        @Suppress("UNCHECKED_CAST")
+        val mutableWeeks = ExamStudyPlan.weeklyPlans as? MutableList<WeeklyStudyPlan>
+        mutableWeeks?.indexOfFirst { it.id == correctedCurrentWeek.id }
+            ?.takeIf { it >= 0 }
+            ?.let { mutableWeeks[it] = correctedCurrentWeek }
+
+        @Suppress("UNCHECKED_CAST")
+        val mutableMonths = ExamStudyPlan.monthlyPlans as? MutableList<MonthlyStudyPlan>
+        mutableMonths?.indices?.forEach { index ->
+            val plan = mutableMonths[index]
+            val month = runCatching { YearMonth.parse(plan.month) }.getOrNull() ?: return@forEach
+            val allocation = monthlyAllocations[month] ?: return@forEach
+            val correctedTasks = plan.tasks
+                .filterNot { it.startsWith("容量校准：") || it.startsWith("总量倒推：") }
+                .map { task ->
+                    if (month == YearMonth.of(2026, 7)) {
+                        task.replace(
+                            "7 月 26 日完整休息",
+                            "7月22日已使用本周恢复日，7月26日改为150分钟轻补",
+                        )
+                    } else {
+                        task
+                    }
+                } + allocation.description(month)
+            mutableMonths[index] = plan.copy(tasks = correctedTasks)
+        }
     }
 
     fun planFor(date: LocalDate): DailyStudyPlan? = plans[date]
@@ -190,6 +233,12 @@ object CurrentWeekStudyRecovery {
             totalMinutes = minutesByMonth.values.sum(),
             professionalRawCourseMinutes = rawCourseMinutes,
             professionalEffectiveInputFloorMinutes = rawCourseMinutes / 2,
+            subjectMinutes = mapOf(
+                StudyPlanSubject.Professional to monthlyAllocations.values.sumOf { it.professionalMinutes },
+                StudyPlanSubject.English to monthlyAllocations.values.sumOf { it.englishMinutes },
+                StudyPlanSubject.Politics to monthlyAllocations.values.sumOf { it.politicsMinutes },
+                StudyPlanSubject.Buffer to monthlyAllocations.values.sumOf { it.bufferMinutes },
+            ),
         )
     }
 
@@ -205,6 +254,34 @@ object CurrentWeekStudyRecovery {
     private fun health(title: String) = StudyPlanTask(title, StudyPlanTaskKind.Health)
 }
 
+private data class StudyMonthAllocation(
+    val totalMinutes: Int,
+    val professionalMinutes: Int,
+    val englishMinutes: Int,
+    val politicsMinutes: Int,
+    val bufferMinutes: Int,
+) {
+    init {
+        require(totalMinutes == professionalMinutes + englishMinutes + politicsMinutes + bufferMinutes)
+    }
+
+    fun description(month: YearMonth): String =
+        "容量校准：${month.monthValue}月总预算约${minutesText(totalMinutes)}；专业课（含听课、题源、错题、背诵和专业课套卷）${minutesText(professionalMinutes)}，英语${minutesText(englishMinutes)}，政治${minutesText(politicsMinutes)}，机动/深复盘${minutesText(bufferMinutes)}。各科必须从总预算内切分，不再额外叠加。"
+
+    private fun minutesText(minutes: Int): String {
+        val hours = minutes / 60
+        val remainder = minutes % 60
+        return if (remainder == 0) "${hours}小时" else "${hours}小时${remainder}分钟"
+    }
+}
+
+enum class StudyPlanSubject {
+    Professional,
+    English,
+    Politics,
+    Buffer,
+}
+
 data class StudyCapacityAudit(
     val start: LocalDate,
     val endInclusive: LocalDate,
@@ -212,6 +289,7 @@ data class StudyCapacityAudit(
     val totalMinutes: Int,
     val professionalRawCourseMinutes: Int,
     val professionalEffectiveInputFloorMinutes: Int,
+    val subjectMinutes: Map<StudyPlanSubject, Int>,
 ) {
     val totalHours: Double get() = totalMinutes / 60.0
     val professionalRawCourseHours: Double get() = professionalRawCourseMinutes / 60.0
