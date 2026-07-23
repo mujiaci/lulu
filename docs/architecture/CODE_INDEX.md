@@ -1,21 +1,135 @@
 # Lulu 代码索引
 
-> 本文件由 `scripts/generate_code_index.py` 自动生成。请勿手工维护统计区；架构决策写入同目录的人工文档。
+> 本文件由 `scripts/generate_code_index.py` 自动生成。统计与热点请勿手工维护；架构决策写入同目录人工文档。
 
 ## 使用顺序
 
 1. 先读根目录 `AGENTS.md` 与 `docs/architecture/COMPANION_REBUILD_PLAN.md`。
-2. 用本页定位功能模块和关键文件。
-3. 需要逐文件符号时读取 `docs/architecture/code-index.json`。
-4. 修改后运行 `python3 scripts/generate_code_index.py`；`master` 上也会由 Actions 自动刷新。
+2. 从“核心产品链路”进入，不要先全仓扫描。
+3. 用“瘦身与耦合热点”决定拆分顺序，再回读真实调用方、持久化与失败路径。
+4. 需要逐文件符号、指纹和分类时读取 `docs/architecture/code-index.json`。
+5. 修改后运行 `python3 scripts/generate_code_index.py`；`master` 推送时 Actions 也会自动刷新。
 
 ## 索引状态
 
-- 基准提交：`d93515925d07fcf946a9960a836a7db429f1e7d8`
+- 基准提交：`664d0c94fca7aff2d6ab98a45a52a7c87793e66a`
 - 分支：`master`
+- 源码指纹：`5f44eebe1dccddc7…`
 - 已索引文件：1102
 - 已索引代码/文本行：262284
-- 已发现类、接口、对象、函数及 Composable：5328
+- 已发现类、接口、对象、函数及 Composable：5329
+
+## 仓库健康信号
+
+| 指标 | 数量 |
+|---|---:|
+| 生产代码文件 | 780 |
+| 测试文件 | 128 |
+| ≥800 行生产文件 | 42 |
+| ≥1500 行生产文件 | 6 |
+| TODO/FIXME/HACK/XXX | 28 |
+
+## 核心产品链路
+
+### 陪伴聊天主链路
+
+用户消息、上下文装配、模型流式回复、工具执行与回合落库。
+
+- `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/ai/CompanionContextEnvelope.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionRuntime.kt`
+
+### 连续记忆
+
+记忆批次、提取、召回、checkpoint、失败重试与私人印象。
+
+- `app/src/main/java/me/rerere/rikkahub/data/service/MemoryBankService.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/service/AffectiveMemoryExtractor.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/ai/CompanionContextEnvelope.kt`
+- `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt`
+
+### 主动陪伴与生活监督
+
+主动消息、承诺、关注、提醒、通知、起床和睡眠监督。
+
+- `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageService.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageWorker.kt`
+- `app/src/main/java/me/rerere/rikkahub/service/ProactiveReminderPlanner.kt`
+- `app/src/main/java/me/rerere/rikkahub/service/ProactiveToolPlanner.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionRuntime.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/ai/tools/AlarmTool.kt`
+
+### 电话与语音
+
+主动来电、通话页面、流式分段、TTS 与通话回合连续性。
+
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/voicecall/VoiceCallPage.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/voicecall/VoiceCallStreaming.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/voicecall/ProactiveCallManager.kt`
+- `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt`
+- `speech/build.gradle.kts`
+
+### 娱乐与数字生活
+
+日记、收藏、小游戏、回放、共读、番茄钟和可追溯数字活动。
+
+- `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionDigitalActivities.kt`
+- `plugins/moments/main.js`
+- `plugins/共读/reader.js`
+- `plugins/番茄钟/main.js`
+- `app/src/main/java/me/rerere/rikkahub/plugin/webview/MusicPlayerService.kt`
+
+### 学习监督
+
+考研计划、每日任务、番茄钟、完成反馈与角色监督。
+
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyVM.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/StudyRules.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/ExamStudyPlan.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/StudyStore.kt`
+
+## 瘦身与耦合热点
+
+### 最大生产文件
+
+| 文件 | 行数 | 符号 | 本地导入 |
+|---|---:|---:|---:|
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyPage.kt` | 3372 | 87 | 51 |
+| `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt` | 3255 | 92 | 126 |
+| `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageService.kt` | 2716 | 59 | 90 |
+| `app/src/main/java/me/rerere/rikkahub/data/service/MemoryBankService.kt` | 1874 | 94 | 17 |
+| `app/src/main/java/me/rerere/rikkahub/plugin/webview/PluginWebViewPage.kt` | 1579 | 14 | 18 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderDetailPage.kt` | 1568 | 14 | 46 |
+| `app/src/main/java/me/rerere/rikkahub/ui/components/richtext/MarkdownNew.kt` | 1496 | 41 | 6 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingDisplayPage.kt` | 1482 | 2 | 16 |
+| `plugins/橘市商业街/main.js` | 1369 | 0 | 0 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/voicecall/VoiceCallPage.kt` | 1358 | 31 | 36 |
+| `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionRuntime.kt` | 1310 | 51 | 0 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/cihai/CihaiPage.kt` | 1266 | 25 | 27 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/starwish/StarWishPage.kt` | 1234 | 21 | 28 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/extensions/PromptPage.kt` | 1211 | 14 | 31 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingModelPage.kt` | 1201 | 23 | 29 |
+
+### 本地导入最多的生产文件
+
+| 文件 | 本地导入 | 行数 |
+|---|---:|---:|
+| `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt` | 126 | 3255 |
+| `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageService.kt` | 90 | 2716 |
+| `app/src/main/java/me/rerere/rikkahub/RouteActivity.kt` | 89 | 1032 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyPage.kt` | 51 | 3372 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProviderDetailPage.kt` | 46 | 1568 |
+| `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageTools.kt` | 44 | 1166 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingPage.kt` | 40 | 423 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/game/GamePage.kt` | 39 | 1189 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/chat/Export.kt` | 39 | 784 |
+| `app/src/main/java/me/rerere/rikkahub/di/DataSourceModule.kt` | 38 | 280 |
+| `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessage.kt` | 37 | 1117 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/voicecall/VoiceCallPage.kt` | 36 | 1358 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/starwish/StarWishVM.kt` | 34 | 465 |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/assistant/detail/AssistantPromptPage.kt` | 33 | 732 |
+| `app/src/main/java/me/rerere/rikkahub/ui/components/ai/ChatInput.kt` | 33 | 1064 |
 
 ## 模块概览
 
@@ -98,20 +212,12 @@
 - `ai/src/main/java/me/rerere/ai/util/ErrorParser.kt`
 - `ai/src/main/java/me/rerere/ai/util/FileEncoder.kt`
 - `ai/src/main/java/me/rerere/ai/util/Json.kt`
-- `ai/src/main/java/me/rerere/ai/util/KeyRoulette.kt`
-- `ai/src/main/java/me/rerere/ai/util/Request.kt`
-- `ai/src/main/java/me/rerere/ai/util/SSE.kt`
-- `ai/src/main/java/me/rerere/ai/util/Serializer.kt`
-- `ai/src/test/java/me/rerere/ai/ExampleUnitTest.kt`
-- `ai/src/test/java/me/rerere/ai/ModelRegistryTest.kt`
-- `ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderMessageTest.kt`
-- `ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderPromptCacheTest.kt`
-- `ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt`
-- `ai/src/test/java/me/rerere/ai/provider/providers/OpenAIImageTransportTest.kt`
-- ……另有 97 个文件，见 `code-index.json`
+- ……另有 107 个文件，见 `code-index.json`
 
 ### 主动代理
 
+- `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionCommitmentReducer.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionConcernReducer.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/datastore/ProactiveMessageSetting.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/service/NotificationListenerService.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageService.kt`
@@ -119,8 +225,11 @@
 - `app/src/main/java/me/rerere/rikkahub/data/voicecall/ProactiveCallManager.kt`
 - `app/src/main/java/me/rerere/rikkahub/service/ProactiveReminderPlanner.kt`
 - `app/src/main/java/me/rerere/rikkahub/service/ProactiveToolPlanner.kt`
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/cihai/CompanionConcernCards.kt`
 - `app/src/main/java/me/rerere/rikkahub/ui/pages/setting/SettingProactiveMessagePage.kt`
 - `app/src/main/java/me/rerere/rikkahub/utils/NotificationUtil.kt`
+- `app/src/test/java/me/rerere/rikkahub/data/companion/CompanionCommitmentReducerTest.kt`
+- `app/src/test/java/me/rerere/rikkahub/data/companion/CompanionConcernReducerTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/data/datastore/ProactiveCallSettingTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/data/service/ProactiveMessageAssemblyTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/data/service/ProactiveMessageContextTest.kt`
@@ -128,6 +237,7 @@
 - `app/src/test/java/me/rerere/rikkahub/data/service/ProactiveProjectionTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/service/ProactiveReminderPlannerTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/service/ProactiveToolPlannerTest.kt`
+- `app/src/test/java/me/rerere/rikkahub/ui/pages/cihai/CompanionConcernCardsTest.kt`
 - `docs/superpowers/plans/2026-07-10-unified-companion-chat-proactive.md`
 
 ### 关系与承诺
@@ -149,6 +259,57 @@
 - `app/src/test/java/me/rerere/rikkahub/data/service/AffectiveRelationshipEventsTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/ui/pages/cihai/CompanionConcernCardsTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/ui/pages/cihai/CompanionRelationshipTimelineTest.kt`
+
+### 娱乐与数字生活
+
+- `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionDigitalActivities.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/db/dao/FavoriteDAO.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/db/entity/FavoriteEntity.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/favorite/FavoriteAdapter.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/favorite/NodeFavoriteAdapter.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/model/Favorite.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/repository/FavoriteRepository.kt`
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/favorite/FavoritePage.kt`
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/favorite/FavoriteVM.kt`
+- `app/src/test/java/me/rerere/rikkahub/data/companion/CompanionDigitalActivitiesTest.kt`
+- `plugins/example/weather/main.js`
+- `plugins/example/weather/manifest.json`
+- `plugins/moments/main.js`
+- `plugins/moments/manifest.json`
+- `plugins/moments/supabase_schema.sql`
+- `plugins/moments/ui/index.html`
+- `plugins/supabase_memory/README.md`
+- `plugins/supabase_memory/main.js`
+- `plugins/supabase_memory/manifest.json`
+- `plugins/supabase_memory/supabase_schema.sql`
+- `plugins/共读/main.js`
+- `plugins/共读/manifest.json`
+- `plugins/共读/reader.css`
+- `plugins/共读/reader.html`
+- `plugins/共读/reader.js`
+- `plugins/橘市商业街/main.js`
+- `plugins/橘市商业街/manifest.json`
+- `plugins/橘市商业街/supabase_schema.sql`
+- `plugins/橘市商业街/ui/index.html`
+- `plugins/番茄钟/main.js`
+- ……另有 5 个文件，见 `code-index.json`
+
+### 学习监督
+
+- `app/src/main/java/me/rerere/rikkahub/data/ai/tools/StudyPlanTool.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/CurrentWeekStudyRecovery.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/ExamStudyPlan.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/StudyModels.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/StudyRules.kt`
+- `app/src/main/java/me/rerere/rikkahub/data/study/StudyStore.kt`
+- `app/src/main/java/me/rerere/rikkahub/plugin/webview/PomodoroTimerService.kt`
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/study/DrawRevealFlow.kt`
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyPage.kt`
+- `app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyVM.kt`
+- `app/src/test/java/me/rerere/rikkahub/data/study/ExamStudyPlanTest.kt`
+- `app/src/test/java/me/rerere/rikkahub/data/study/StudyRulesTest.kt`
+- `app/src/test/java/me/rerere/rikkahub/data/study/StudyStorePersistenceTest.kt`
+- `app/src/test/java/me/rerere/rikkahub/ui/pages/study/DrawRevealFlowTest.kt`
 
 ### 工具
 
@@ -191,17 +352,7 @@
 - `plugins/supabase_memory/manifest.json`
 - `plugins/supabase_memory/supabase_schema.sql`
 - `plugins/共读/main.js`
-- `plugins/共读/manifest.json`
-- `plugins/共读/reader.css`
-- `plugins/共读/reader.html`
-- `plugins/共读/reader.js`
-- `plugins/橘市商业街/main.js`
-- `plugins/橘市商业街/manifest.json`
-- `plugins/橘市商业街/supabase_schema.sql`
-- `plugins/橘市商业街/ui/index.html`
-- `plugins/番茄钟/main.js`
-- `plugins/番茄钟/manifest.json`
-- ……另有 4 个文件，见 `code-index.json`
+- ……另有 14 个文件，见 `code-index.json`
 
 ### 数据库
 
@@ -235,17 +386,7 @@
 - `app/src/androidTest/java/me/rerere/rikkahub/data/db/migrations/Migration_11_12_Test.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/datastore/migration/PreferenceStoreV1Migration.kt`
 - `app/src/main/java/me/rerere/rikkahub/data/datastore/migration/PreferenceStoreV2Migration.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/datastore/migration/PreferenceStoreV3Migration.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/datastore/migration/PreferenceStoreV4Migration.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/datastore/migration/SettingsJsonMigrator.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/AppDatabase.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/DatabaseMigrationTracker.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/dao/ConversationDAO.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/dao/FavoriteDAO.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/dao/GenMediaDAO.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/dao/ManagedFileDAO.kt`
-- `app/src/main/java/me/rerere/rikkahub/data/db/dao/MemoryBankDAO.kt`
-- ……另有 35 个文件，见 `code-index.json`
+- ……另有 45 个文件，见 `code-index.json`
 
 ### 构建与发布
 
@@ -296,17 +437,7 @@
 - `speech/src/main/java/me/rerere/tts/controller/TtsSynthesizer.kt`
 - `speech/src/main/java/me/rerere/tts/model/PlaybackState.kt`
 - `speech/src/main/java/me/rerere/tts/model/TTSRequest.kt`
-- `speech/src/main/java/me/rerere/tts/model/TTSResponse.kt`
-- `speech/src/main/java/me/rerere/tts/provider/TTSManager.kt`
-- `speech/src/main/java/me/rerere/tts/provider/TTSProvider.kt`
-- `speech/src/main/java/me/rerere/tts/provider/TTSProviderSetting.kt`
-- `speech/src/main/java/me/rerere/tts/provider/providers/GeminiTTSProvider.kt`
-- `speech/src/main/java/me/rerere/tts/provider/providers/GroqTTSProvider.kt`
-- `speech/src/main/java/me/rerere/tts/provider/providers/MiMoTTSProvider.kt`
-- `speech/src/main/java/me/rerere/tts/provider/providers/MiniMaxTTSProvider.kt`
-- `speech/src/main/java/me/rerere/tts/provider/providers/OpenAITTSProvider.kt`
-- `speech/src/main/java/me/rerere/tts/provider/providers/QwenTTSProvider.kt`
-- ……另有 8 个文件，见 `code-index.json`
+- ……另有 18 个文件，见 `code-index.json`
 
 ### 界面
 
@@ -340,17 +471,7 @@
 - `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageActions.kt`
 - `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageAvatar.kt`
 - `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageBranch.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageCopySheet.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageCot.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageNerdLine.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageReasoning.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageTools.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/ChatMessageTranslation.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/message/RoleReplySegments.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/nav/BackButton.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/richtext/HighlightCodeBlock.kt`
-- `app/src/main/java/me/rerere/rikkahub/ui/components/richtext/LatexText.kt`
-- ……另有 244 个文件，见 `code-index.json`
+- ……另有 254 个文件，见 `code-index.json`
 
 ### 记忆
 
@@ -384,17 +505,7 @@
 - `app/src/test/java/me/rerere/rikkahub/data/voicecall/VoiceCallRepositorySummaryTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/ui/pages/memory/MemoryAssistantLabelTest.kt`
 - `app/src/test/java/me/rerere/rikkahub/ui/pages/memory/MemoryDiagnosticsTest.kt`
-- `app/src/test/java/me/rerere/rikkahub/ui/pages/setting/MemoryEmbeddingConfigInputTest.kt`
-- `docs/architecture/MEMORY_PIPELINE.md`
-- `docs/superpowers/plans/2026-06-29-affective-memory-extraction.md`
-- `docs/superpowers/plans/2026-06-29-affective-vector-memory.md`
-- `docs/superpowers/plans/2026-07-10-cihai-memory-settlement.md`
-- `docs/superpowers/plans/2026-07-10-memory-worldbook-presence-recovery.md`
-- `docs/superpowers/specs/2026-07-10-cihai-memory-settlement-design.md`
-- `docs/superpowers/specs/2026-07-10-memory-worldbook-presence-recovery-design.md`
-- `plugins/supabase_memory/README.md`
-- `plugins/supabase_memory/main.js`
-- ……另有 2 个文件，见 `code-index.json`
+- ……另有 12 个文件，见 `code-index.json`
 
 ## 关键符号快速入口
 
@@ -403,17 +514,21 @@
 | `app/src/main/java/me/rerere/rikkahub/RouteActivity.kt` | `Assistant` |
 | `app/src/main/java/me/rerere/rikkahub/data/ai/CompanionContextEnvelope.kt` | `CompanionContextEnvelope` |
 | `app/src/main/java/me/rerere/rikkahub/data/ai/GenerationHandler.kt` | `GenerationHandler` |
+| `app/src/main/java/me/rerere/rikkahub/data/companion/CompanionRuntime.kt` | `CompanionRuntime` |
 | `app/src/main/java/me/rerere/rikkahub/data/db/AppDatabase.kt` | `AppDatabase` |
 | `app/src/main/java/me/rerere/rikkahub/data/model/Assistant.kt` | `Assistant` |
 | `app/src/main/java/me/rerere/rikkahub/data/model/Conversation.kt` | `Conversation` |
 | `app/src/main/java/me/rerere/rikkahub/data/service/MemoryBankService.kt` | `MemoryBankService` |
 | `app/src/main/java/me/rerere/rikkahub/data/service/ProactiveMessageService.kt` | `ProactiveMessageService` |
+| `app/src/main/java/me/rerere/rikkahub/data/study/StudyRules.kt` | `StudyRules` |
 | `app/src/main/java/me/rerere/rikkahub/service/ChatService.kt` | `ChatService` |
+| `app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyVM.kt` | `StudyVM` |
 | `app/src/main/java/me/rerere/rikkahub/web/routes/ConversationRoutes.kt` | `Conversation` |
 
-## 维护约束
+## 索引边界
 
-- 自动生成提交使用 `[skip ci]`，避免索引工作流循环触发。
+- 这是静态导航索引，不是编译器级调用图；本地导入数只表示耦合信号，不等同于运行时调用次数。
+- 路径分类和符号识别使用保守规则，重构前仍须回读实现、调用方、数据库、测试与失败路径。
+- 自动生成提交使用 `[skip ci]` 和 `[skip index]`，避免工作流循环。
 - 二进制、构建产物、依赖缓存和生成目录不会进入索引。
-- 本页是导航，不替代测试、数据库迁移说明或任务账本。
-- 若索引基准提交落后于当前 `master`，先重新生成再据此修改代码。
+- 源码指纹未变化时保留原生成时间和基准提交，避免无意义索引提交。
