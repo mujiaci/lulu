@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-07-23T08:31:53.507762+00:00",
-  "commit": "b911fa8828bd19b128af51235a796433b2e2a43f",
+  "generatedAt": "2026-07-23T08:34:35.101244+00:00",
+  "commit": "789cbfb805fe6d6b3bcfdf834a60aacc6d3b625a",
   "branch": "master",
   "summary": {
-    "files": 1107,
-    "lines": 262742,
+    "files": 1102,
+    "lines": 261977,
     "symbols": 5322,
     "byModule": {
       "app": 640,
@@ -17,12 +17,12 @@
       "plugins": 25,
       "docs": 23,
       "common": 21,
-      ".github": 11,
       "root": 11,
       ".agents": 10,
       "website": 10,
       "highlight": 9,
       "web": 7,
+      ".github": 6,
       ".claude": 5,
       "locale-tui": 4,
       "study-plans": 4,
@@ -39,9 +39,9 @@
       ".xml": 37,
       ".pro": 15,
       ".kts": 11,
-      ".yml": 10,
       ".js": 9,
       ".html": 7,
+      ".yml": 5,
       ".css": 4,
       ".yaml": 3,
       ".properties": 3,
@@ -360,13 +360,8 @@
     ],
     "构建与发布": [
       ".github/workflows/code-index.yml",
-      ".github/workflows/compact-study-header-once.yml",
       ".github/workflows/deploy-website.yml",
-      ".github/workflows/polish-study-app-once.yml",
-      ".github/workflows/polish-voice-call-once.yml",
       ".github/workflows/release.yml",
-      ".github/workflows/remove-reply-suggestions-once.yml",
-      ".github/workflows/verify-performance-monitor-once.yml",
       "ai/build.gradle.kts",
       "app/baselineprofile/build.gradle.kts",
       "app/build.gradle.kts",
@@ -1937,17 +1932,6 @@
       "symbols": []
     },
     {
-      "path": ".github/workflows/compact-study-header-once.yml",
-      "module": ".github",
-      "extension": ".yml",
-      "lines": 122,
-      "package": null,
-      "categories": [
-        "构建与发布"
-      ],
-      "symbols": []
-    },
-    {
       "path": ".github/workflows/deploy-website.yml",
       "module": ".github",
       "extension": ".yml",
@@ -1959,54 +1943,10 @@
       "symbols": []
     },
     {
-      "path": ".github/workflows/polish-study-app-once.yml",
-      "module": ".github",
-      "extension": ".yml",
-      "lines": 157,
-      "package": null,
-      "categories": [
-        "构建与发布"
-      ],
-      "symbols": []
-    },
-    {
-      "path": ".github/workflows/polish-voice-call-once.yml",
-      "module": ".github",
-      "extension": ".yml",
-      "lines": 181,
-      "package": null,
-      "categories": [
-        "构建与发布"
-      ],
-      "symbols": []
-    },
-    {
       "path": ".github/workflows/release.yml",
       "module": ".github",
       "extension": ".yml",
       "lines": 143,
-      "package": null,
-      "categories": [
-        "构建与发布"
-      ],
-      "symbols": []
-    },
-    {
-      "path": ".github/workflows/remove-reply-suggestions-once.yml",
-      "module": ".github",
-      "extension": ".yml",
-      "lines": 265,
-      "package": null,
-      "categories": [
-        "构建与发布"
-      ],
-      "symbols": []
-    },
-    {
-      "path": ".github/workflows/verify-performance-monitor-once.yml",
-      "module": ".github",
-      "extension": ".yml",
-      "lines": 57,
       "package": null,
       "categories": [
         "构建与发布"
@@ -28102,7 +28042,7 @@
       "path": "app/src/main/java/me/rerere/rikkahub/ui/pages/study/StudyVM.kt",
       "module": "app",
       "extension": ".kt",
-      "lines": 300,
+      "lines": 317,
       "package": "me.rerere.rikkahub.ui.pages.study",
       "categories": [
         "界面"
@@ -28111,152 +28051,152 @@
         {
           "name": "StudyVM",
           "kind": "class",
-          "line": 41
+          "line": 42
         },
         {
           "name": "syncToday",
           "kind": "function",
-          "line": 55
+          "line": 56
         },
         {
           "name": "selectCompanion",
           "kind": "function",
-          "line": 57
+          "line": 64
         },
         {
           "name": "signIn",
           "kind": "function",
-          "line": 59
+          "line": 66
         },
         {
           "name": "addTask",
           "kind": "function",
-          "line": 65
+          "line": 72
         },
         {
           "name": "deleteTask",
           "kind": "function",
-          "line": 70
+          "line": 77
         },
         {
           "name": "generateTodaySchedule",
           "kind": "function",
-          "line": 74
+          "line": 81
         },
         {
           "name": "toggleTask",
           "kind": "function",
-          "line": 141
+          "line": 158
         },
         {
           "name": "completePomodoro",
           "kind": "function",
-          "line": 150
+          "line": 167
         },
         {
           "name": "openMysteryBox",
           "kind": "function",
-          "line": 156
+          "line": 173
         },
         {
           "name": "draw",
           "kind": "function",
-          "line": 171
+          "line": 188
         },
         {
           "name": "drawPurpleTicket",
           "kind": "function",
-          "line": 204
+          "line": 221
         },
         {
           "name": "claimSuperMoment",
           "kind": "function",
-          "line": 220
+          "line": 237
         },
         {
           "name": "claimAchievement",
           "kind": "function",
-          "line": 226
+          "line": 243
         },
         {
           "name": "claimLevel",
           "kind": "function",
-          "line": 232
+          "line": 249
         },
         {
           "name": "refreshShop",
           "kind": "function",
-          "line": 238
+          "line": 255
         },
         {
           "name": "buyShopItem",
           "kind": "function",
-          "line": 240
+          "line": 257
         },
         {
           "name": "redeemEntertainment",
           "kind": "function",
-          "line": 246
+          "line": 263
         },
         {
           "name": "applyUniversalNormal",
           "kind": "function",
-          "line": 252
+          "line": 269
         },
         {
           "name": "applyBestUniversalNormal",
           "kind": "function",
-          "line": 258
+          "line": 275
         },
         {
           "name": "applyPenalty",
           "kind": "function",
-          "line": 270
+          "line": 287
         },
         {
           "name": "reduce",
           "kind": "function",
-          "line": 276
+          "line": 293
         },
         {
           "name": "emitReward",
           "kind": "function",
-          "line": 282
+          "line": 299
         },
         {
           "name": "StudyEffect",
           "kind": "interface",
-          "line": 289
+          "line": 306
         },
         {
           "name": "Message",
           "kind": "class",
-          "line": 290
+          "line": 307
         },
         {
           "name": "MysteryBoxReady",
           "kind": "object",
-          "line": 291
+          "line": 308
         },
         {
           "name": "MysteryBox",
           "kind": "class",
-          "line": 292
+          "line": 309
         },
         {
           "name": "DrawResults",
           "kind": "class",
-          "line": 293
+          "line": 310
         },
         {
           "name": "SuperMomentReady",
           "kind": "object",
-          "line": 294
+          "line": 311
         },
         {
           "name": "StudyDrawReveal",
           "kind": "class",
-          "line": 297
+          "line": 314
         }
       ]
     },

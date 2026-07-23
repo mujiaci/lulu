@@ -11,10 +11,10 @@
 
 ## 索引状态
 
-- 基准提交：`b911fa8828bd19b128af51235a796433b2e2a43f`
+- 基准提交：`789cbfb805fe6d6b3bcfdf834a60aacc6d3b625a`
 - 分支：`master`
-- 已索引文件：1107
-- 已索引代码/文本行：262742
+- 已索引文件：1102
+- 已索引代码/文本行：261977
 - 已发现类、接口、对象、函数及 Composable：5322
 
 ## 模块概览
@@ -30,12 +30,12 @@
 | `plugins` | 25 |
 | `docs` | 23 |
 | `common` | 21 |
-| `.github` | 11 |
 | `root` | 11 |
 | `.agents` | 10 |
 | `website` | 10 |
 | `highlight` | 9 |
 | `web` | 7 |
+| `.github` | 6 |
 | `.claude` | 5 |
 | `locale-tui` | 4 |
 | `study-plans` | 4 |
@@ -55,9 +55,9 @@
 | `.xml` | 37 |
 | `.pro` | 15 |
 | `.kts` | 11 |
-| `.yml` | 10 |
 | `.js` | 9 |
 | `.html` | 7 |
+| `.yml` | 5 |
 | `.css` | 4 |
 | `.yaml` | 3 |
 | `.properties` | 3 |
@@ -250,13 +250,8 @@
 ### 构建与发布
 
 - `.github/workflows/code-index.yml`
-- `.github/workflows/compact-study-header-once.yml`
 - `.github/workflows/deploy-website.yml`
-- `.github/workflows/polish-study-app-once.yml`
-- `.github/workflows/polish-voice-call-once.yml`
 - `.github/workflows/release.yml`
-- `.github/workflows/remove-reply-suggestions-once.yml`
-- `.github/workflows/verify-performance-monitor-once.yml`
 - `ai/build.gradle.kts`
 - `app/baselineprofile/build.gradle.kts`
 - `app/build.gradle.kts`
