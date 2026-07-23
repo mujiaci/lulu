@@ -89,29 +89,32 @@ object CurrentWeekStudyRecovery {
 
         @Suppress("UNCHECKED_CAST")
         val mutableWeeks = ExamStudyPlan.weeklyPlans as? MutableList<WeeklyStudyPlan>
-        mutableWeeks?.indexOfFirst { it.id == correctedCurrentWeek.id }
-            ?.takeIf { it >= 0 }
-            ?.let { mutableWeeks[it] = correctedCurrentWeek }
+        mutableWeeks?.let { weeks ->
+            val weekIndex = weeks.indexOfFirst { it.id == correctedCurrentWeek.id }
+            if (weekIndex >= 0) weeks[weekIndex] = correctedCurrentWeek
+        }
 
         @Suppress("UNCHECKED_CAST")
         val mutableMonths = ExamStudyPlan.monthlyPlans as? MutableList<MonthlyStudyPlan>
-        mutableMonths?.indices?.forEach { index ->
-            val plan = mutableMonths[index]
-            val month = runCatching { YearMonth.parse(plan.month) }.getOrNull() ?: return@forEach
-            val allocation = monthlyAllocations[month] ?: return@forEach
-            val correctedTasks = plan.tasks
-                .filterNot { it.startsWith("容量校准：") || it.startsWith("总量倒推：") }
-                .map { task ->
-                    if (month == YearMonth.of(2026, 7)) {
-                        task.replace(
-                            "7 月 26 日完整休息",
-                            "7月22日已使用本周恢复日，7月26日改为150分钟轻补",
-                        )
-                    } else {
-                        task
-                    }
-                } + allocation.description(month)
-            mutableMonths[index] = plan.copy(tasks = correctedTasks)
+        mutableMonths?.let { months ->
+            months.indices.forEach { index ->
+                val plan = months[index]
+                val month = runCatching { YearMonth.parse(plan.month) }.getOrNull() ?: return@forEach
+                val allocation = monthlyAllocations[month] ?: return@forEach
+                val correctedTasks = plan.tasks
+                    .filterNot { it.startsWith("容量校准：") || it.startsWith("总量倒推：") }
+                    .map { task ->
+                        if (month == YearMonth.of(2026, 7)) {
+                            task.replace(
+                                "7 月 26 日完整休息",
+                                "7月22日已使用本周恢复日，7月26日改为150分钟轻补",
+                            )
+                        } else {
+                            task
+                        }
+                    } + allocation.description(month)
+                months[index] = plan.copy(tasks = correctedTasks)
+            }
         }
     }
 
@@ -141,7 +144,7 @@ object CurrentWeekStudyRecovery {
                 id = "recovery-plan-$dateText-$index",
                 title = title,
                 done = previous?.done ?: false,
-                createdAt = previous?.createdAt ?: date.toEpochDay(),
+                createdAt = previous?.createdAt ?: System.currentTimeMillis(),
                 completedAt = previous?.completedAt,
                 completionRewardClaimed = previous?.completionRewardClaimed ?: previous?.done ?: false,
                 source = StudyTaskSource.Plan,
