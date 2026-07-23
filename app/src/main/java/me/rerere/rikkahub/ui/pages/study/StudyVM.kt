@@ -24,17 +24,17 @@ import me.rerere.rikkahub.data.datastore.getCurrentAssistant
 import me.rerere.rikkahub.data.study.CurrentWeekStudyRecovery
 import me.rerere.rikkahub.data.study.ExamStudyPlan
 import me.rerere.rikkahub.data.study.StudyDrawResult
+import me.rerere.rikkahub.data.study.StudyEntertainmentReward
+import me.rerere.rikkahub.data.study.StudyFragmentType
 import me.rerere.rikkahub.data.study.StudyMysteryBoxReward
 import me.rerere.rikkahub.data.study.StudyRules
 import me.rerere.rikkahub.data.study.StudyShopItem
 import me.rerere.rikkahub.data.study.StudyState
 import me.rerere.rikkahub.data.study.StudyStore
 import me.rerere.rikkahub.data.study.SuperMomentChoice
-import me.rerere.rikkahub.data.starwish.StarWishVideoItem
 import me.rerere.rikkahub.data.starwish.StarWishRules
 import me.rerere.rikkahub.data.starwish.StarWishStore
-import me.rerere.rikkahub.data.study.StudyFragmentType
-import me.rerere.rikkahub.data.study.StudyEntertainmentReward
+import me.rerere.rikkahub.data.starwish.StarWishVideoItem
 import java.time.LocalDate
 import java.time.LocalTime
 import kotlin.random.Random
@@ -111,10 +111,17 @@ class StudyVM(
                     tasks = currentState.tasks,
                     currentTime = currentTime,
                 )
+                val scheduleSystemPrompt = buildString {
+                    appendLine(ExamStudyPlan.dynamicScheduleSystemPrompt)
+                    appendLine()
+                    appendLine(CurrentWeekStudyRecovery.executionOrderReference)
+                    appendLine()
+                    appendLine("刑法阶段节点：${CurrentWeekStudyRecovery.criminalLawTimeline}")
+                }
                 val chunk = provider.generateText(
                     providerSetting = providerSetting,
                     messages = listOf(
-                        UIMessage.system(ExamStudyPlan.dynamicScheduleSystemPrompt),
+                        UIMessage.system(scheduleSystemPrompt),
                         UIMessage.user(prompt),
                     ),
                     params = TextGenerationParams(
