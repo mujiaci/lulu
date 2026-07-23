@@ -11,10 +11,10 @@
 
 ## 索引状态
 
-- 基准提交：`8db4fca96f30b9a68d956fd6125e04a64f2b8b64`
+- 基准提交：`32ef17d136919ba82aca1bc6d0aa8f932089e16c`
 - 分支：`master`
-- 已索引文件：1103
-- 已索引代码/文本行：262080
+- 已索引文件：1104
+- 已索引代码/文本行：262261
 - 已发现类、接口、对象、函数及 Composable：5309
 
 ## 模块概览
@@ -33,8 +33,8 @@
 | `root` | 11 |
 | `.agents` | 10 |
 | `website` | 10 |
+| `.github` | 9 |
 | `highlight` | 9 |
-| `.github` | 8 |
 | `web` | 7 |
 | `.claude` | 5 |
 | `locale-tui` | 4 |
@@ -56,7 +56,7 @@
 | `.pro` | 15 |
 | `.kts` | 11 |
 | `.js` | 9 |
-| `.yml` | 7 |
+| `.yml` | 8 |
 | `.html` | 7 |
 | `.css` | 4 |
 | `.yaml` | 3 |
@@ -251,6 +251,7 @@
 
 - `.github/workflows/code-index.yml`
 - `.github/workflows/deploy-website.yml`
+- `.github/workflows/polish-voice-call-once.yml`
 - `.github/workflows/release.yml`
 - `.github/workflows/remove-reply-suggestions-once.yml`
 - `.github/workflows/verify-performance-monitor-once.yml`
