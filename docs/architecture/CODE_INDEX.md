@@ -11,17 +11,17 @@
 
 ## 索引状态
 
-- 基准提交：`d81b95eee0cbada4466355f60a244af245001d47`
+- 基准提交：`33898064aa3a3a64881e3b8c7ce5b83e2e9dc5ab`
 - 分支：`master`
-- 已索引文件：1102
-- 已索引代码/文本行：261877
-- 已发现类、接口、对象、函数及 Composable：5300
+- 已索引文件：1103
+- 已索引代码/文本行：262063
+- 已发现类、接口、对象、函数及 Composable：5309
 
 ## 模块概览
 
 | 模块 | 文件数 |
 |---|---:|
-| `app` | 638 |
+| `app` | 639 |
 | `web-ui` | 131 |
 | `document` | 76 |
 | `ai` | 47 |
@@ -46,7 +46,7 @@
 
 | 扩展名 | 文件数 |
 |---|---:|
-| `.kt` | 706 |
+| `.kt` | 707 |
 | `.tsx` | 74 |
 | `.java` | 64 |
 | `.md` | 58 |
@@ -108,7 +108,7 @@
 - `ai/src/test/java/me/rerere/ai/provider/providers/ClaudeProviderPromptCacheTest.kt`
 - `ai/src/test/java/me/rerere/ai/provider/providers/GoogleProviderMessageTest.kt`
 - `ai/src/test/java/me/rerere/ai/provider/providers/OpenAIImageTransportTest.kt`
-- ……另有 96 个文件，见 `code-index.json`
+- ……另有 97 个文件，见 `code-index.json`
 
 ### 主动代理
 
@@ -249,11 +249,11 @@
 
 ### 构建与发布
 
-- `.github/workflows/add-performance-monitor-once.yml`
 - `.github/workflows/code-index.yml`
 - `.github/workflows/deploy-website.yml`
 - `.github/workflows/release.yml`
 - `.github/workflows/remove-reply-suggestions-once.yml`
+- `.github/workflows/verify-performance-monitor-once.yml`
 - `ai/build.gradle.kts`
 - `app/baselineprofile/build.gradle.kts`
 - `app/build.gradle.kts`
